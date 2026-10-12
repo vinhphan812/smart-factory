@@ -28,5 +28,5 @@ include = ["amlp*"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
-testpaths = ["tests/python"]
+testpaths = ["tests/python", "tests/parity"]
 pythonpath = ["tools"]
