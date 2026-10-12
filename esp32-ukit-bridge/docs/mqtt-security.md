@@ -1,5 +1,7 @@
 # MQTT Security
 
+> ⚠️ **PRODUCTION BLOCKED**: The current firmware uses plain MQTT (`WiFiClient`) on port 1883. All credentials and payload data are transmitted in the clear. This is acceptable only in a fully isolated lab network. Do not deploy outside a lab until TLS is wired. See Section 2.
+
 This document describes the current security posture of the ESP32 MQTT bridge and outlines the path to production-grade security. Read this alongside [mqtt-contract.md](mqtt-contract.md).
 
 ---
@@ -12,7 +14,7 @@ This document describes the current security posture of the ESP32 MQTT bridge an
 |--------|---------------|-------|
 | Username / password | **Implemented** | Passed to `PubSubClient::connect()`. See `connectOnce()` in `mqtt_bridge.cpp`. |
 | Client certificate (TLS client auth) | **Not implemented** | Planned for future. Requires broker support (e.g., Mosquitto with `certfile`/`keyfile`). |
-| Anonymous | Disabled by default | Connection is refused unless `BRIDGE_MQTT_USERNAME` is non-empty. |
+| Anonymous | **Fail-closed** | Bridge refuses to connect if `BRIDGE_MQTT_USERNAME` is empty; remains disconnected and retries on next tick. |
 
 The broker must enforce credentials. The ESP32 bridge accepts any non-empty username; the broker is responsible for verifying the corresponding password.
 
@@ -88,20 +90,14 @@ mqttClient.setServer(BRIDGE_MQTT_HOST, 8883);  // TLS port
 
 4. Set `BRIDGE_MQTT_PORT` to `8883` in `secrets.h`.
 
-### BearSSL vs mbedTLS on ESP32
+### ESP-IDF mbedTLS on ESP32
 
-The ESP32 and ESP32-S3 use **BearSSL** (via `WiFiClientSecure`) rather than mbedTLS. Key implications:
+The ESP32 uses **ESP-IDF mbedTLS** (via `WiFiClientSecure`), not BearSSL (BearSSL is for ESP8266 only). Key implications:
 
-- **No dynamic certificate loading** at runtime by default. Certificates are embedded at compile time via `setCACert()`.
-- **To load from SPIFFS**, read the PEM file into a buffer and pass it to `wifiClient.setCACert()`.
-- **Certificate pinning**: `wifiClient.setInsecure()` must NOT be used in production. Instead, pin the SHA-256 fingerprint of the broker certificate:
-
-```cpp
-wifiClient.setFingerprint(fingerprint_sha256);
-```
-
-- **Flash size**: RSA-2048 / EC-P256 certificates are small (< 2 KB). Ed25519 support depends on BearSSL version.
-- **Session resumption**: Not supported by BearSSL on ESP32; each connection performs a full handshake (~12 KB additional RAM).
+- **Dynamic certificate loading**: mbedTLS on ESP32 supports loading certificates from SPIFFS at runtime via `wifiClient.setCACert()`.
+- **Certificate pinning**: `wifiClient.setInsecure()` must NOT be used in production. Instead, pin the SHA-256 fingerprint of the broker certificate. Note: the current firmware does not call `setFingerprint()` or `setCACert()` — TLS is not yet wired. See the Production Deployment Checklist.
+- **Flash size**: RSA-2048 / EC-P256 certificates are small (< 2 KB).
+- **Session resumption**: Supported by mbedTLS on ESP32 (~2 KB RAM saved on reconnect).
 
 ### CA Certificate Storage in SPIFFS
 
@@ -117,7 +113,7 @@ if (caFile) {
     char* buf = new char[len + 1];
     caFile.readBytes(buf, len);
     buf[len] = '\0';
-    wifiClient.setCACert(buf);  // BearSSL copies the cert
+    wifiClient.setCACert(buf);  // mbedTLS copies the cert
     delete[] buf;
 }
 ```
@@ -142,7 +138,7 @@ Copy `esp32/include/secrets.example.h` to `esp32/include/secrets.h` and fill in 
 | `BRIDGE_MQTT_USERNAME` | `"bridge-device-001"` | Must be non-empty to enable authentication. |
 | `BRIDGE_MQTT_PASSWORD` | `"***"` | Strong, unique per device recommended. |
 | `BRIDGE_MQTT_CLIENT_ID` | `"sf-bridge-001"` | Must be unique per device. |
-| `BRIDGE_MQTT_TLS_FINGERPRINT` | SHA-256 hex string | Required for TLS with pinning. Empty when TLS is disabled. |
+| `BRIDGE_MQTT_TLS_FINGERPRINT` | SHA-256 hex string | Optional. Used with `setFingerprint()` for pinning. Not currently called by firmware — TLS not wired. |
 | `BRIDGE_MQTT_CA_CERT_PATH` | `"/spiffs/certs/ca.crt"` | Path in SPIFFS. Empty when TLS is disabled. |
 
 ### Never Commit secrets.h

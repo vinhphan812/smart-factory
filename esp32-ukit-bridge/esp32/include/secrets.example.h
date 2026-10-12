@@ -38,6 +38,9 @@
 
 // Authentication. Both must be non-empty to enable broker authentication.
 // The broker is responsible for verifying the password.
+//
+// Compile-time enforcement: if BRIDGE_MQTT_USERNAME is empty, the firmware
+// refuses to connect (fail-closed). Fill in both fields before deployment.
 #define BRIDGE_MQTT_USERNAME ""
 #define BRIDGE_MQTT_PASSWORD ""
 

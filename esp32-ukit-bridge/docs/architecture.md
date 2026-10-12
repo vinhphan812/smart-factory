@@ -22,6 +22,29 @@ graph LR
     ESP32 -- "TCP / AMLP v1" --> Tools
 ```
 
+## Implementation Status
+
+| Feature | Status | Evidence |
+|---------|--------|---------|
+| Command queue (8 entries) | ✅ Implemented | `kCommandQueueCapacity = 8` in `bridge_core.h` |
+| Dedup cache (16 entries) | ✅ Implemented | `kDedupeCapacity = 16` in `bridge_core.h` |
+| Command allowlist: all 5 commands | ✅ Implemented | `CommandMapper::build()` in `command_mapper.cpp` |
+| CONVEYOR_START speed validation 1..100 | ✅ Implemented | `CommandMapper::validSpeed()` |
+| SET_OUTPUT channel validation 0..255 | ✅ Implemented | `CommandMapper::validChannel()` |
+| CRC-16/CCITT-FALSE accidental-corruption detection | ✅ Implemented | `amlp::encode()` / `crc16_ccitt_false()` |
+| Fail-closed auth (no empty credentials) | ✅ Implemented | `connectOnce()` guard in `mqtt_bridge.cpp` |
+| Anonymous connection prevention | ✅ Implemented | `connectOnce()` refuses if `username_` empty |
+| MQTT broker ACL | ⚠️ Broker-config | Broker ACL required; see `mqtt-security.md` |
+| CRC-16 as cryptographic integrity | ❌ Not applicable | CRC-16 detects accidents only; not a security primitive |
+| TLS transport | 🔒 Planned | `WiFiClient` used; `WiFiClientSecure` not wired |
+| Runtime allowlist (configurable) | 🔒 Planned | Hard-coded in `CommandMapper` |
+| Actuator hard limits | 🔒 Planned | MEGA enforces; ESP32-level clamp planned |
+| E-stop priority queue bypass | 🔒 Planned | `estop_active_` not implemented |
+| SPIFFS device registry | 🔒 Planned | Hard-coded topic names; `device-registry.md` is design-only |
+| Exponential backoff for MQTT reconnect | 🔒 Planned | Fixed `kMqttRetryMs` used; `kMqttBackoffInitialMs/MaxMs` unused |
+
+---
+
 ## Layer Responsibilities
 
 ### ESP32 bridge

@@ -1,11 +1,35 @@
 # Threat Model and Safety Policy
 
+> ⚠️ **PRODUCTION BLOCKED**: The current firmware uses plain MQTT (`WiFiClient`) on port 1883 with no TLS. All credentials and payload data are transmitted in the clear. Do not deploy outside an isolated lab until TLS is wired. See `mqtt-security.md` Section 2.
+
 This document defines the threat model, command authorization rules, AI command safety constraints, fail-safe behaviour, and watchdog policy for the ESP32-MEGA MQTT bridge. It is the authoritative safety reference for issue #5.
 
 It supplements:
 - [MQTT contract](./mqtt-contract.md) -- topics, QoS, framing
 - [Command lifecycle & authorization](./contracts/v1/command-lifecycle.md) -- state machine, TTL, dedupe, error codes
 - [Command schema](./contracts/v1/schemas/command.schema.json) -- JSON field constraints
+
+---
+
+## Implementation Status
+
+| Control | Status | Evidence |
+|---|---|---|
+| CRC-16/CCITT-FALSE accidental-corruption detection | ✅ Implemented | `amlp::encode()` / `crc16_ccitt_false()` |
+| Replay deduplication (16-entry FIFO) | ✅ Implemented | `BridgeCore` `recent_[]` cache; `kDedupeCapacity = 16` |
+| Command queue capacity (8) | ✅ Implemented | `kCommandQueueCapacity = 8` |
+| Command allowlist: all 5 commands | ✅ Implemented | `CommandMapper::build()` in `command_mapper.cpp` |
+| CONVEYOR_START speed validation 1..100 | ✅ Implemented | `CommandMapper::validSpeed()` |
+| SET_OUTPUT channel validation 0..255 | ✅ Implemented | `CommandMapper::validChannel()` |
+| Fail-closed auth (no empty credentials) | ✅ Implemented | `connectOnce()` guard in `mqtt_bridge.cpp` |
+| Anonymous connection prevention | ✅ Implemented | `connectOnce()` refuses if `username_` empty |
+| CRC-16 as cryptographic integrity | ❌ Not applicable | CRC-16 detects accidents only; not a security primitive |
+| TLS transport | 🔒 Planned | `WiFiClient` used; `WiFiClientSecure` not wired |
+| Runtime allowlist (configurable) | 🔒 Planned | Hard-coded in `CommandMapper` |
+| Actuator hard limits at ESP32 level | 🔒 Planned | MEGA enforces; ESP32-level clamp planned |
+| E-stop priority queue bypass | 🔒 Planned | `estop_active_` not implemented; `CONVEYOR_STOP` not yet special-cased |
+| SPIFFS device registry | 🔒 Planned | Hard-coded topic names |
+| Exponential backoff for MQTT reconnect | 🔒 Planned | Fixed `kMqttRetryMs` used |
 
 ---
 
@@ -67,28 +91,28 @@ The MQTT broker **must** enforce an access control list. This is the primary gat
 
 ### 2.2 ESP32 Input Validation
 
-All MQTT JSON is validated in `MqttBridge::onMessage()` and `buildAmlpCommand()` before a UART frame is transmitted.
+All MQTT JSON is validated in `MqttBridge::onMessage()` and `CommandMapper::build()` before a UART frame is transmitted.
 
 | Check | Source field | Rule | On failure |
 |---|---|---|---|
 | JSON structure | top-level | Must be a JSON object; `deserializeJson` must succeed | `invalid_argument` |
-| Required fields | `request_id`, `command` | Must be non-null, non-empty strings | `invalid_argument` |
+| Required fields | `command_id` (integer) or `request_id` (string), `command_name` | Correlation ID must be present; `command_name` must be non-null | `invalid_argument` |
 | Field count | `arguments` array | Max 10 items (`maxItems: 10` in schema) | `invalid_argument` |
-| String length | `request_id`, `command`, each `arguments` item | Max 64 bytes each (AMLP field limit) | `invalid_argument` |
+| String length | `request_id`, `command_name`, each `arguments` item | Max 64 bytes each (AMLP field limit) | `invalid_argument` |
 | Allowed characters | `arguments` items | Printable ASCII 0x21..0x7E; prohibited: `,` `*` `@` CR LF | `invalid_argument` |
-| `command` allowlist | `command` field | Must be one of the five tokens below | `unknown_command` |
+| `command_name` allowlist | `command_name` field | Must be one of the five tokens below | `unknown_command` |
 | Argument range -- CONVEYOR_START | `arguments[0]` | Integer string 1..100 | `invalid_argument` |
 | Argument range -- SET_OUTPUT | `arguments[0]` | Integer string 0..255; `arguments[1]` must be `"0"` or `"1"` | `invalid_argument` |
 | Payload size | AMLP-encoded frame | Must be <= 256 bytes | `invalid_argument` |
-| `request_id` uniqueness | pending / queue / recent cache | Reject if `findRequest()` returns true | `duplicate` (no re-enqueue) |
+| `command_id` / `request_id` uniqueness | pending / queue / recent cache | Reject if `findRequest()` returns true | `duplicate` (no re-enqueue) |
 
 All rejected commands result in an **immediate** MQTT ACK (`status: "duplicate"`, `"invalid_argument"`, `"unknown_command"`, `"internal_error"`). Commands are never silently dropped or forwarded with invalid data.
 
 ### 2.3 Command Allowlist
 
-The bridge firmware accepts **only** the following `command` values (case-sensitive ASCII). Any other value returns `unknown_command`.
+The bridge firmware accepts **only** the following `command_name` values (case-sensitive ASCII). Any other value returns `unknown_command`.
 
-| `command` | Required `arguments` | AMLP frame example |
+| `command_name` | Required `arguments` | AMLP frame example |
 |---|---|---|
 | `CONVEYOR_START` | One: speed as decimal string integer 1..100 | `@CMD,1,CONVEYOR_START,60*XXXX\r\n` |
 | `CONVEYOR_STOP` | None | `@CMD,2,CONVEYOR_STOP*XXXX\r\n` |
@@ -105,7 +129,7 @@ The JSON schema (`command.schema.json`) encodes this as `enum: ["CONVEYOR_START"
 | ESP32 bridge | 16 (`kDedupeCapacity`) | `request_id` + `sequence` | Until evicted by newer entries |
 | MEGA uKit | 8 | Command `id` (AMLP field 0) | Until evicted by newer entries |
 
-- **Dedup window**: at least `max(16, 8) * retryIntervalMs = 16 seconds` after a command completes before the same `command_id` may be reused for a different command.
+- **Dedup window**: The bridge maintains a 16-entry FIFO cache (`kDedupeCapacity`) and the MEGA uKit maintains an 8-entry cache. A `command_id` evicted from either cache is treated as new. The window is throughput-dependent — at ≤1 command/s the ESP32 cache holds 16 seconds of history, but at higher rates it shrinks. Publishers must not assume any minimum reuse window; use UUIDs or monotonic counters.
 - **TTL enforcement**: `ttl_seconds` (schema default 10 s, range 1..300 s) is the wall-clock deadline for the command. The ESP32 should stop retransmitting once the deadline is reached rather than waiting for all `maxAttempts`. (Currently `ttl_seconds` is parsed but not wired into the retry budget; firmware update required.)
 - A command that is in the cache is acknowledged with `status: "duplicate"` and **not re-enqueued or re-sent**.
 
