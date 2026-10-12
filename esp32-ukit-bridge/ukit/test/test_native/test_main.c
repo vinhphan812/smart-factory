@@ -47,7 +47,7 @@ static void test_crc_golden_vectors(void) {
     /* All three AMLP body CRCs from shared/protocol-spec/test-vectors.json */
     TEST_ASSERT_EQUAL_HEX16(
         0xC942u,
-        amlp_crc16_ccitt_false((const uint8_t *)"CMD,102,CONVEYOR_START,60", 27u));
+        amlp_crc16_ccitt_false((const uint8_t *)"CMD,102,CONVEYOR_START,60", 25u));
     TEST_ASSERT_EQUAL_HEX16(
         0x22A0u,
         amlp_crc16_ccitt_false((const uint8_t *)"ACK,102,OK", 11u));

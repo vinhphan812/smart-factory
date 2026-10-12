@@ -30,10 +30,10 @@ jobs:
           cache: pip
 
       - name: Install package and test dependencies
-        run: python -m pip install -e ".[test]"
+        run: python -m pip install -e "esp32-ukit-bridge".[test]
 
       - name: Run Python tests
-        run: python -m pytest tests/python
+        run: python -m pytest esp32-ukit-bridge/tests/python esp32-ukit-bridge/tests/parity
 
   platformio:
     name: PlatformIO test and build
