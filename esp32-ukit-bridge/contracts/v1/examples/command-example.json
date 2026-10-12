@@ -1,0 +1,10 @@
+{
+  "$id": "https://smart-factory.example.com/contracts/v1/examples/command-example.json",
+  "command_id": 102,
+  "correlation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "device_id": "bridge-001",
+  "command_name": "CONVEYOR_START",
+  "arguments": ["60"],
+  "timestamp": "2026-10-12T08:30:00.000Z",
+  "ttl_seconds": 10
+}

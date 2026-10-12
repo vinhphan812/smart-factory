@@ -8,10 +8,10 @@ A bridge that connects uKit controllers to an MQTT broker via ESP32. ESP32 recei
 
 ```mermaid
 graph LR
-    Broker["MQTT Broker"] <-->|Wi-Fi| ESP32["ESP32 Bridge"]
+    Broker["MQTT Broker"] <-->|"Wi-Fi"| ESP32["ESP32 Bridge"]
     ESP32 -->|"TX GPIO17"| RX0["uKit RX0"]
-    ESP32 <--|"RX GPIO18"| TX0["uKit TX0"]
-    ESP32 ---|GND| GND["GND"]
+    TX0["uKit TX0"] -->|"RX GPIO18"| ESP32
+    ESP32 ---|"GND"| GND["GND"]
 ```
 
 **Electrical safety:** confirm the UART logic level of both ESP32 and uKit before connecting. ESP32 uses 3.3 V logic; do not assume uKit RX0/TX0 are also 3.3 V. If levels differ, use an appropriate logic level shifter. Always connect common GND.

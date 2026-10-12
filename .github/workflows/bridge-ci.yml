@@ -2,7 +2,11 @@ name: CI
 
 on:
   push:
+    paths:
+      - esp32-ukit-bridge/**
   pull_request:
+    paths:
+      - esp32-ukit-bridge/**
 
 permissions:
   contents: read
@@ -56,25 +60,25 @@ jobs:
         run: python -m pip install --upgrade platformio
 
       - name: Test portable uKit reference
-        run: pio test -d ukit -e native
+        run: pio test -d esp32-ukit-bridge/ukit -e native
 
       - name: Build portable uKit reference
-        run: pio run -d ukit -e native
+        run: pio run -d esp32-ukit-bridge/ukit -e native
 
       - name: Test ESP32 native code when available
         shell: bash
         run: |
-          if [[ -f esp32/platformio.ini ]]; then
-            pio test -d esp32 -e native --filter "test_*"
+          if [[ -f esp32-ukit-bridge/esp32/platformio.ini ]]; then
+            pio test -d esp32-ukit-bridge/esp32 -e native --filter "test_*"
           else
-            echo "esp32/platformio.ini not found; skipping ESP32 test."
+            echo "esp32-ukit-bridge/esp32/platformio.ini not found; skipping ESP32 test."
           fi
 
       - name: Build ESP32 firmware when available
         shell: bash
         run: |
-          if [[ -f esp32/platformio.ini ]]; then
-            pio run -d esp32
+          if [[ -f esp32-ukit-bridge/esp32/platformio.ini ]]; then
+            pio run -d esp32-ukit-bridge/esp32
           else
-            echo "esp32/platformio.ini not found; skipping ESP32 build."
+            echo "esp32-ukit-bridge/esp32/platformio.ini not found; skipping ESP32 build."
           fi
