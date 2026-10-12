@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/v1/schemas/telemetry.schema.json",
+  "title": "Telemetry",
+  "description": "Canonical telemetry payload emitted by uKit over AMLP and forwarded by the ESP32 bridge.",
+  "type": "object",
+  "required": ["device_id", "timestamp", "state"],
+  "properties": {
+    "device_id": {
+      "type": "string",
+      "description": "Identifier of the bridge that forwarded this telemetry.",
+      "examples": ["bridge-001"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) when the telemetry was captured."
+    },
+    "state": {
+      "type": "string",
+      "description": "Current device state string.",
+      "examples": ["STATE"]
+    },
+    "speed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Current conveyor speed setting (0 when stopped)."
+    },
+    "sensors": {
+      "type": "object",
+      "description": "Raw sensor readings as reported by uKit.",
+      "properties": {
+        "temperature_centi_c": {
+          "type": "integer",
+          "description": "Temperature in hundredths of degrees Celsius (divide by 100 for Celsius)."
+        },
+        "humidity_centi_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Relative humidity in hundredths of a percent (divide by 100 for percent)."
+        },
+        "digital_inputs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "16-bit bitmask of digital input states."
+        }
+      }
+    },
+    "uptime": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Device uptime in milliseconds since last reset."
+    }
+  },
+  "additionalProperties": false
+}

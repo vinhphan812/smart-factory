@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/v1/schemas/device-event.schema.json",
+  "title": "DeviceEvent",
+  "description": "Canonical device event envelope used across the Smart Factory system.",
+  "type": "object",
+  "required": ["device_id", "timestamp", "event_type", "payload"],
+  "properties": {
+    "device_id": {
+      "type": "string",
+      "description": "Unique identifier for the device that generated the event.",
+      "examples": ["bridge-001", "conveyor-a1"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) when the event occurred on the device."
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Discriminator for the event category.",
+      "enum": ["command_acknowledged", "command_failed", "telemetry", "status_change", "error"]
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-type-specific data payload.",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "Correlation ID matching the originating command id."
+        },
+        "status": {
+          "type": "string",
+          "description": "Application-level status, e.g. 'acknowledged', 'failed'.",
+          "examples": ["acknowledged", "failed", "OK", "UNKNOWN_COMMAND"]
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of transmission attempts before success or exhaustion."
+        }
+      }
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonically increasing sequence number from the bridge. Omit if unknown."
+    },
+    "trace_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Distributed trace identifier for correlating events across services."
+    }
+  },
+  "additionalProperties": false
+}

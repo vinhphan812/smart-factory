@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/v1/schemas/command.schema.json",
+  "title": "Command",
+  "description": "Canonical command envelope sent from the SCADA/application layer to a bridge device.",
+  "type": "object",
+  "required": ["command_id", "device_id", "command_name", "timestamp"],
+  "properties": {
+    "command_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295,
+      "description": "Unique command identifier used for correlation, queue/retry and deduplication."
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "Optional external correlation id (e.g. UUID) for end-to-end tracing."
+    },
+    "device_id": {
+      "type": "string",
+      "description": "Target device/bridge identifier.",
+      "examples": ["bridge-001"]
+    },
+    "command_name": {
+      "type": "string",
+      "description": "Name of the command to execute on the device.",
+      "enum": ["CONVEYOR_START", "CONVEYOR_STOP"]
+    },
+    "arguments": {
+      "type": "array",
+      "description": "Positional arguments passed to the command.",
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[\\x21-\\x7E]+$",
+        "description": "Printable ASCII, 1-64 bytes. Must not contain: comma, asterisk, at-sign, CR or LF."
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) when the command was issued."
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 10,
+      "description": "Time-to-live in seconds before the command is considered stale by the bridge."
+    }
+  },
+  "additionalProperties": false
+}

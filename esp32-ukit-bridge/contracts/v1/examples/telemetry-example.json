@@ -1,0 +1,13 @@
+{
+  "$id": "https://smart-factory.example.com/contracts/v1/examples/telemetry-example.json",
+  "device_id": "bridge-001",
+  "timestamp": "2026-10-12T08:30:45.123Z",
+  "state": "STATE",
+  "speed": 60,
+  "sensors": {
+    "temperature_centi_c": 2534,
+    "humidity_centi_percent": 6550,
+    "digital_inputs": 5
+  },
+  "uptime": 123456
+}
