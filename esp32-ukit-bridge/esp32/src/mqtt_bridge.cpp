@@ -191,10 +191,15 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
 
   // -----------------------------------------------------------------------
   // Extract arguments from the canonical arguments array.
+  // Strictly require a JSON array — a non-array or absent "arguments" means
+  // zero arguments for all commands (including SET_OUTPUT and CONVEYOR_START).
   // -----------------------------------------------------------------------
   unsigned int channel = 0;
   bool outputValue = false;
+  bool channelParsed = false;
+  bool valueParsed = false;
   int speedArg = -1;
+  bool speedParsed = false;
   uint8_t argCount = 0;
   const char* arg0 = nullptr;
   const char* arg1 = nullptr;
@@ -211,30 +216,43 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
   }
 
   // Pre-parse SET_OUTPUT channel and value from arguments.
-  if (argCount >= 2 && arg0 != nullptr && arg1 != nullptr) {
-    // Channel is arg0 as unsigned integer string.
-    char* end = nullptr;
-    const unsigned long ch = std::strtoul(arg0, &end, 10);
-    if (end != arg0 && *end == '\0' && ch <= 255UL) {
-      channel = static_cast<unsigned int>(ch);
+  // Track parse success explicitly — a failed parse must NOT produce a
+  // valid command that falls through to the actuator.
+  if (std::strcmp(commandName, "SET_OUTPUT") == 0) {
+    if (argCount >= 2 && arg0 != nullptr && arg1 != nullptr) {
+      // Channel: must be strictly decimal with no trailing non-numeric garbage.
+      char* endCh = nullptr;
+      const unsigned long ch = std::strtoul(arg0, &endCh, 10);
+      if (endCh != arg0 && *endCh == '\0' && ch <= 255UL) {
+        channel = static_cast<unsigned int>(ch);
+        channelParsed = true;
+      }
+      // Value: must be exactly "0" or "1".
+      if (std::strcmp(arg1, "0") == 0) {
+        outputValue = false;
+        valueParsed = true;
+      } else if (std::strcmp(arg1, "1") == 0) {
+        outputValue = true;
+        valueParsed = true;
+      }
     }
-    // Value is arg1 as bool string: "1"/"true" -> true, "0"/"false" -> false.
-    if (std::strcmp(arg1, "1") == 0 || std::strcmp(arg1, "true") == 0 ||
-        std::strcmp(arg1, "True") == 0) {
-      outputValue = true;
-    } else if (std::strcmp(arg1, "0") == 0 || std::strcmp(arg1, "false") == 0 ||
-               std::strcmp(arg1, "False") == 0) {
-      outputValue = false;
+    // Fail-open guard: malformed channel or value → reject immediately.
+    // Do NOT fall through with channel=0, value=false defaults.
+    if (!channelParsed || !valueParsed) {
+      publishImmediateAck(requestId, sequence, commandName,
+                          "invalid_argument", 2);
+      return;
     }
   }
 
   // Pre-parse CONVEYOR_START speed from arg0.
   if (std::strcmp(commandName, "CONVEYOR_START") == 0 && argCount >= 1 &&
       arg0 != nullptr) {
-    char* end = nullptr;
-    const long spd = std::strtol(arg0, &end, 10);
-    if (end != arg0 && *end == '\0' && spd >= 1 && spd <= 100) {
+    char* endSpd = nullptr;
+    const long spd = std::strtol(arg0, &endSpd, 10);
+    if (endSpd != arg0 && *endSpd == '\0' && spd >= 1 && spd <= 100) {
       speedArg = static_cast<int>(spd);
+      speedParsed = true;
     }
   }
 

@@ -189,12 +189,20 @@ CommandMapperResult CommandMapper::build(
   }
 
   if (std::strcmp(commandName, "SET_OUTPUT") == 0) {
-    // SET_OUTPUT requires exactly two arguments: channel (uint 0..255) and value (bool).
+    // SET_OUTPUT requires exactly two arguments: channel (uint 0..255) and value (0 or 1).
     if (argCount != 2u || arg0 == nullptr || arg1 == nullptr) {
       result.code = CommandMapperResult::kInvalidArgument;
       return result;
     }
     if (!validChannel(channel)) {
+      result.code = CommandMapperResult::kInvalidArgument;
+      return result;
+    }
+    // Reject value strings that are not exactly "0" or "1".
+    // The JSON adapter pre-parses these; if parsing failed the adapter returns
+    // early before calling build(). This defense-in-depth check catches any
+    // caller that passes a raw boolean or malformed string for the value.
+    if (std::strcmp(arg1, "0") != 0 && std::strcmp(arg1, "1") != 0) {
       result.code = CommandMapperResult::kInvalidArgument;
       return result;
     }

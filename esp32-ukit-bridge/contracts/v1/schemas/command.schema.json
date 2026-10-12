@@ -56,5 +56,14 @@
       "description": "Time-to-live in seconds before the command is considered stale. The ESP32 bridge firmware uses a fixed retry budget (3 attempts, 1 s interval). TTL enforcement via wall-clock deadline is planned."
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "description": "Either command_id (integer) or request_id (string) must be present. The firmware rejects requests without any correlation ID.",
+      "anyOf": [
+        { "required": ["command_id"] },
+        { "required": ["request_id"] }
+      ]
+    }
+  ]
 }
