@@ -30,6 +30,9 @@ class AckStatus(str, Enum):
 class CommandId(str, Enum):
     CONVEYOR_START = "CONVEYOR_START"
     CONVEYOR_STOP = "CONVEYOR_STOP"
+    PING = "PING"
+    RESET = "RESET"
+    SET_OUTPUT = "SET_OUTPUT"
 
 
 class FrameError(ValueError):

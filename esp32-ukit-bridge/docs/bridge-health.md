@@ -4,6 +4,22 @@ This document describes the health monitoring, heartbeat, and reconnection behav
 
 ---
 
+## Implementation Status
+
+| Feature | Status | Evidence |
+|---------|--------|---------|
+| `publishHeartbeat()` function body | ✅ Implemented | `esp32/src/diagnostics.cpp` |
+| Heartbeat called in `MqttBridge::tick()` | 🔒 Planned | Not wired; `lastHeartbeatMs_` not in `MqttBridge` |
+| `checkTelemetryHealth()` function body | ✅ Implemented | `esp32/src/diagnostics.cpp` |
+| Telemetry health called in `MqttBridge::tick()` | 🔒 Planned | `lastTelReceivedMs_` not tracked in `UartAdapter` |
+| `telemetry_timeout` event on critical | 🔒 Planned | Branch exists but not called; no rate guard |
+| `DiagnosticsCounters` struct | ✅ Implemented | Defined in `diagnostics.h` |
+| Counter increments at call sites | 🔒 Planned | No call sites increment any counter |
+| MQTT exponential backoff | 🔒 Planned | `kMqttBackoffInitialMs/MaxMs` unused; fixed `kMqttRetryMs` used |
+| SPIFFS device registry | 🔒 Planned | Not wired; hard-coded topic names |
+
+---
+
 ## 1. Heartbeat
 
 The bridge periodically publishes a heartbeat message to advertise its presence and liveness.

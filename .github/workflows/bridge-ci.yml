@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - esp32-ukit-bridge/**
+      - .github/workflows/**
   pull_request:
     paths:
       - esp32-ukit-bridge/**
+      - .github/workflows/**
 
 permissions:
   contents: read
