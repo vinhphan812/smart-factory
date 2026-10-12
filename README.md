@@ -1,159 +1,58 @@
-# Smart Factory — AIBOT Industrial Automation Platform
+# Smart Factory — AIBOT
 
-A modular industrial automation platform built around a physical 9-module smart factory, a real-time Digital Twin, and an Edge AI co-pilot (MiniAlpha). The project is organized as a monorepo; each module lives in its own subdirectory.
+**A 12-month research and engineering project** at AIBOT / Dong Nai Technology University (DNTU): a nine-module physical miniature factory, a **real-time Unreal Engine Digital Twin**, and an **AI Edge MiniAlpha Robot** for bounded monitoring and incident response.
 
-## The Three Systems
+This repository is a **modular monorepo**. GitHub Issues describe planned deliverables; they are not proof that the requested features or hardware are already implemented.
 
-### Physical Factory (9 Modules)
-A real-world factory floor made of 9 interlocking production-line modules driven by
-uKit microcontrollers and Arduino MEGA logic controllers. Each module hosts one or more
-actuators (conveyor belts, robotic arms, color sorters, stacking arms, etc.) and
-sensors (inductive sensors, color sensors, IR barriers). The ESP32 Bridge translates
-network commands into the AMLP v1 serial protocol understood by the MEGA.
+## Start here
 
-### Digital Twin
-A near-real-time 3D visualization of the physical factory rendered in a web browser.
-The twin subscribes to the same MQTT topics as the physical bridge, mirroring machine
-state, telemetry and fault events as they happen on the floor. Operators can watch
-the live system without being on the factory floor.
+- [Project context, objectives and readiness](docs/PROJECT_CONTEXT.md)
+- [Documentation index](docs/README.md)
+- [Architecture: current bridge vs future systems](docs/architecture/overview.md)
+- [Contracts and event semantics](docs/contracts-and-data.md)
+- [Testing and acceptance](docs/testing-and-acceptance.md)
+- [12-month roadmap](docs/ROADMAP.md)
+- [Instructions for AI coding agents](AGENTS.md)
+- [Contribution and claiming issues](CONTRIBUTING.md)
+- [Master backlog Issue #52](https://github.com/vinhphan812/smart-factory/issues/52)
 
-### MiniAlpha (Edge AI)
-An on-premises AI co-pilot running on edge hardware (e.g. Raspberry Pi or NVIDIA Jetson)
-that observes both the physical and digital layers. MiniAlpha provides anomaly detection,
-predictive maintenance alerts and natural-language interaction with the factory.
+## System components
 
----
-
-## Repository Status
-
-| Module | Status | Notes |
+| System | Research target | Current repository status |
 |---|---|---|
-| `esp32-ukit-bridge` | **Implemented** | Wi-Fi/MQTT-to-AMLP bridge for the uKit layer |
-| `physical-module-*` | Planned | 9 individual module controllers (MEGA firmware) |
-| `digital-twin` | Planned | Web-based 3D twin (Three.js / R3F) |
-| `iot-gateway` | Planned | Unified MQTT/OPC-UA gateway for SCADA/cloud |
-| `observability` | Planned | Prometheus + Grafana + structured log pipeline |
-| `minialpha` | Planned | Edge AI inference service |
-| `scada-client` | Planned | Desktop or web SCADA panel |
+| Physical factory | Forklift, Dump Truck, Bracket, Packaging, Conveyor, Sorting, Tower Crane, Parking Lot and integration | ESP32–UKIT communication bridge exists; full 9-module hardware proof pending |
+| Digital Twin | Unreal Engine, 3D visualization synchronized with observed physical events | Planned; see Issues #11 #12 #33–#35 |
+| AI Edge Robot | MiniAlpha alerts and validated, bounded on-site response | Planned; see Issues #13 #14 #36–#38 |
+| Supporting services | MQTT gateway, event store, dashboard, safe commands, tests and deployment | Some contracts and bridge firmware exist; most services planned |
 
----
+## Existing bridge: what is actually present
 
-## Architecture
+The [ESP32–UKIT bridge](esp32-ukit-bridge/README.md) includes ESP32-S3 PlatformIO firmware, AMLP v1 UART framing, existing MQTT command/result/status behavior, Python tools, C99 portable UKIT reference code and automated tests. It **does not by itself prove integration with the vendor's real UKIT firmware or nine factory modules**.
 
-```
-                                    +------------+
-                                    |  SCADA /   |
-                                    |  Cloud     |
-                                    +-----+------+
-                                          | MQTT JSON / TLS
-                                          v
-  +----------+  Wi-Fi/MQTT  +-------------------+  UART/AMLP  +-----+
-  | Broker  |<-----------> | ESP32 Bridge      | <--------->|MEGA |
-  +----------+              | (esp32-ukit-bridge)|            +-----+
-                            +-------------------+                   |
-                                                                         v
-                                    +-------------------+   Digital Twin
-                                    | MQTT topics       | <--- (web UI)
-                                    | bridge/command    |
-                                    | bridge/telemetry  |
-                                    | bridge/status     |
-                                    +-------------------+
-```
+Important: the [current MQTT contract](esp32-ukit-bridge/docs/mqtt-contract.md) documents `smart-factory/bridge/command`, `smart-factory/bridge/result`, and `smart-factory/bridge/status`; TEL→MQTT telemetry is not yet verified as implemented. Do not invent additional operational topic endpoints or assert live Twin synchronization.
 
-**Layers (top → bottom):**
-
-1. **Cloud / SCADA** — publishes JSON commands, receives telemetry.
-2. **MQTT Broker** — mosquitto or cloud broker (HiveMQ, AWS IoT Core, etc.).
-3. **ESP32 Bridge** — subscribes to `smart-factory/bridge/command`, validates JSON,
-   encodes AMLP v1 frames, sends over UART; parses ACK/telemetry from UART,
-   publishes results to `smart-factory/bridge/+/+`.
-4. **Arduino MEGA** — executes actuator commands, returns ACK, emits telemetry.
-5. **Actuators / Sensors** — physical hardware on each factory module.
-
-**Safety boundary:** The ESP32 sits between the network and the MEGA. It validates
-and frames all traffic. The MEGA firmware is responsible for debouncing sensors,
-enforcing mechanical travel limits and emergency-stop handling locally; network
-latency must never block safety-critical responses.
-
----
-
-## Quick Start — Bridge Simulator
-
-No hardware required. The Python simulator accepts TCP connections and responds
-with AMLP ACK/TEL frames, enabling full integration testing from a laptop.
+### Software-only quickstart
 
 ```bash
-# 1. Enter the bridge module
 cd esp32-ukit-bridge
-
-# 2. Create a virtual environment
 python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Linux / macOS: source .venv/bin/activate
-
-# 3. Install Python tools + test dependencies
+# Activate the environment for your shell
 python -m pip install -e ".[test]"
-
-# 4. Run tests (Python codec + C99 reference)
 python -m pytest tests/python
-
-# 5. Start the TCP simulator (mimics MEGA UART responses)
 python -m amlp simulate --telemetry-interval 1
-# listens on 127.0.0.1:8765
 ```
 
-From another terminal, send commands through the CLI:
+From the repository root with PlatformIO installed:
 
 ```bash
-python -m amlp command --id 1 --name CONVEYOR_START --arg 60
-python -m amlp command --id 2 --name CONVEYOR_STOP
+pio test -d esp32-ukit-bridge/ukit -e native
+pio run -d esp32-ukit-bridge/esp32 -e esp32-s3
 ```
 
-Decode raw frames:
+These build/simulation results must never be reported as hardware-in-the-loop acceptance.
 
-```bash
-python -m amlp decode "@ACK,1,OK*22A0"
-python -m amlp crc "CMD,1,CONVEYOR_START,60"
-```
+## Safety and licensing
 
-Build the portable C99 reference (no ESP32 hardware needed):
+Physical motion requires local hardware interlocks, operator override and emergency stop independent of networking or AI. A queued/ACK response is not observed successful physical actuation. Check the project's licensing situation before reusing code or distributing vendor SDKs/3D assets; **no root project-wide license is asserted here**. Never commit secrets.
 
-```bash
-pio run -d ukit -e native   # compile + run on host
-pio test -d ukit -e native  # run unit tests on host
-```
-
----
-
-## Prerequisites
-
-| Tool | Version | Purpose |
-|---|---|---|
-| Python | 3.11+ | CLI tools, simulator, tests |
-| PlatformIO Core | latest (`pip install --upgrade platformio`) | Build + test ESP32 and C99 code |
-| Git | any recent | Source control |
-
-Optional (hardware integration):
-
-| Hardware | Purpose |
-|---|---|
-| ESP32-WROOM-32 | Bridge Wi-Fi/MQTT ↔ UART |
-| Arduino MEGA 2560 | Module logic controller |
-| uKit-compatible actuators/sensors | Physical factory modules |
-
----
-
-## Module Details
-
-Detailed documentation for each module lives in its own subdirectory:
-
-- [`esp32-ukit-bridge/README.md`](esp32-ukit-bridge/README.md) — Bridge module: wiring,
-  MQTT contract, AMLP v1 protocol reference, troubleshooting, development workflow.
-- [`esp32-ukit-bridge/docs/`](esp32-ukit-bridge/docs/) — Architecture, wiring diagrams,
-  development guide, MQTT contract specification.
-
----
-
-## License
-
-MIT — see individual module `LICENSE` files.
+For detailed operating rules, see [AGENTS.md](AGENTS.md) and [safety/test policy](docs/testing-and-acceptance.md).
