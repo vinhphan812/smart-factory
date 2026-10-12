@@ -6,6 +6,24 @@ It supplements the [MQTT contract](./mqtt-contract.md) and assumes familiarity w
 
 ---
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| JSON envelope parsing (command_id / request_id, command_name, arguments) | ✅ Implemented | `MqttBridge::onMessage()` + `CommandMapper` |
+| Command allowlist: CONVEYOR_START, CONVEYOR_STOP, RESET, PING, SET_OUTPUT | ✅ Implemented | All five commands in `CommandMapper::build()` |
+| Argument range validation | ✅ Implemented | `CommandMapper` validates channel 0..255, speed 1..100 |
+| TTL / deadline enforcement | 🔒 Planned | `ttl_seconds` field is accepted but not used in retry budget |
+| E-stop / priority command | 🔒 Planned | No `estop_active_` flag; E-stop command returns `unknown_command` |
+| Replay deduplication (16-entry LRU cache) | ✅ Implemented | `BridgeCore::recent_[]` |
+| Duplicate ACK suppression (MEGA side) | ✅ Implemented | 8-entry cache in `ukit_endpoint_t` |
+| Exponential backoff for MQTT reconnect | 🔒 Planned | Fixed `kMqttRetryMs` interval; `kMqttBackoffInitialMs/MaxMs` unused |
+| Heartbeat publication | 🔒 Planned | `publishHeartbeat()` defined but not called in `MqttBridge::tick()` |
+| Telemetry health monitoring | 🔒 Planned | `checkTelemetryHealth()` defined but not called; `lastTelReceivedMs_` not tracked |
+| SPIFFS device registry | 🔒 Planned | Not wired; topics are hard-coded in `MqttBridge::begin()` |
+
+---
+
 ## 1. Command Lifecycle States
 
 A command moves through the following logical states. Not every command visits every state.
@@ -87,9 +105,9 @@ The effective TTL for a given command is:
 effective_ttl_ms = min(ttl_seconds * 1000, maxAttempts * retryIntervalMs)
 ```
 
-- If `ttl_seconds * 1000` is smaller than the fixed retry budget, the bridge SHOULD stop retransmitting once the wall-clock deadline is reached rather than waiting for all `maxAttempts`.
+- If `ttl_seconds * 1000` is smaller than the fixed retry budget, the bridge **should** stop retransmitting once the wall-clock deadline is reached rather than waiting for all `maxAttempts`.
 - If `ttl_seconds * 1000` is larger, the fixed `maxAttempts` limit takes precedence.
-- **Current firmware behaviour**: The ESP32 bridge uses the fixed `maxAttempts` (3) and `retryIntervalMs` (1000 ms) values. The `ttl_seconds` field from the JSON is parsed but not yet wired into the retry budget. Implementations SHOULD interpret `ttl_seconds` as the wall-clock deadline for the command; firmware should be updated to enforce it.
+- **Current firmware behaviour**: The ESP32 bridge uses the fixed `maxAttempts` (3) and `retryIntervalMs` (1000 ms) values. The `ttl_seconds` field is accepted in the JSON payload but **not yet wired into the retry budget**. Commands never expire on this basis. Enforcement is tracked in the Implementation Status table above.
 
 ### 2.3 What Happens on TTL Expiry
 
@@ -132,11 +150,10 @@ The MEGA uKit endpoint maintains an **independent 8-entry cache** of acknowledge
 
 ### 3.3 Deduplication Rules
 
-- A new MQTT message whose `command_id` is found in the bridge's pending, queue, or recent cache is acknowledged with `status: "duplicate"` and is **not re-enqueued or re-sent**.
+- A new MQTT message whose `command_id` (or `request_id`) is found in the bridge's pending, queue, or recent cache is silently dropped. No immediate acknowledgement is published for duplicates.
 - After a command is completed (acknowledged or timed out) its ID remains in the bridge's recent cache until it is evicted by newer entries.
-- MQTT publishers **must not reuse a `command_id`** for a different command while it could still be in either cache:
-  - Safe reuse window after completion: at least `max(kDedupeCapacity, MEGA_cache) * retryIntervalMs` = **16 seconds** after the last publish of that ID.
-  - Publishers SHOULD use a UUID or monotonic counter for `command_id` to avoid accidental reuse.
+- MQTT publishers **must not reuse a `command_id` or `request_id`** for a different command while it could still be in either cache.
+- The 16-entry rolling cache gives best-effort replay protection. A `command_id` evicted from the cache (after 16 newer entries have been completed) or after a bridge restart is treated as new. The safe reuse window is **at most 16 completed commands**; the wall-clock duration of that window depends on command throughput. At 1 command/second the window is approximately 16 seconds; at higher rates it is shorter. Publishers **must not assume any minimum reuse window**; use UUIDs or monotonic counters and never reuse IDs within a single session.
 
 ### 3.4 Sequence Number
 

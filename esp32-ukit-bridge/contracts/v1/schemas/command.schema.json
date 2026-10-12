@@ -2,28 +2,29 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://smart-factory.example.com/contracts/v1/schemas/command.schema.json",
   "title": "Command",
-  "description": "Canonical command envelope sent from the SCADA/application layer to a bridge device.",
+  "description": "Canonical command envelope sent from the SCADA/application layer to a bridge device. The ESP32 bridge firmware reads command_id (integer) or request_id (string) for correlation, and command_name for the operation token.",
   "type": "object",
-  "required": ["command_id", "device_id", "command_name", "timestamp"],
+  "required": ["command_name"],
   "properties": {
     "command_id": {
       "type": "integer",
       "minimum": 1,
       "maximum": 4294967295,
-      "description": "Unique command identifier used for correlation, queue/retry and deduplication. This is the canonical field name."
+      "description": "Integer correlation ID. Preferred when the caller uses a numeric counter. The bridge converts this to a string for deduplication and ACK correlation. Mutually exclusive with request_id; if both are present, command_id takes precedence."
     },
     "request_id": {
       "type": "string",
-      "description": "Alias for command_id. Some MQTT publishers use request_id (string) instead of command_id (integer). The bridge accepts either. When both are present, request_id takes precedence."
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "String correlation ID. Accepted for UUID-based or legacy callers. When command_id is also present, command_id takes precedence."
     },
     "correlation_id": {
       "type": "string",
-      "description": "Optional external correlation id (e.g. UUID) for end-to-end tracing."
+      "description": "Optional external correlation id (e.g. UUID) for end-to-end tracing between the SCADA layer and the bridge log. Not used by the bridge firmware."
     },
     "device_id": {
       "type": "string",
-      "description": "Target device/bridge identifier.",
-      "examples": ["bridge-001"]
+      "description": "Target device/bridge identifier. Accepted but not validated by the bridge firmware. The bridge routes to the correct device via the MQTT topic."
     },
     "command_name": {
       "type": "string",
@@ -32,7 +33,7 @@
     },
     "arguments": {
       "type": "array",
-      "description": "Positional arguments passed to the command.",
+      "description": "Positional arguments passed to the command. Max 2 are processed (channel + value for SET_OUTPUT; speed for CONVEYOR_START).",
       "maxItems": 10,
       "items": {
         "type": "string",
@@ -45,15 +46,15 @@
     "timestamp": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO 8601 timestamp (UTC) when the command was issued."
+      "description": "ISO 8601 timestamp (UTC) when the command was issued. Accepted but not used by the bridge firmware."
     },
     "ttl_seconds": {
       "type": "integer",
       "minimum": 1,
       "maximum": 300,
       "default": 10,
-      "description": "Time-to-live in seconds before the command is considered stale by the bridge."
+      "description": "Time-to-live in seconds before the command is considered stale. The ESP32 bridge firmware uses a fixed retry budget (3 attempts, 1 s interval). TTL enforcement via wall-clock deadline is planned."
     }
   },
-  "additionalProperties": false
+  "additionalProperties": true
 }

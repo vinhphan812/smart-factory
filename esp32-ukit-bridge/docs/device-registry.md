@@ -2,6 +2,20 @@
 
 This document defines the device registry schema, ownership model, and onboarding process for the Smart Factory installation.
 
+## Implementation Status
+
+| Feature | Status | Evidence |
+|---------|--------|---------|
+| Device ID format specification | ✅ Implemented | Schema defined here |
+| MQTT topic hierarchy (`smart-factory/{deviceId}/...`) | ✅ Implemented | `MqttBridge::begin()` formats topics using chip-derived `deviceId` |
+| Dynamic topic configuration from registry | 🔒 Planned | Not wired; `MqttBridge` uses compile-time topic names |
+| SPIFFS JSON registry loading at startup | 🔒 Planned | No `device-registry.json` file or loading code; topics are hard-coded |
+| Ownership and capabilities fields | 🔒 Planned | Schema defined; no firmware implementation |
+| etcd-backed central registry | 🔒 Planned | Design only |
+| MQTT auto-discovery | 🔒 Planned | Design only |
+
+---
+
 ## Device ID Format
 
 A device identifier is a **UTF-8 string** used in MQTT topics, the registry, and logs.
