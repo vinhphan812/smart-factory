@@ -111,3 +111,20 @@ All values are ASCII decimal strings. Temperature is signed in hundredths of °C
 - ESP32 retries the exact wire frame so the correlation id never changes.
 - uKit caches results for the last 8 ids; duplicate frames get a cached ACK but the handler is not invoked a second time.
 - Do not reuse an `id` for a different command while it could still be in a queue or cache.
+
+## Safety Boundaries
+
+The system implements multiple independent layers of defence-in-depth. Full threat modelling, fail-safe policy, AI command safety rules, watchdog configuration, and recovery procedures are documented in [Threat Model and Safety Policy](./threat-safety-model.md).
+
+Key boundaries:
+
+| Boundary | Mechanism |
+|---|---|
+| MQTT transport | Broker ACL restricts publish access to `smart-factory/{device_id}/command/down` to authorised clients only |
+| ESP32 input validation | Field count, string length, allowed character set, command allowlist, argument range checks |
+| AMLP framing | CRC-16/CCITT-FALSE checksum; inter-byte 250 ms timeout; 256-byte frame limit; 12-field limit |
+| MEGA actuator limits | Hard speed clamp 1..100; watchdog timer; `INVALID_ARGUMENT` returned for out-of-range values |
+| Telemetry isolation | Telemetry parser is read-only; has no access to command queue or actuator control |
+| ESP32 RAM | All state (queue, cache, pending) in static/fixed-size RAM; no dynamic allocation in ISR context |
+| E-stop | Defined as `CONVEYOR_STOP` command with highest priority; bypasses command queue |
+| Fail-closed | Unknown commands and malformed payloads are rejected, never silently ignored or forwarded |
