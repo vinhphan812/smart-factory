@@ -50,10 +50,10 @@ static void test_crc_golden_vectors(void) {
         amlp_crc16_ccitt_false((const uint8_t *)"CMD,102,CONVEYOR_START,60", 25u));
     TEST_ASSERT_EQUAL_HEX16(
         0x22A0u,
-        amlp_crc16_ccitt_false((const uint8_t *)"ACK,102,OK", 11u));
+        amlp_crc16_ccitt_false((const uint8_t *)"ACK,102,OK", 10u));
     TEST_ASSERT_EQUAL_HEX16(
         0x0942u,
-        amlp_crc16_ccitt_false((const uint8_t *)"TEL,CONVEYOR,RUNNING,60,SENSOR1=1", 37u));
+        amlp_crc16_ccitt_false((const uint8_t *)"TEL,CONVEYOR,RUNNING,60,SENSOR1=1", 33u));
 }
 
 static void test_encode_ack_golden_vector(void) {
