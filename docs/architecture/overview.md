@@ -1,175 +1,58 @@
-# Architecture Overview
+# Smart Factory — Architecture (baseline and target)
 
-This document describes the high-level architecture of the Smart Factory platform:
-data flows, control flows, safety boundaries, and the division of responsibility
-between modules.
+**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The scientific target uses Unreal Engine 3D and MiniAlpha. Earlier repository material mentions Three.js and unimplemented MQTT topics; those are not authoritative implementation claims.
 
----
+## Existing bridge baseline
 
-## System Layers
-
-```
-Layer 5  +---------------------+   External systems (SCADA, cloud dashboards)
-         |  SCADA / Cloud      |
-         +---------+-----------+
-                   | MQTT JSON (TLS)
-                   v
-Layer 4  +---------------------+   Message broker (mosquitto / HiveMQ / AWS IoT)
-         |  MQTT Broker        |   Topics: bridge/command, bridge/telemetry,
-         +---------+-----------+   bridge/status, digital-twin/+
-                   | MQTT
-                   v
-Layer 3  +---------------------+   ESP32 firmware (esp32-ukit-bridge)
-         |  ESP32 Bridge        |   - Validates incoming JSON
-         +---------+-----------+   - Encodes AMLP v1 frames
-                   | UART 115200 8N1  - Retries + deduplication
-                   v               - Parses ACK + telemetry
-Layer 2  +---------------------+   Arduino MEGA firmware (physical-module-*)
-         |  MEGA Controller     |   - Executes actuator commands
-         +---------+-----------+   - Enforces safety limits locally
-                   | GPIO / PWM   - Emits periodic telemetry
-                   v
-Layer 1  +---------------------+
-         |  Actuators / Sensors |
-         |  (conveyors, arms,    |  Physical factory floor
-         |   sorters, stackers)  |
-         +---------------------+
+```mermaid
+flowchart LR
+  Broker[MQTT Broker] <-->|JSON Wi-Fi| ESP[ESP32-S3 Bridge]
+  ESP <-->|AMLP v1 UART| Ref[UKIT C99 reference endpoint]
+  Sim[Python AMLP test simulator] -. offline validation .-> Ref
 ```
 
----
+Current documented firmware topics:
+- Subscribe: `smart-factory/bridge/command`, JSON example `{"id":102,"fields":["CONVEYOR_START","60"]}`.
+- Publish: `smart-factory/bridge/result` (queued, duplicate, invalid, acknowledged, failed and attempts), `smart-factory/bridge/status` (retained).
+- AMLP v1 command/ACK/TEL frame shape and CRC are specified in `esp32-ukit-bridge/shared/protocol-spec/AMLP-v1.md`.
+- Firmware currently lacks confirmed TEL-to-MQTT publish; reference UKIT is not approved physical controller firmware.
+- Bridge ACK means a frame acknowledgement, **not** confirmed physical task completion.
 
-## Data Flow — Telemetry Path
+## Proposed end-to-end architecture (not yet all implemented)
 
-```
-MEGA Controller
-  | produces:  @TEL,<uptime>,<temp_c>,<humidity>,<digital_inputs>*CRC4\r\n
-  v UART (TX/RX)
-ESP32 Bridge
-  | parses AMLP, repackages as MQTT JSON:
-  | {
-  |   "module": "CONVEYOR",
-  |   "state": "RUNNING",
-  |   "speed": 60,
-  |   "sensor_1": 1,
-  |   "uptime_ms": 123456,
-  |   "temperature_centi_c": 3420,
-  |   "humidity_centi_pct": 7650
-  | }
-  v MQTT publish  →  broker  →  Digital Twin (web UI)
-                                 →  MiniAlpha (AI inference)
-                                 →  SCADA / historian
-```
-
-- Topic convention: `smart-factory/bridge/telemetry/<module_id>`
-- Payload: JSON object mirroring the AMLP `TEL` frame fields.
-- Latency target: bridge publishes within 50 ms of UART reception.
-- The ESP32 does not store telemetry; it is fire-and-forget.
-
----
-
-## Control Flow — Command Path
-
-```
-SCADA / Cloud
-  | publishes JSON: { "id": 1, "command": "CONVEYOR_START", "arg": 60 }
-  v MQTT subscribe  ←  broker  ←  smart-factory/bridge/command
-                        |
-ESP32 Bridge
-  | validates JSON schema
-  | generates AMLP: @CMD,1,CONVEYOR_START,60*<crc4>\r\n
-  | retries up to 3x with 500 ms interval on missing ACK
-  | deduplicates by correlation id
-  v UART TX
-                        |
-MEGA Controller
-  | executes command (starts conveyor at speed 60)
-  | sends ACK: @ACK,1,OK*<crc4>\r\n
-  v UART RX → bridge parses ACK, stops retry timer
-                        |
-                        v
-  ESP32 Bridge
-  | publishes MQTT result:
-  | { "id": 1, "status": "OK", "command": "CONVEYOR_START" }
-  v MQTT publish  →  broker  →  SCADA / Cloud
+```mermaid
+flowchart TD
+  Factory[9 physical modules and local controllers] <-->|sensors / bounded commands| Bridge[ESP32 UKIT Bridge / other adapters]
+  Bridge <-->|authenticated MQTT| Broker[Broker]
+  Broker --> Gateway[IoT Gateway: validate normalize trace]
+  Gateway --> Store[(Event store snapshots)]
+  Gateway --> Twin[Unreal Digital Twin]
+  Gateway --> Dash[Dashboard]
+  Gateway --> Edge[Edge anomaly detector]
+  Edge --> Robot[MiniAlpha notification / bounded skills]
+  Operator[Authorized operator] --> Guard[Safety authorization and fresh context guard]
+  Edge -. request only .-> Guard
+  Guard --> Broker
 ```
 
-### Command Retry and Deduplication
+## Observation path
+Device sensor state → local controller → bridge MQTT → gateway validated event → Twin, dashboard, AI, persisted event. The Twin must show **unknown/stale**, not invent a running state, when telemetry becomes disconnected or delayed.
 
-- If the MEGA does not respond within 500 ms, the ESP32 retries the exact same
-  wire frame (same correlation id) up to 3 times.
-- After 3 failures the ESP32 publishes `{ "id": N, "status": "TIMEOUT" }` and
-  discards the command.
-- The MEGA deduplicates by caching the last 8 correlation ids; a re-delivered
-  command returns the cached ACK but does not re-execute actuator logic.
+## Action path
+Operator/AI intent → role/capability authorization → current context and safety gate → expiry/idempotency checks → broker → local controller interlocks → protocol ACK → independent observed state/terminal feedback. Do not interpret `queued` or `acknowledged` as successful physical completion.
 
----
+## Five conceptual layers
+1. Physical factory and actuators
+2. Industrial / IoT communication (UART AMLP, MQTT; OPC UA is a potential extension)
+3. Edge / control (ESP32, local UKIT controllers, safe motion)
+4. Data / AI (gateway, event store, anomalous conditions, robot adapter)
+5. Applications (Unreal Twin, dashboard, educational interfaces)
 
-## Safety Boundaries
+## Open architecture decisions
+- ADR-001: canonical system event schema and device IDs; compatibility with existing bridge MQTT.
+- ADR-002: Unreal engine version, renderer/runtime, Git LFS and 3D asset policy.
+- ADR-003: verified per-device controller/voltage/SDK and emergency-stop mechanism.
+- ADR-004: actual MiniAlpha API and allowed response skills.
+- ADR-005: latency thresholds from instrumented baselines rather than untested declarations.
 
-```
-Network (MQTT)          ESP32 Bridge          MEGA Controller       Physical
-─────────────────────────────────────────────────────────────────────────────
-• TLS / auth at broker  • JSON validation     • Hard travel limits  • E-stop
-• Rate limiting          • Frame size limit   • Sensor debounce      • Overcurrent
-• Idempotency key        • CRC check on AMLP  • Watchdog timer      • Fuses
-• No firmware flash      • Command allowlist   • Emergency stop pin   • Enclosures
-  over MQTT               enforcement           (GPIO cutoff)         grounded
-```
-
-**Critical principle:** Safety-critical logic (travel limits, e-stop, overcurrent
-detection) must run on the MEGA locally. Network delays, broker outages or ESP32
-failure must never prevent the MEGA from stopping a moving actuator.
-
----
-
-## Module Responsibilities
-
-| Module | Responsibility |
-|---|---|
-| `esp32-ukit-bridge` | Wi-Fi, MQTT client, JSON ↔ AMLP translation, retry/dedupe, UART I/O |
-| `physical-module-*` | Actuator/sensor control, MEGA firmware, local safety enforcement |
-| `digital-twin` | Subscribe telemetry, render 3D scene, expose web UI |
-| `iot-gateway` | Protocol translation (OPC-UA ↔ MQTT), authentication proxy for SCADA |
-| `observability` | Prometheus exporter, Grafana dashboards, structured log aggregation |
-| `minialpha` | On-device AI inference (anomaly detection, NL interface) |
-| `scada-client` | Human-machine interface, alarm acknowledgment, historian queries |
-
----
-
-## Hardware Blockers
-
-| Hardware | Blocker Detail | Workaround |
-|---|---|---|
-| uKit SDK / firmware | uKit SDK, electrical pinout and flashing procedure have not been provided | `ukit/` portable C99 reference; `simulator.py` TCP endpoint |
-| Physical MEGA firmware | 9-module MEGA source not yet in repo | Simulate commands via `amlp` CLI |
-| ESP32 real UART | `esp32/platformio.ini` not yet present | Python simulator + C99 native build |
-| Actuator drivers | Motor drivers, sensors not wired to MEGA | Stage-by-stage development with simulator |
-
-The ESP32 bridge is functionally complete (Python tools, C99 reference, MQTT contract).
-Full hardware integration is blocked pending delivery of the uKit SDK and physical
-module specifications.
-
----
-
-## MQTT Topic Reference
-
-```
-smart-factory/bridge/command/<module_id>   # JSON command  (SCADA → Bridge)
-smart-factory/bridge/telemetry/<module_id> # JSON telemetry (Bridge → Twin/AI)
-smart-factory/bridge/status/<module_id>    # Bridge online/error events
-smart-factory/digital-twin/scene/<event>    # Twin rendering events
-smart-factory/alarms/<module_id>            # Alarm notifications
-```
-
-All topics use QoS 1 for commands and telemetry. Alarm topics use QoS 2.
-
----
-
-## Protocol Stack Summary
-
-| Layer | Protocol | Format |
-|---|---|---|
-| Application | MQTT 3.1.1 | JSON |
-| Transport | TLS 1.3 (production) | TCP |
-| Bridge firmware | AMLP v1 over UART | `@BODY*CRC4\r\n` |
-| Physical link | UART 115200 8N1 | 3.3 V TTL (verify uKit levels) |
+See [component boundaries](components.md), [contracts](../contracts-and-data.md) and [acceptance](../testing-and-acceptance.md).
