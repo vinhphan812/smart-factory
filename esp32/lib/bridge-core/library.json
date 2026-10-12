@@ -1,0 +1,8 @@
+{
+  "name": "bridge-core",
+  "version": "1.0.0",
+  "description": "Platform-independent reliable command bridge domain",
+  "build": {
+    "flags": "-std=gnu++17"
+  }
+}

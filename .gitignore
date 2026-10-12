@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Compiled test binaries (from host compiler)
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Credentials and certificates
+esp32/include/secrets.h
+*.pem
+*.key
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build and temporary files
+build/
+dist/
+*.log
+*.tmp

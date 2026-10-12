@@ -1,0 +1,9 @@
+{
+  "name": "amlp-reference",
+  "version": "0.1.0",
+  "description": "Portable C99 AMLP codec and reference uKit endpoint",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  }
+}
