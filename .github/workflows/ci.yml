@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package and test dependencies
+        run: python -m pip install -e ".[test]"
+
+      - name: Run Python tests
+        run: python -m pytest tests/python
+
+  platformio:
+    name: PlatformIO test and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio/.cache
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
+      - name: Install PlatformIO Core
+        run: python -m pip install --upgrade platformio
+
+      - name: Test portable uKit reference
+        run: pio test -d ukit -e native
+
+      - name: Build portable uKit reference
+        run: pio run -d ukit -e native
+
+      - name: Test ESP32 native code when available
+        shell: bash
+        run: |
+          if [[ -f esp32/platformio.ini ]]; then
+            pio test -d esp32 -e native --filter "test_*"
+          else
+            echo "esp32/platformio.ini not found; skipping ESP32 test."
+          fi
+
+      - name: Build ESP32 firmware when available
+        shell: bash
+        run: |
+          if [[ -f esp32/platformio.ini ]]; then
+            pio run -d esp32
+          else
+            echo "esp32/platformio.ini not found; skipping ESP32 build."
+          fi

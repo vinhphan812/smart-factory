@@ -1,0 +1,9 @@
+{
+  "name": "amlp",
+  "version": "1.0.0",
+  "description": "Arduino-independent C++17 AMLP v1 codec and incremental parser",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  }
+}

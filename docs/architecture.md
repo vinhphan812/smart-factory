@@ -1,0 +1,113 @@
+# System Architecture
+
+## Goals
+
+The bridge separates network communication from uKit control logic:
+
+1. ESP32 maintains Wi-Fi/MQTT and converts MQTT JSON to ASCII AMLP frames.
+2. uKit processes commands locally, returns ACK and emits telemetry over UART.
+3. AMLP provides clear framing, CRC and limits for transmission error detection.
+
+```mermaid
+graph LR
+    SCADA["SCADA / Application"]
+    Broker["MQTT Broker"]
+    ESP32["ESP32 Bridge"]
+    UKit["uKit"]
+    Tools["Python Tools"]
+
+    SCADA <-- "Wi-Fi / MQTT JSON" --> Broker
+    Broker <-- "Wi-Fi / MQTT JSON" --> ESP32
+    ESP32 -- "UART / AMLP v1" --> UKit
+    ESP32 -- "TCP / AMLP v1" --> Tools
+```
+
+## Layer Responsibilities
+
+### ESP32 bridge
+
+- Subscribe to `smart-factory/bridge/command`.
+- Validate JSON `{ "id": number, "fields": [string, ...] }`.
+- Encode as `CMD`, placing `id` as the first field and the array `fields` elements after.
+- Queue, retry the full wire frame, and deduplicate correlation ids.
+- Parse AMLP from UART; the first ACK field is used to complete the pending command.
+- Publish results and status to MQTT.
+
+### uKit endpoint
+
+- Streaming parser ignores noise until `@`, restarts on new `@`, and accepts both CRLF and LF-only.
+- Limits: 256-byte frame, 12 fields, 64-byte field, 250 ms inter-byte timeout.
+- Validate syntax and CRC before delivering a frame.
+- Bridge profile: process `CMD,<id>,<command>,...`, return `ACK,<id>,<status>`.
+- Dedupe the last 8 correlation ids: retrying gets a cached ACK but the handler is not called again.
+- Emit `TEL,STATE,...` periodically.
+
+`ukit/` is a portable C99 reference. UART callback, clock, GPIO/sensor must be mapped to the real uKit SDK.
+
+### Python tools
+
+- `protocol.py`: codec following `shared/protocol-spec/AMLP-v1.md`.
+- `cli.py`: encode/decode/CRC and bridge-profile command generation.
+- `simulator.py`: TCP endpoint for testing the bridge without uKit hardware.
+
+The TCP simulator preserves the AMLP byte stream; only the UART transport is replaced by TCP in the development environment.
+
+## AMLP v1
+
+Wire form:
+
+```
+@BODY*CRC4\r\n
+```
+
+- `BODY = type *( "," field )`.
+- `type` is `CMD`, `ACK` or `TEL`.
+- Fields are printable 7-bit ASCII, must not contain `,`, `*`, `@`, CR or LF; must not be empty.
+- Senders emit CRLF; receivers must accept both CRLF and LF-only.
+- CRC4 is four uppercase hex characters of CRC-16/CCITT-FALSE computed over BODY only.
+- Frame max 256 bytes; max 12 fields including type; each field max 64 bytes.
+- A new `@` always discards any partial frame and starts a new one.
+- A partial frame is discarded if no new byte arrives within 250 ms.
+
+CRC: polynomial `0x1021`, initial `0xFFFF`, refin/refout false, xorout `0x0000`; `123456789 -> 0x29B1`.
+
+Standard spec and vectors are at `shared/protocol-spec/`.
+
+## Bridge application profile
+
+AMLP defines framing only; this project adds the following field profile.
+
+### Command
+
+```
+CMD,<correlation_id>,<command>[,<argument>...]
+```
+
+- `correlation_id`: decimal number 1..4294967295.
+- `CONVEYOR_START`: speed argument (e.g. `60`).
+- `CONVEYOR_STOP`: no arguments.
+
+### ACK
+
+```
+ACK,<correlation_id>,<status>
+```
+
+Status: `OK`, `UNKNOWN_COMMAND`, `INVALID_ARGUMENT`, `INTERNAL_ERROR`.
+
+ESP32 only needs the correlation id field to stop retrying; status is still forwarded for diagnostics and future profile extensions.
+
+### Telemetry
+
+```
+TEL,STATE,<uptime_ms>,<temperature_centi_c>,<humidity_centi_percent>,<digital_inputs>
+```
+
+All values are ASCII decimal strings. Temperature is signed in hundredths of °C; humidity is unsigned in hundredths of percent; digital inputs is a 16-bit bitmask.
+
+## Correlation, retry and deduplication
+
+- MQTT `id` becomes the first field of `CMD` and `ACK`.
+- ESP32 retries the exact wire frame so the correlation id never changes.
+- uKit caches results for the last 8 ids; duplicate frames get a cached ACK but the handler is not invoked a second time.
+- Do not reuse an `id` for a different command while it could still be in a queue or cache.

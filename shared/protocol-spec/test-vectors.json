@@ -1,0 +1,54 @@
+{
+  "protocol": "AMLP",
+  "version": 1,
+  "encoding": "ASCII",
+  "crc": {
+    "name": "CRC-16/CCITT-FALSE",
+    "width": 16,
+    "polynomial": "0x1021",
+    "initial": "0xFFFF",
+    "reflectInput": false,
+    "reflectOutput": false,
+    "xorOut": "0x0000"
+  },
+  "vectors": [
+    {
+      "name": "command",
+      "body": "CMD,102,CONVEYOR_START,60",
+      "crc": "C942",
+      "frameCrLf": "@CMD,102,CONVEYOR_START,60*C942\r\n",
+      "frameLf": "@CMD,102,CONVEYOR_START,60*C942\n"
+    },
+    {
+      "name": "acknowledgement",
+      "body": "ACK,102,OK",
+      "crc": "22A0",
+      "frameCrLf": "@ACK,102,OK*22A0\r\n",
+      "frameLf": "@ACK,102,OK*22A0\n"
+    },
+    {
+      "name": "telemetry",
+      "body": "TEL,CONVEYOR,RUNNING,60,SENSOR1=1",
+      "crc": "0942",
+      "frameCrLf": "@TEL,CONVEYOR,RUNNING,60,SENSOR1=1*0942\r\n",
+      "frameLf": "@TEL,CONVEYOR,RUNNING,60,SENSOR1=1*0942\n"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "crc-mismatch",
+      "frame": "@CMD,102,CONVEYOR_START,60*C943\r\n",
+      "reason": "invalid-crc"
+    },
+    {
+      "name": "lowercase-crc",
+      "frame": "@CMD,102,CONVEYOR_START,60*c942\r\n",
+      "reason": "invalid-format"
+    },
+    {
+      "name": "empty-field",
+      "frame": "@CMD,,PING*8BE2\r\n",
+      "reason": "invalid-format"
+    }
+  ]
+}
