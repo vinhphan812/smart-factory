@@ -9,6 +9,7 @@
 #include "amlp/amlp.hpp"
 #include "bridge_config.h"
 #include "command_mapper.h"
+#include "json_adapter.h"
 
 namespace {
 
@@ -61,18 +62,6 @@ const char* statusName(int16_t statusCode) {
 }
 
 }  // namespace
-
-// Returns true only if s is one or more ASCII decimal digits 0–9.
-// Rejects: null, empty, whitespace, leading '+', hex, embedded non-digits.
-bool isDigitOnly(const char* s) {
-  if (s == nullptr || *s == '\0') return false;
-  const char* p = s;
-  while (*p) {
-    if (*p < '0' || *p > '9') return false;
-    ++p;
-  }
-  return true;
-}
 
 MqttBridge* MqttBridge::instance_ = nullptr;
 
@@ -231,6 +220,10 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
     if (argCount >= 2) {
       arg1 = args[1].as<const char*>();
     }
+  } else if (document["arguments"].is<JsonVariant>()) {
+    // "arguments" is present but not an array — structural error.
+    publishImmediateAck(requestId, 0, commandName, "invalid_argument", 2);
+    return;
   }
 
   // Pre-parse SET_OUTPUT channel and value from arguments.
@@ -238,7 +231,7 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
   // valid command that falls through to the actuator.
   if (std::strcmp(commandName, "SET_OUTPUT") == 0) {
     if (argCount >= 2 && arg0 != nullptr && arg1 != nullptr &&
-        isDigitOnly(arg0) && isDigitOnly(arg1)) {
+        bridge::isDigitOnly(arg0) && bridge::isDigitOnly(arg1)) {
       // Channel: must be strictly decimal with no trailing non-numeric garbage.
       char* endCh = nullptr;
       const unsigned long ch = std::strtoul(arg0, &endCh, 10);
@@ -266,7 +259,7 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
 
   // Pre-parse CONVEYOR_START speed from arg0.
   if (std::strcmp(commandName, "CONVEYOR_START") == 0 && argCount >= 1 &&
-      arg0 != nullptr && isDigitOnly(arg0)) {
+      arg0 != nullptr && bridge::isDigitOnly(arg0)) {
     char* endSpd = nullptr;
     const long spd = std::strtol(arg0, &endSpd, 10);
     if (endSpd != arg0 && *endSpd == '\0' && spd >= 1 && spd <= 100) {
