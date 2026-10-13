@@ -49,33 +49,57 @@ class WebSocketServer:
             client_queue: asyncio.Queue[str] = asyncio.Queue(
                 maxsize=self.MAX_QUEUE_PER_CLIENT
             )
+            close_event = asyncio.Event()
+
+            async def wait_for_close() -> None:
+                """Monitor the connection and signal close when the client departs."""
+                try:
+                    await conn.wait_closed()
+                except Exception:
+                    pass
+                close_event.set()
+
+            close_monitor = asyncio.create_task(wait_for_close())
+
             async with self._queues_lock:
                 self._client_queues.add(client_queue)
             addr = conn.remote_address
             logger.info("WS client connected: %s", addr)
             try:
                 while True:
+                    # Wait for either the next queued message or a close signal.
+                    # close_event fires when the client disconnects, so we detect
+                    # departure promptly without needing long timeouts.
+                    done, _ = await asyncio.wait(
+                        {
+                            asyncio.create_task(client_queue.get()),
+                            asyncio.create_task(close_event.wait()),
+                        },
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if close_monitor in done:
+                        # Connection closed — break so finally runs and queue is unregistered.
+                        break
+                    # A queued message arrived — cancel the close monitor and send it.
+                    # Cancelling is safe: wait_closed() either returned (close_event
+                    # already set) or hasn't returned yet; either way the event is done.
+                    close_monitor.cancel()
                     try:
-                        # Wait for the next message but cap the wait so the event
-                        # loop stays responsive to WebSocket control frames
-                        # (close handshake, ping/pong) and we can detect a
-                        # client disconnect promptly.
-                        data = await asyncio.wait_for(
-                            client_queue.get(), timeout=5.0
-                        )
-                    except asyncio.TimeoutError:
-                        # No message in 5 s — actively probe connection state by
-                        # requesting an orderly close. This raises ConnectionClosed
-                        # if the client is gone, letting us exit cleanly.
-                        try:
-                            await conn.close()
-                        except websockets.exceptions.ConnectionClosed:
-                            raise
-                        continue
+                        await close_monitor
+                    except asyncio.CancelledError:
+                        pass
+                    # Get the result from the queue task (the other one in done)
+                    queue_task = next(t for t in done if t is not close_monitor)
+                    data = queue_task.result()
                     await conn.send(data)
             except websockets.exceptions.ConnectionClosed:
                 pass
             finally:
+                close_monitor.cancel()
+                try:
+                    await close_monitor
+                except asyncio.CancelledError:
+                    pass
                 async with self._queues_lock:
                     self._client_queues.discard(client_queue)
                 logger.info("WS client disconnected: %s", addr)

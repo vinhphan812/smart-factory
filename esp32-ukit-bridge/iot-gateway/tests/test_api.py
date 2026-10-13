@@ -132,6 +132,14 @@ def test_list_events_enforces_limit_max() -> None:
 class TestWebSocketBroadcast:
     """Tests for WebSocketServer broadcast to multiple simultaneous clients."""
 
+    def _run_async(self, coro):
+        """Run a coroutine in a new event loop (Python 3.10+ compatible)."""
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
     def test_broadcast_serializes_event_to_all_client_queues(self) -> None:
         """broadcast() serializes an event once and enqueues it in every client queue.
 
@@ -153,8 +161,7 @@ class TestWebSocketBroadcast:
             lock_mock.__aexit__ = AsyncMock(return_value=None)
             with patch.object(ws, "_queues_lock", lock_mock):
                 event = {"event_id": "e1", "device_id": "d1"}
-                # Run broadcast synchronously
-                asyncio.get_event_loop().run_until_complete(ws.broadcast(event))
+                self._run_async(ws.broadcast(event))
 
         # Each queue must have received exactly one item via put_nowait
         assert mock_q1.put_nowait.call_count == 1
@@ -181,9 +188,7 @@ class TestWebSocketBroadcast:
 
         with patch.object(ws, "_client_queues", set()):
             with patch.object(ws, "_queues_lock", lock_mock):
-                asyncio.get_event_loop().run_until_complete(
-                    ws.broadcast({"event_id": "orphan"})
-                )
+                self._run_async(ws.broadcast({"event_id": "orphan"}))
 
         # Lock was acquired but no queue.put_nowait was called
         lock_mock.__aenter__.assert_called_once()
@@ -228,10 +233,7 @@ class TestWebSocketBroadcast:
             lock_mock.__aenter__ = AsyncMock(return_value=None)
             lock_mock.__aexit__ = AsyncMock(return_value=None)
             with patch.object(ws, "_queues_lock", lock_mock):
-                asyncio.get_event_loop().run_until_complete(
-                    ws.broadcast({"event_id": "e1"})
-                )
-            # Inside this outer context, _client_queues == patched_set
+                self._run_async(ws.broadcast({"event_id": "e1"}))
 
         # Q1 received the event; Q2 raised QueueFull and was dropped
         mock_q1.put_nowait.assert_called_once()
@@ -243,15 +245,15 @@ class TestWebSocketBroadcast:
 
     @pytest.mark.asyncio
     async def test_handler_unregisters_client_on_close(self) -> None:
-        """Handler removes client queue when ServerConnection raises ConnectionClosed.
+        """Handler removes client queue when the connection closes.
 
-        The handler waits on the client queue with a 5 s timeout and calls
-        conn.close() each time the timeout fires — this raises ConnectionClosed
-        on the next call when the client has gone, so the finally-block runs
-        promptly and the queue is unregistered.  We unblock the handler from
-        its queue.get() with a dummy send before aborting the connection, so
-        the close is detected without waiting for the full 5 s timeout.
+        A background monitor task waits on conn.wait_closed() and signals a
+        close_event when the client departs.  The handler's asyncio.wait()
+        unblocks as soon as either a message arrives or close_event is set,
+        so disconnection is detected promptly (well under 1 s) without
+        any polling or long timeouts.
         """
+        import websockets
         from iot_gateway.api import WebSocketServer
 
         ws = WebSocketServer("127.0.0.1", 0)
@@ -264,16 +266,13 @@ class TestWebSocketBroadcast:
         await asyncio.sleep(0.3)
         assert len(ws._client_queues) == 1
 
-        # Put a dummy message so the handler is no longer blocked on queue.get()
-        # and can proceed to the conn.close() call where it will detect the
-        # ConnectionClosed and unregister.
-        queue_ref = next(iter(ws._client_queues))
-        queue_ref.put_nowait('{"event":"unblock"}')
-        # Also abort the transport so the next conn.close() raises ConnectionClosed
-        if client.transport is not None:
-            client.transport.abort()
-        await asyncio.sleep(0.3)
+        # Close the client — the server's conn.wait_closed() fires and
+        # close_event is set, so the handler's asyncio.wait() returns
+        # promptly and the finally-block removes the queue.
+        await client.close()
+        await asyncio.sleep(0.5)
 
         assert len(ws._client_queues) == 0
         await ws.shutdown()
+
 
