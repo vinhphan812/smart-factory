@@ -226,27 +226,17 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
     return;
   }
 
-  // Pre-parse SET_OUTPUT channel and value from arguments.
-  // Track parse success explicitly — a failed parse must NOT produce a
-  // valid command that falls through to the actuator.
+  // Pre-parse SET_OUTPUT channel and value using the shared adapter helper
+  // (tested in test_json_adapter/). The helper validates: arg0 is 0..255 decimal
+  // digit-only; arg1 is "0" or "1". Track parse success explicitly — a failed
+  // parse must NOT produce a valid command that falls through to the actuator.
   if (std::strcmp(commandName, "SET_OUTPUT") == 0) {
-    if (argCount >= 2 && arg0 != nullptr && arg1 != nullptr &&
-        bridge::isDigitOnly(arg0) && bridge::isDigitOnly(arg1)) {
-      // Channel: must be strictly decimal with no trailing non-numeric garbage.
-      char* endCh = nullptr;
-      const unsigned long ch = std::strtoul(arg0, &endCh, 10);
-      if (endCh != arg0 && *endCh == '\0' && ch <= 255UL) {
-        channel = static_cast<unsigned int>(ch);
-        channelParsed = true;
-      }
-      // Value: must be exactly "0" or "1".
-      if (std::strcmp(arg1, "0") == 0) {
-        outputValue = false;
-        valueParsed = true;
-      } else if (std::strcmp(arg1, "1") == 0) {
-        outputValue = true;
-        valueParsed = true;
-      }
+    if (bridge::parseSetOutputArgs(arg0, arg1)) {
+      // Helper confirmed digit-only + range + value. Extract actual values.
+      channel = static_cast<unsigned int>(std::strtoul(arg0, nullptr, 10));
+      outputValue = (std::strcmp(arg1, "1") == 0);
+      channelParsed = true;
+      valueParsed = true;
     }
     // Fail-open guard: malformed channel or value → reject immediately.
     // Do NOT fall through with channel=0, value=false defaults.
@@ -257,13 +247,12 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
     }
   }
 
-  // Pre-parse CONVEYOR_START speed from arg0.
-  if (std::strcmp(commandName, "CONVEYOR_START") == 0 && argCount >= 1 &&
-      arg0 != nullptr && bridge::isDigitOnly(arg0)) {
-    char* endSpd = nullptr;
-    const long spd = std::strtol(arg0, &endSpd, 10);
-    if (endSpd != arg0 && *endSpd == '\0' && spd >= 1 && spd <= 100) {
-      speedArg = static_cast<int>(spd);
+  // Pre-parse CONVEYOR_START speed using the shared adapter helper
+  // (tested in test_json_adapter/). The helper validates: arg0 is 1..100
+  // decimal digit-only.
+  if (std::strcmp(commandName, "CONVEYOR_START") == 0) {
+    if (bridge::parseConveyorStartArg(arg0)) {
+      speedArg = static_cast<int>(std::strtol(arg0, nullptr, 10));
       speedParsed = true;
     }
   }
