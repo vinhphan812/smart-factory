@@ -94,7 +94,7 @@ void test_publishTelemetry_rejects_oversize_json_exceeding_384_bytes(void) {
   bridge.begin();
 
   FakePubSubClient fake{};
-  std::size_t publishedLen = bridge.publishTelemetry(frame, fake);
+  std::size_t publishedLen = bridge.publishWith(frame, fake);
 
   // Oversize payload must be dropped: measureJson detected >384 bytes,
   // telDropped_ was incremented, and publish was skipped (returns 0).
