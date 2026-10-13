@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // Integration tests for MqttBridge telemetry publishing.
-// Exercises publishTelemetry() with a fake PubSubClient to verify:
-// - Oversize JSON (>384 bytes) increments telDropped_ and skips publish.
-// - Frames with overflow fields emit "truncated":true and overflow stats in JSON.
-// - onTelemetry() increments telDropped_ when MQTT is disabled.
+//
+// Both production ESP32 and native tests call the same shared function:
+//   bridge::publishTelemetry(frame, client, buffer, device_id,
+//                            telemetry_topic, tel_dropped, tel_published)
+//
+// Tests verify the shared function directly using a FakePubSubClient.
 // ---------------------------------------------------------------------------
 
 #include <cstring>
@@ -28,8 +30,8 @@ struct FakePubSubClient {
   // Stores a copy of payload for test assertions.
   bool publish(const char* topic, const char* payload, bool /*retained*/) {
     lastTopic_ = topic;
-    lastPayload_ = payload;
-    lastPayloadSize_ = std::strlen(payload);
+    lastPayload_.assign(payload, std::strlen(payload));
+    lastPayloadSize_ = lastPayload_.size();
     return publishReturn_;
   }
   void setPublishReturn(bool v) { publishReturn_ = v; }
@@ -68,15 +70,12 @@ static std::string make_wire(std::string_view body) {
 // ---------------------------------------------------------------------------
 
 void test_publishTelemetry_rejects_oversize_json_exceeding_384_bytes(void) {
-  // Build a TelemetryFrame whose serialized JSON exceeds 384 bytes.
+  // Build a TelemetryFrame whose serialised JSON exceeds 384 bytes.
   // TelemetryFrame caps at kMaxTelemetryValues=6 values and kMaxTelemetryPairs=4 pairs.
   // We use 6 values of 64 chars each to push the JSON over the 384-byte limit.
-  // JSON estimate (6 × 64-char values + overhead):
-  //   {"device_id":"x","received_at_ms":0,"values":["AAAA...","AAAA...",...]} ≈ 448 bytes.
   bridge::TelemetryFrame frame{};
   frame.received_at_ms = 0;
 
-  // Fill all 6 value slots with 64-char strings.
   for (int i = 0; i < bridge::kMaxTelemetryValues; ++i) {
     std::memset(frame.values[i].text, 'A', 64);
     frame.values[i].text[64] = '\0';
@@ -84,26 +83,29 @@ void test_publishTelemetry_rejects_oversize_json_exceeding_384_bytes(void) {
     ++frame.num_values;
   }
 
-  // Sanity-check: the resulting JSON must exceed 384 bytes.
-  // Without the measureJson guard, serializeJson would silently truncate
-  // at 384 bytes and return len < 384, hiding the overflow.
   bridge::BridgeCore kDummyCore{};
   PubSubClient nullClient;
-  MqttBridge bridge(nullClient, kDummyCore, "localhost", 1883, "user",
-                    "pass", "test-device");
-  bridge.begin();
+  MqttBridge bridgeObj(nullClient, kDummyCore, "localhost", 1883, "user",
+                       "pass", "test-device");
+  bridgeObj.begin();
 
   FakePubSubClient fake{};
-  std::size_t publishedLen = bridge.publishWith(frame, fake);
+  char buffer[384]{};
+  std::uint32_t dropped = 0;
+  std::uint32_t published = 0;
+  const std::size_t result = bridge::publishTelemetry(
+      frame, fake, buffer, bridgeObj.deviceId(),
+      bridgeObj.telemetryTopic(), dropped, published);
 
-  // Oversize payload must be dropped: measureJson detected >384 bytes,
-  // telDropped_ was incremented, and publish was skipped (returns 0).
-  TEST_ASSERT_EQUAL_UINT32(0, publishedLen);
+  // Oversize payload: measureJson detected >384 bytes, dropped was incremented,
+  // and publish was skipped (returns 0).
+  TEST_ASSERT_EQUAL_UINT32(0, result);
+  TEST_ASSERT_EQUAL_UINT32(1, dropped);
+  TEST_ASSERT_EQUAL_UINT32(0, published);
   TEST_ASSERT_TRUE(fake.lastPayload_.empty());
 }
 
 void test_publishTelemetry_emits_truncated_flag_when_values_overflow(void) {
-  // Construct a frame that hit the values capacity limit.
   bridge::TelemetryFrame frame{};
   frame.received_at_ms = 2000;
   frame.num_values = bridge::kMaxTelemetryValues;
@@ -123,13 +125,19 @@ void test_publishTelemetry_emits_truncated_flag_when_values_overflow(void) {
 
   bridge::BridgeCore kDummyCore{};
   PubSubClient nullClient;
-  MqttBridge bridge(nullClient, kDummyCore, "localhost", 1883, "user",
-                    "pass", "overflow-test");
-  bridge.begin();
+  MqttBridge bridgeObj(nullClient, kDummyCore, "localhost", 1883, "user",
+                       "pass", "overflow-test");
+  bridgeObj.begin();
 
   FakePubSubClient fake{};
-  bridge.publishWith(frame, fake);
+  char buffer[384]{};
+  std::uint32_t dropped = 0;
+  std::uint32_t published = 0;
+  bridge::publishTelemetry(frame, fake, buffer, bridgeObj.deviceId(),
+                           bridgeObj.telemetryTopic(), dropped, published);
 
+  TEST_ASSERT_EQUAL_UINT32(1, published);
+  TEST_ASSERT_EQUAL_UINT32(0, dropped);
   TEST_ASSERT_FALSE(fake.lastPayload_.empty());
   TEST_ASSERT_NOT_NULL(fake.lastTopic_);
 
@@ -143,7 +151,6 @@ void test_publishTelemetry_emits_truncated_flag_when_values_overflow(void) {
 }
 
 void test_publishTelemetry_emits_truncated_flag_when_pairs_overflow(void) {
-  // Construct a frame that hit the pairs capacity limit.
   bridge::TelemetryFrame frame{};
   frame.received_at_ms = 3000;
   frame.num_pairs = bridge::kMaxTelemetryPairs;
@@ -151,13 +158,19 @@ void test_publishTelemetry_emits_truncated_flag_when_pairs_overflow(void) {
 
   PubSubClient nullClient;
   bridge::BridgeCore kDummyCore{};
-  MqttBridge bridge(nullClient, kDummyCore, "localhost", 1883, "user",
-                    "pass", "pair-overflow");
-  bridge.begin();
+  MqttBridge bridgeObj(nullClient, kDummyCore, "localhost", 1883, "user",
+                       "pass", "pair-overflow");
+  bridgeObj.begin();
 
   FakePubSubClient fake{};
-  bridge.publishWith(frame, fake);
+  char buffer[384]{};
+  std::uint32_t dropped = 0;
+  std::uint32_t published = 0;
+  bridge::publishTelemetry(frame, fake, buffer, bridgeObj.deviceId(),
+                           bridgeObj.telemetryTopic(), dropped, published);
 
+  TEST_ASSERT_EQUAL_UINT32(1, published);
+  TEST_ASSERT_EQUAL_UINT32(0, dropped);
   TEST_ASSERT_FALSE(fake.lastPayload_.empty());
   TEST_ASSERT_TRUE(fake.lastPayload_.find("\"truncated\":true") !=
                    std::string::npos);
@@ -184,13 +197,19 @@ void test_publishTelemetry_normal_frame_has_no_truncated_flag(void) {
 
   PubSubClient nullClient;
   bridge::BridgeCore kDummyCore{};
-  MqttBridge bridge(nullClient, kDummyCore, "localhost", 1883, "user",
-                    "pass", "normal-frame");
-  bridge.begin();
+  MqttBridge bridgeObj(nullClient, kDummyCore, "localhost", 1883, "user",
+                       "pass", "normal-frame");
+  bridgeObj.begin();
 
   FakePubSubClient fake{};
-  bridge.publishWith(frame, fake);
+  char buffer[384]{};
+  std::uint32_t dropped = 0;
+  std::uint32_t published = 0;
+  bridge::publishTelemetry(frame, fake, buffer, bridgeObj.deviceId(),
+                           bridgeObj.telemetryTopic(), dropped, published);
 
+  TEST_ASSERT_EQUAL_UINT32(1, published);
+  TEST_ASSERT_EQUAL_UINT32(0, dropped);
   TEST_ASSERT_FALSE(fake.lastPayload_.empty());
   TEST_ASSERT_TRUE(fake.lastPayload_.find("\"truncated\"") ==
                    std::string::npos);

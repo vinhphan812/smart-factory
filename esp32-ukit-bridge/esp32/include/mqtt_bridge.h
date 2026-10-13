@@ -16,10 +16,27 @@
 
 namespace bridge {
 
-// Builds a telemetry JSON payload into buffer[BufferSize] and returns the
-// serialised byte count.  Returns 0 on measureJson overflow or serializeJson
-// failure.  This function is the single canonical implementation shared by both
-// production (ESP32) and native unit tests.
+// Canonical telemetry publish function.
+//
+// Builds a JSON payload from frame into buffer[BufferSize], measures it with
+// measureJson before serialising, then calls client.publish(topic, payload, false).
+//
+// Parameters:
+//   frame           — source telemetry frame
+//   client          — PubSubClient-like (must implement publish(topic, payload,
+//                     retained))  [NOT called when payload is oversized or
+//                     serialisation fails]
+//   buffer          — caller-provided output buffer (BufferSize bytes)
+//   device_id       — device identifier string
+//   telemetry_topic  — MQTT topic string
+//   tel_dropped     — incremented on overflow, len==0, or publish failure
+//   tel_published   — incremented only on successful publish
+//
+// Returns: bytes written to buffer (0 on failure, in which case the buffer
+// contents are indeterminate).
+//
+// This function is the single source of truth for telemetry JSON building and
+// MQTT publishing.  Both production ESP32 and native unit tests call it.
 template <std::size_t BufferSize, typename PubSubClientLike>
 std::size_t publishTelemetry(const TelemetryFrame& frame,
                               PubSubClientLike& client,
@@ -58,16 +75,10 @@ std::size_t publishTelemetry(const TelemetryFrame& frame,
     return 0;
   }
 
-  char tmp[BufferSize]{};
-  const std::size_t len = serializeJson(doc, tmp, sizeof(tmp));
+  const std::size_t len = serializeJson(doc, buffer, BufferSize);
   if (len == 0) {
     ++tel_dropped;
     return 0;
-  }
-
-  // Copy into caller's buffer so the caller can inspect it.
-  for (std::size_t i = 0; i < len && i < BufferSize; ++i) {
-    buffer[i] = tmp[i];
   }
 
   const bool ok = client.publish(telemetry_topic, buffer, false);
@@ -91,72 +102,23 @@ class MqttBridge final : public bridge::TelemetryHandler {
   void tick(uint32_t nowMs, bool networkReady);
 
   // bridge::TelemetryHandler — called by UartAdapter when a TEL frame arrives.
-  // Inline definition for native tests (vtable must be complete without mqtt_bridge.cpp).
+  // Inline for native tests (vtable must be complete without mqtt_bridge.cpp).
   // Production ESP32 uses the definition from mqtt_bridge.cpp.
 #if defined(PLATFORMIO_NATIVE_TEST)
-  void onTelemetry(const bridge::TelemetryFrame& frame) override {
-    if (!enabled_) {
-      ++telDropped_;
-      return;
-    }
-    publishWith(frame, client_);
-  }
+  void onTelemetry(const bridge::TelemetryFrame& frame) override;
 #else
   void onTelemetry(const bridge::TelemetryFrame& frame) override;
 #endif
-
-  // Constructs the telemetry JSON and stores it in buffer (max BufferSize bytes).
-  // Returns the number of bytes written, or 0 on failure.
-  // Tests can call this directly; production publishTelemetry delegates to it.
-  template <std::size_t BufferSize>
-  std::size_t buildTelemetryPayload(const bridge::TelemetryFrame& frame,
-                                   char (&buffer)[BufferSize]) const {
-    JsonDocument doc;
-    doc["device_id"] = deviceId_;
-    doc["received_at_ms"] = frame.received_at_ms;
-
-    if (frame.num_values > 0) {
-      JsonArray vals = doc["values"].to<JsonArray>();
-      for (std::uint8_t i = 0; i < frame.num_values; ++i) {
-        vals.add(frame.values[i].text);
-      }
-    }
-
-    if (frame.num_pairs > 0) {
-      JsonObject pairs = doc["pairs"].to<JsonObject>();
-      for (std::uint8_t i = 0; i < frame.num_pairs; ++i) {
-        pairs[frame.pairs[i].key] = frame.pairs[i].value;
-      }
-    }
-
-    if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
-      doc["truncated"] = true;
-      doc["overflow_dropped_values"] = frame.overflow_dropped_values;
-      doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
-    }
-
-    const std::size_t measured = measureJson(doc);
-    if (measured + 1 > BufferSize) {
-      return 0;
-    }
-
-    const std::size_t len = serializeJson(doc, buffer, BufferSize);
-    return (len == 0) ? 0 : len;
-  }
 
   bool enabled() const { return enabled_; }
   std::uint32_t telDropped() const { return telDropped_; }
   std::uint32_t telPublished() const { return telPublished_; }
 
-  // Exposed for test injection: publishes a frame using an arbitrary client.
-  // Delegates to the shared bridge::publishTelemetry free function.
-  template <typename PubSubClientLike>
-  std::size_t publishWith(const bridge::TelemetryFrame& frame,
-                          PubSubClientLike& client) {
-    char buffer[384]{};
-    return bridge::publishTelemetry(frame, client, buffer, deviceId_,
-                                   telemetryTopic_, telDropped_, telPublished_);
-  }
+  // Accessors exposed so tests can call bridge::publishTelemetry() directly.
+  const char* deviceId() const { return deviceId_; }
+  const char* telemetryTopic() const { return telemetryTopic_; }
+  std::uint32_t& telDroppedRef() { return telDropped_; }
+  std::uint32_t& telPublishedRef() { return telPublished_; }
 
  private:
   void publishTelemetry(const bridge::TelemetryFrame& frame);
@@ -195,8 +157,8 @@ class MqttBridge final : public bridge::TelemetryHandler {
 
   // Telemetry QoS/backpressure: if the MQTT write buffer is full, drop rather
   // than block the UART poll loop.  Backpressure accounting is diagnostic only.
-  uint32_t telDropped_ = 0;
-  uint32_t telPublished_ = 0;
+  std::uint32_t telDropped_ = 0;
+  std::uint32_t telPublished_ = 0;
 };
 
 // ---------------------------------------------------------------------------

@@ -351,23 +351,11 @@ void MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame) {
     return;
   }
 
-  // Delegate to the shared buildTelemetryPayload helper.  This is the single
-  // canonical implementation; both production and native tests call the same
-  // JSON-building logic (tests via bridge::publishTelemetry free function).
+  // Delegate to the single canonical bridge::publishTelemetry() free function.
+  // Both production ESP32 and native unit tests call this same function.
   char buffer[384]{};
-  const std::size_t len = buildTelemetryPayload(frame, buffer);
-  if (len == 0) {
-    ++telDropped_;
-    return;
-  }
-
-  // QoS 0: fire-and-forget. Do not block if the MQTT write buffer is full.
-  const bool ok = client_.publish(telemetryTopic_, buffer, false);
-  if (ok) {
-    ++telPublished_;
-  } else {
-    ++telDropped_;
-  }
+  bridge::publishTelemetry(frame, client_, buffer, deviceId_,
+                           telemetryTopic_, telDropped_, telPublished_);
 }
 #endif  // !PLATFORMIO_NATIVE_TEST
 
