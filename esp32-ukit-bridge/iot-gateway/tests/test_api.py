@@ -247,11 +247,10 @@ class TestWebSocketBroadcast:
     async def test_handler_unregisters_client_on_close(self) -> None:
         """Handler removes client queue when the connection closes.
 
-        A background monitor task waits on conn.wait_closed() and signals a
-        close_event when the client departs.  The handler's asyncio.wait()
-        unblocks as soon as either a message arrives or close_event is set,
-        so disconnection is detected promptly (well under 1 s) without
-        any polling or long timeouts.
+        The handler checks conn.close_code on each queue timeout (1 s).  When the
+        client disconnects, close_code becomes non-None; the handler breaks out of
+        its loop and the finally-block removes the queue.  We verify this by
+        closing the client and waiting long enough for the timeout to fire.
         """
         import websockets
         from iot_gateway.api import WebSocketServer
@@ -266,11 +265,10 @@ class TestWebSocketBroadcast:
         await asyncio.sleep(0.3)
         assert len(ws._client_queues) == 1
 
-        # Close the client — the server's conn.wait_closed() fires and
-        # close_event is set, so the handler's asyncio.wait() returns
-        # promptly and the finally-block removes the queue.
+        # Close the client — the server's conn.close_code becomes non-None.
+        # The handler detects this on its next queue timeout (≤ 1 s) and exits.
         await client.close()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.5)
 
         assert len(ws._client_queues) == 0
         await ws.shutdown()
