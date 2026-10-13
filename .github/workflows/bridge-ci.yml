@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           if [[ -f esp32-ukit-bridge/esp32/platformio.ini ]]; then
-            pio test -d esp32-ukit-bridge/esp32 -e native --filter "test_*"
+            pio test -d esp32-ukit-bridge/esp32 -e native_test --filter "test_*"
           else
             echo "esp32-ukit-bridge/esp32/platformio.ini not found; skipping ESP32 test."
           fi
