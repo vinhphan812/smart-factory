@@ -1,0 +1,38 @@
+name: IoT Gateway Tests
+
+on:
+  push:
+    branches:
+      - feat/issues-7-gateway
+      - master
+    paths:
+      - esp32-ukit-bridge/iot-gateway/**
+  pull_request:
+    paths:
+      - esp32-ukit-bridge/iot-gateway/**
+
+jobs:
+  pytest:
+    name: pytest (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e esp32-ukit-bridge/iot-gateway[dev]
+
+      - name: Run tests
+        run: python -m pytest esp32-ukit-bridge/iot-gateway/tests/ -v --tb=short
+
+      - name: Coverage
+        run: python -m pytest esp32-ukit-bridge/iot-gateway/tests/ --cov=esp32-ukit-bridge.iot_gateway --cov-report=xml --cov-report=term-missing
+        continue-on-error: true
