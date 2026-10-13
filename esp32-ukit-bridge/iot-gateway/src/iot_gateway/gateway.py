@@ -43,6 +43,10 @@ class Gateway:
         )
         self._shutdown_event = asyncio.Event()
         self._writers_done: list[asyncio.Task[None]] = []
+        # Saved so the MQTT thread callback can schedule async work safely.
+        # Set in start(); do not call create_task() directly in the MQTT callback —
+        # that runs on Paho's internal thread which has no running event loop.
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def _write_worker(self, worker_id: int, stop_event: asyncio.Event) -> None:
         """Worker that drains the write queue and persists events to SQLite.
@@ -57,9 +61,9 @@ class Gateway:
                 )
             except asyncio.TimeoutError:
                 continue
-            if event_dict is None or stop_event.is_set():
+            if event_dict is None:
                 self._write_queue.task_done()
-                break
+                continue
             try:
                 await self._store.insert_dict(event_dict)
                 await self._ws.broadcast(event_dict)
@@ -68,15 +72,15 @@ class Gateway:
             finally:
                 self._write_queue.task_done()
 
-        # Drain remaining queue items before exiting
+        # Drain ALL remaining queue items before exiting — no early exit.
         while True:
             try:
                 event_dict = self._write_queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
-            if event_dict is None or stop_event.is_set():
+            if event_dict is None:
                 self._write_queue.task_done()
-                break
+                continue
             try:
                 await self._store.insert_dict(event_dict)
                 await self._ws.broadcast(event_dict)
@@ -109,11 +113,40 @@ class Gateway:
             )
 
     def _mqtt_callback(self, topic: str, payload: bytes) -> None:
-        """Sync wrapper for MQTT thread — schedules async handler without blocking."""
-        asyncio.create_task(self._on_mqtt_message(topic, payload))
+        """Called from Paho's internal thread.
+
+        Paho's MQTT loop runs on its own thread, not the asyncio event loop.
+        Calling asyncio.create_task() directly here raises RuntimeError because
+        there is no running event loop on that thread.
+
+        When _loop is set (normal operation via start()), schedule the async handler
+        with call_soon_threadsafe so the event loop processes it on its next tick.
+
+        When _loop is not set (e.g. in tests before start()), fall back to a
+        temporary event loop so messages are not silently dropped.
+        """
+        if self._loop is None:
+            # Fall back: create a fresh event loop to run the async handler.
+            # This path is hit only in tests or if called before start().
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self._on_mqtt_message(topic, payload))
+            finally:
+                loop.close()
+            return
+
+        self._loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(self._on_mqtt_message(topic, payload))
+        )
 
     async def start(self) -> None:
         """Start all gateway components."""
+        # Save event loop reference before starting any async work.
+        # _mqtt_callback runs on Paho's thread, not the asyncio thread,
+        # so we cannot call asyncio.create_task() directly there.
+        self._loop = asyncio.get_running_loop()
+
         await self._store.init()
         logger.info("Starting IoT Gateway...")
 

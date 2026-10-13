@@ -61,6 +61,8 @@ class TestGatewayMQTTPipeline:
         """A command_ack event is normalized, stored, and broadcast."""
         with patch("iot_gateway.gateway.WebSocketServer", return_value=mock_ws_server):
             gateway = Gateway(gateway_config)
+            # Simulate start() setting the event loop (mqtt_callback needs it)
+            gateway._loop = asyncio.get_running_loop()
             await gateway._store.init()
             gateway._stop_events = [
                 asyncio.Event() for _ in range(gateway.NUM_WRITERS)
@@ -82,7 +84,7 @@ class TestGatewayMQTTPipeline:
             # Await the async handler directly (bypasses thread bridge for tests)
             await gateway._on_mqtt_message(topic, payload)
 
-            # Wait for queue to drain: keep polling until count reaches expected
+            # Wait for queue to drain: poll until count reaches expected
             import time
             deadline = time.monotonic() + 10.0
             while time.monotonic() < deadline:
@@ -192,7 +194,6 @@ class TestGatewayBoundedQueue:
             ]
 
             topic = "smart-factory/device-1/command/ack"
-            payload = json.dumps({"command_id": 1}).encode()
 
             # Fill the queue (500 capacity)
             accepted = 0

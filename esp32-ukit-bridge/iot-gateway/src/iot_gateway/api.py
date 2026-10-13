@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Any
 
+import websockets
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -20,46 +21,67 @@ class EventQuery(BaseModel):
     limit: int = 100
 
 
+# Protocol type alias — uses websockets.ServerProtocol (modern API, no deprecation warning)
+_WsProtocol = websockets.ServerProtocol
+
+
 class WebSocketServer:
-    """Broadcasts events to connected WebSocket clients."""
+    """Broadcasts events to connected WebSocket clients using the websockets protocol.
+
+    Uses the ``websockets`` library to provide a real WebSocket server that
+    Unity, browsers, and any RFC-6455-compliant client can connect to.
+    """
 
     def __init__(self, host: str, port: int) -> None:
         self._host = host
         self._port = port
-        self._clients: set[asyncio.Queue] = set()
-        self._server: asyncio.Server | None = None
+        self._clients: set[_WsProtocol] = set()
+        self._server: websockets.WebSocketServer | None = None
+        self._broadcast_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+    async def _ws_handler(
+        self, ws: _WsProtocol, path: str
+    ) -> None:
+        """Handle a single WebSocket client connection."""
+        self._clients.add(ws)
+        addr = ws.remote_address
+        logger.info("WebSocket client connected: %s path=%s", addr, path)
+        try:
+            while True:
+                # Wait for events to broadcast to this client
+                event_dict = await self._broadcast_queue.get()
+                try:
+                    await ws.send(json.dumps(event_dict, default=str))
+                except websockets.exceptions.ConnectionClosed:
+                    break
+                finally:
+                    self._broadcast_queue.task_done()
+        finally:
+            self._clients.discard(ws)
+            logger.info("WebSocket client disconnected: %s", addr)
 
     async def start(self) -> None:
-        async def _ws_handler(
-            ws: asyncio.StreamReader, sw: asyncio.StreamWriter
-        ) -> None:
-            addr = sw.get_extra_info("peername")
-            queue: asyncio.Queue[bytes] = asyncio.Queue()
-            self._clients.add(queue)
-            logger.info("WebSocket client connected: %s", addr)
-            try:
-                while True:
-                    data = await queue.get()
-                    sw.write(data + b"\n")
-                    await sw.drain()
-            except ConnectionResetError:
-                pass
-            finally:
-                self._clients.discard(queue)
-                logger.info("WebSocket client disconnected: %s", addr)
-
-        self._server = await asyncio.start_server(_ws_handler, self._host, self._port)
+        """Start the WebSocket server."""
+        self._server = await websockets.serve(
+            self._ws_handler,
+            self._host,
+            self._port,
+            # Limit queue per connection to prevent memory bloat on slow clients
+            max_queue=64,
+        )
         logger.info("WebSocket server started on %s:%d", self._host, self._port)
 
     async def broadcast(self, event_dict: dict[str, Any]) -> None:
-        """Push an event to all connected clients."""
+        """Push an event to all connected clients.
+
+        Each client has its own consumer task pulling from _broadcast_queue,
+        so slow clients are isolated and fast clients are not throttled.
+        """
         if not self._clients:
             return
-        data = json.dumps(event_dict, default=str).encode()
-        await asyncio.gather(
-            *(queue.put(data) for queue in list(self._clients)),
-            return_exceptions=True,
-        )
+        data = json.dumps(event_dict, default=str)
+        # Enqueue once per broadcast call; each client task dequeues it.
+        await self._broadcast_queue.put(data)
 
     async def shutdown(self) -> None:
         if self._server:
