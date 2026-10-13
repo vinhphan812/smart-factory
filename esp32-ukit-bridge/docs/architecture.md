@@ -22,16 +22,39 @@ graph LR
     ESP32 -- "TCP / AMLP v1" --> Tools
 ```
 
+## Implementation Status
+
+| Feature | Status | Evidence |
+|---------|--------|---------|
+| Command queue (8 entries) | ✅ Implemented | `kCommandQueueCapacity = 8` in `bridge_core.h` |
+| Dedup cache (16 entries) | ✅ Implemented | `kDedupeCapacity = 16` in `bridge_core.h` |
+| Command allowlist: all 5 commands | ✅ Implemented | `CommandMapper::build()` in `command_mapper.cpp` |
+| CONVEYOR_START speed validation 1..100 | ✅ Implemented | `CommandMapper::validSpeed()` |
+| SET_OUTPUT channel validation 0..255 | ✅ Implemented | `CommandMapper::validChannel()` |
+| CRC-16/CCITT-FALSE accidental-corruption detection | ✅ Implemented | `amlp::encode()` / `crc16_ccitt_false()` |
+| Fail-closed auth (no empty credentials) | ✅ Implemented | `connectOnce()` guard in `mqtt_bridge.cpp` |
+| Anonymous connection prevention | ✅ Implemented | `connectOnce()` refuses if `username_` empty |
+| MQTT broker ACL | ⚠️ Broker-config | Broker ACL required; see `mqtt-security.md` |
+| CRC-16 as cryptographic integrity | ❌ Not applicable | CRC-16 detects accidents only; not a security primitive |
+| TLS transport | 🔒 Planned | `WiFiClient` used; `WiFiClientSecure` not wired |
+| Runtime allowlist (configurable) | 🔒 Planned | Hard-coded in `CommandMapper` |
+| Actuator hard limits | 🔒 Planned | MEGA enforces; ESP32-level clamp planned |
+| E-stop priority queue bypass | 🔒 Planned | `estop_active_` not implemented |
+| SPIFFS device registry | 🔒 Planned | Hard-coded topic names; `device-registry.md` is design-only |
+| Exponential backoff for MQTT reconnect | 🔒 Planned | Fixed `kMqttRetryMs` used; `kMqttBackoffInitialMs/MaxMs` unused |
+
+---
+
 ## Layer Responsibilities
 
 ### ESP32 bridge
 
-- Subscribe to `smart-factory/bridge/command`.
-- Validate JSON `{ "id": number, "fields": [string, ...] }`.
-- Encode as `CMD`, placing `id` as the first field and the array `fields` elements after.
+- Subscribe to `smart-factory/{deviceId}/command/down`.
+- Validate JSON `{ "command_id": number, "request_id": string, "command_name": string, "arguments": [string, ...] }`.
+- Encode as `CMD`, placing the correlation ID as the first field and the command name and arguments after.
 - Queue, retry the full wire frame, and deduplicate correlation ids.
 - Parse AMLP from UART; the first ACK field is used to complete the pending command.
-- Publish results and status to MQTT.
+- Publish results and status to `smart-factory/{deviceId}/command/ack`.
 
 ### uKit endpoint
 
@@ -111,3 +134,20 @@ All values are ASCII decimal strings. Temperature is signed in hundredths of °C
 - ESP32 retries the exact wire frame so the correlation id never changes.
 - uKit caches results for the last 8 ids; duplicate frames get a cached ACK but the handler is not invoked a second time.
 - Do not reuse an `id` for a different command while it could still be in a queue or cache.
+
+## Safety Boundaries
+
+The system implements multiple independent layers of defence-in-depth. Full threat modelling, fail-safe policy, AI command safety rules, watchdog configuration, and recovery procedures are documented in [Threat Model and Safety Policy](./threat-safety-model.md).
+
+Key boundaries:
+
+| Boundary | Mechanism |
+|---|---|
+| MQTT transport | Broker ACL restricts publish access to `smart-factory/{device_id}/command/down` to authorised clients only |
+| ESP32 input validation | Field count, string length, allowed character set, command allowlist, argument range checks |
+| AMLP framing | CRC-16/CCITT-FALSE checksum; inter-byte 250 ms timeout; 256-byte frame limit; 12-field limit |
+| MEGA actuator limits | Hard speed clamp 1..100; watchdog timer; `INVALID_ARGUMENT` returned for out-of-range values |
+| Telemetry isolation | Telemetry parser is read-only; has no access to command queue or actuator control |
+| ESP32 RAM | All state (queue, cache, pending) in static/fixed-size RAM; no dynamic allocation in ISR context |
+| E-stop | Defined as `CONVEYOR_STOP` command with highest priority; bypasses command queue |
+| Fail-closed | Unknown commands and malformed payloads are rejected, never silently ignored or forwarded |
