@@ -34,7 +34,7 @@
     "arguments": {
       "type": "array",
       "description": "Positional arguments passed to the command. Max 2 are processed (channel + value for SET_OUTPUT; speed for CONVEYOR_START).",
-      "maxItems": 10,
+      "maxItems": 2,
       "items": {
         "type": "string",
         "minLength": 1,

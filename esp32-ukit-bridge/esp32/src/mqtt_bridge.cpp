@@ -62,6 +62,18 @@ const char* statusName(int16_t statusCode) {
 
 }  // namespace
 
+// Returns true only if s is one or more ASCII decimal digits 0–9.
+// Rejects: null, empty, whitespace, leading '+', hex, embedded non-digits.
+bool isDigitOnly(const char* s) {
+  if (s == nullptr || *s == '\0') return false;
+  const char* p = s;
+  while (*p) {
+    if (*p < '0' || *p > '9') return false;
+    ++p;
+  }
+  return true;
+}
+
 MqttBridge* MqttBridge::instance_ = nullptr;
 
 MqttBridge::MqttBridge(PubSubClient& client, bridge::BridgeCore& core,
@@ -160,9 +172,11 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
   }
 
   if (requestId == nullptr) {
-    // Fall back to string request_id.
+    // Fall back to string request_id. Reject if empty or exceeds max length
+    // to prevent dedupe cache collisions from truncation.
     const char* fallback = document["request_id"] | nullptr;
-    if (fallback != nullptr) {
+    if (fallback != nullptr && fallback[0] != '\0' &&
+        std::strlen(fallback) <= bridge::kMaxRequestIdLength) {
       std::strncpy(requestIdBuf, fallback, bridge::kMaxRequestIdLength);
       requestIdBuf[bridge::kMaxRequestIdLength] = '\0';
       requestId = requestIdBuf;
@@ -206,7 +220,11 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
 
   if (document["arguments"].is<JsonArray>()) {
     JsonArrayConst args = document["arguments"].as<JsonArrayConst>();
-    argCount = static_cast<uint8_t>(std::min(args.size(), static_cast<size_t>(2)));
+    if (args.size() > 2) {
+      publishImmediateAck(requestId, 0, commandName, "invalid_argument", 2);
+      return;
+    }
+    argCount = static_cast<uint8_t>(args.size());
     if (argCount >= 1) {
       arg0 = args[0].as<const char*>();
     }
@@ -219,7 +237,8 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
   // Track parse success explicitly — a failed parse must NOT produce a
   // valid command that falls through to the actuator.
   if (std::strcmp(commandName, "SET_OUTPUT") == 0) {
-    if (argCount >= 2 && arg0 != nullptr && arg1 != nullptr) {
+    if (argCount >= 2 && arg0 != nullptr && arg1 != nullptr &&
+        isDigitOnly(arg0) && isDigitOnly(arg1)) {
       // Channel: must be strictly decimal with no trailing non-numeric garbage.
       char* endCh = nullptr;
       const unsigned long ch = std::strtoul(arg0, &endCh, 10);
@@ -247,7 +266,7 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
 
   // Pre-parse CONVEYOR_START speed from arg0.
   if (std::strcmp(commandName, "CONVEYOR_START") == 0 && argCount >= 1 &&
-      arg0 != nullptr) {
+      arg0 != nullptr && isDigitOnly(arg0)) {
     char* endSpd = nullptr;
     const long spd = std::strtol(arg0, &endSpd, 10);
     if (endSpd != arg0 && *endSpd == '\0' && spd >= 1 && spd <= 100) {
@@ -271,7 +290,7 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
 
   const bridge::EnqueueResult enqResult = core_.enqueue(cmd);
   if (enqResult == bridge::EnqueueResult::QueueFull) {
-    publishImmediateAck(requestId, sequence, commandName, "internal_error", 3);
+    publishImmediateAck(requestId, sequence, commandName, "queue_full", 4);
   } else if (enqResult == bridge::EnqueueResult::Invalid) {
     publishImmediateAck(requestId, sequence, commandName, "invalid_argument", 2);
   }

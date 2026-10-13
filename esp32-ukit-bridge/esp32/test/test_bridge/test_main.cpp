@@ -322,6 +322,20 @@ void test_null_request_id_rejected(void) {
   TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInternalError, r.code);
 }
 
+void test_ping_with_args_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build("PING", "req-ping-args", 30,
+                        0, false, -1, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_reset_with_args_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build("RESET", "req-reset-args", 31,
+                        0, false, -1, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
 }  // namespace
 
 int main() {
@@ -351,5 +365,7 @@ int main() {
   RUN_TEST(test_unknown_command_rejected);
   RUN_TEST(test_null_command_name_rejected);
   RUN_TEST(test_null_request_id_rejected);
+  RUN_TEST(test_ping_with_args_rejected);
+  RUN_TEST(test_reset_with_args_rejected);
   return UNITY_END();
 }

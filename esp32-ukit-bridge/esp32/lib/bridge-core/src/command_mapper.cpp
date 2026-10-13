@@ -129,6 +129,10 @@ CommandMapperResult CommandMapper::build(
   }
 
   if (std::strcmp(commandName, "RESET") == 0) {
+    if (argCount != 0u) {
+      result.code = CommandMapperResult::kInvalidArgument;
+      return result;
+    }
     amlp::Frame frame{};
     frame.type = amlp::Type::Cmd;
     char seqBuf[6]{};
@@ -159,6 +163,10 @@ CommandMapperResult CommandMapper::build(
   }
 
   if (std::strcmp(commandName, "PING") == 0) {
+    if (argCount != 0u) {
+      result.code = CommandMapperResult::kInvalidArgument;
+      return result;
+    }
     amlp::Frame frame{};
     frame.type = amlp::Type::Cmd;
     char seqBuf[6]{};
