@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 // HardwareSerial is never instantiated in tests — feedBytes() bypasses serial.
