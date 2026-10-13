@@ -84,7 +84,7 @@ python -m amlp simulate --host 127.0.0.1 --port 8765
 # directly from the IoT gateway
 
 # Terminal 4: publish a command
-mosquitto_pub -t smart-factory/bridge-001/command -m '{"id":1,"fields":["CONVEYOR_START","60"]}'
+mosquitto_pub -t smart-factory/bridge-001/command/down -m '{"command_id":1,"command_name":"CONVEYOR_START","arguments":["60"]}'
 ```
 
 ---

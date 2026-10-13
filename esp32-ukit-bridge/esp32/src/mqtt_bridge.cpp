@@ -283,13 +283,16 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
 void MqttBridge::connectOnce(uint32_t nowMs) {
   reconnectAtMs_ = nowMs + bridge_config::kMqttRetryMs;
 
-  const bool hasUsername = username_ != nullptr && username_[0] != '\0';
+  // Fail-closed: refuse to connect if credentials are unprovisioned.
+  // Remain disconnected and retry on the next tick.
+  if (username_ == nullptr || username_[0] == '\0') {
+    return;
+  }
+
   const bool connected =
-      hasUsername
-          ? client_.connect(deviceId_, username_,
-                            password_ == nullptr ? "" : password_, statusTopic_,
-                            1, true, kOfflinePayload)
-          : client_.connect(deviceId_, statusTopic_, 1, true, kOfflinePayload);
+      client_.connect(deviceId_, username_,
+                     password_ == nullptr ? "" : password_, statusTopic_,
+                     1, true, kOfflinePayload);
   if (!connected) {
     return;
   }
