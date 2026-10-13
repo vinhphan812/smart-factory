@@ -281,6 +281,9 @@ class TestSetOutputFailOpen:
         frame = command_frame(1, CommandId.SET_OUTPUT, ("256", "1"))
         wire = encode_frame(frame)
         assert b"@CMD,1,SET_OUTPUT,256,1*" in wire
+
+
+class TestTlsNotWired:
     """Document that TLS is not yet implemented.
 
     The current firmware uses WiFiClient (plain TCP) regardless of port.
