@@ -233,3 +233,51 @@ class TestGatewayReadOnly:
             gateway = Gateway(gateway_config)
             assert not hasattr(gateway, "_mqtt_publisher")
             assert not hasattr(gateway, "publish")
+
+
+class TestGatewayShutdown:
+    """TC7: Shutdown drains the write queue and persists all accepted events."""
+
+    @pytest.mark.asyncio
+    async def test_all_enqueued_events_persisted_after_shutdown(
+        self, gateway_config: GatewayConfig
+    ) -> None:
+        """Events in the queue at shutdown time are all durable in SQLite."""
+        with patch("iot_gateway.gateway.WebSocketServer"):
+            gateway = Gateway(gateway_config)
+            await gateway._store.init()
+            gateway._stop_events = [
+                asyncio.Event() for _ in range(gateway.NUM_WRITERS)
+            ]
+            gateway._writers_done = [
+                asyncio.create_task(gateway._write_worker(i, stop))
+                for i, stop in enumerate(gateway._stop_events)
+            ]
+
+            topic = "smart-factory/device-1/command/ack"
+            num_events = 10
+            for i in range(num_events):
+                payload = json.dumps({"command_id": i}).encode()
+                await gateway._on_mqtt_message(topic, payload)
+
+            # Allow workers to process all items
+            import time
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                count = await gateway._store.count()
+                if count >= num_events:
+                    break
+                await asyncio.sleep(0.1)
+
+            # Stop — workers must have drained everything
+            for stop in gateway._stop_events:
+                stop.set()
+            await asyncio.gather(*gateway._writers_done, return_exceptions=True)
+
+            # All events must be durable in SQLite
+            count = await gateway._store.count()
+            assert count == num_events, (
+                f"Expected {num_events} events persisted, got {count} — "
+                "events were dropped during shutdown drain"
+            )
+            await gateway._store.close()

@@ -28,16 +28,14 @@ async def store(database_url: str) -> Generator[EventStore, None, None]:
 
 
 @pytest.fixture
-async def ws_server(database_url) -> Generator["WebSocketServer", None, None]:
-    """Live WebSocketServer backed by a temp SQLite store (used by API tests)."""
+async def ws_server(tmp_path) -> "WebSocketServer":
+    """Live WebSocketServer on a random port (for integration tests)."""
     from iot_gateway.api import WebSocketServer
-    store = EventStore(database_url, max_events=1000)
-    await store.init()
+
     ws = WebSocketServer("127.0.0.1", 0)
     await ws.start()
     try:
         yield ws
     finally:
         await ws.shutdown()
-        await store.close()
 

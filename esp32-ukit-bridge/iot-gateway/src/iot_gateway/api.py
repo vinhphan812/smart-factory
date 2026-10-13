@@ -7,7 +7,6 @@ from typing import Any
 
 import websockets
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .event_store import EventStore
@@ -21,93 +20,103 @@ class EventQuery(BaseModel):
     limit: int = 100
 
 
-# Protocol type alias — uses websockets.ServerProtocol (modern API, no deprecation warning)
-_WsProtocol = websockets.ServerProtocol
-
-
 class WebSocketServer:
-    """Broadcasts events to connected WebSocket clients using the websockets protocol.
+    """Broadcasts events to all connected WebSocket clients.
 
-    Uses the ``websockets`` library to provide a real WebSocket server that
-    Unity, browsers, and any RFC-6455-compliant client can connect to.
+    Each client has its own outbound queue so that slow clients do not block
+    fast clients and every connected client receives every broadcast event.
+
+    Uses the ``websockets`` library (RFC-6455) so Unity, browsers, and any
+    standards-compliant WebSocket client can connect.
     """
+
+    MAX_QUEUE_PER_CLIENT = 64
 
     def __init__(self, host: str, port: int) -> None:
         self._host = host
         self._port = port
-        self._clients: set[_WsProtocol] = set()
-        self._server: websockets.WebSocketServer | None = None
-        self._broadcast_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-
-    async def _ws_handler(
-        self, ws: _WsProtocol, path: str
-    ) -> None:
-        """Handle a single WebSocket client connection."""
-        self._clients.add(ws)
-        addr = ws.remote_address
-        logger.info("WebSocket client connected: %s path=%s", addr, path)
-        try:
-            while True:
-                # Wait for events to broadcast to this client
-                event_dict = await self._broadcast_queue.get()
-                try:
-                    await ws.send(json.dumps(event_dict, default=str))
-                except websockets.exceptions.ConnectionClosed:
-                    break
-                finally:
-                    self._broadcast_queue.task_done()
-        finally:
-            self._clients.discard(ws)
-            logger.info("WebSocket client disconnected: %s", addr)
+        # Per-client queue set — each client task pulls from its own queue
+        self._client_queues: set[asyncio.Queue[str]] = set()
+        self._queues_lock: asyncio.Lock = asyncio.Lock()
+        self._server: websockets.Server | None = None
 
     async def start(self) -> None:
-        """Start the WebSocket server."""
+        """Start the WebSocket server on self._host:self._port."""
+        # Define the handler as a lambda so websockets.serve receives a regular
+        # callable, not a bound method whose return value (coroutine) might not
+        # be awaited correctly on all Python/asyncio versions.
+        async def handler(conn: websockets.ServerConnection) -> None:
+            client_queue: asyncio.Queue[str] = asyncio.Queue(
+                maxsize=self.MAX_QUEUE_PER_CLIENT
+            )
+            async with self._queues_lock:
+                self._client_queues.add(client_queue)
+            addr = conn.remote_address
+            logger.info("WS client connected: %s", addr)
+            try:
+                while True:
+                    try:
+                        # Timeout allows the event loop to process WebSocket frames
+                        # (close handshake, keepalives) so ConnectionClosed is raised.
+                        data = await asyncio.wait_for(
+                            client_queue.get(), timeout=5.0
+                        )
+                    except asyncio.TimeoutError:
+                        # No message in 5 s — yield to allow websockets internals
+                        # to run (ping/pong, close detection). Re-check connection.
+                        continue
+                    await conn.send(data)
+            except websockets.exceptions.ConnectionClosed:
+                pass
+            finally:
+                async with self._queues_lock:
+                    self._client_queues.discard(client_queue)
+                logger.info("WS client disconnected: %s", addr)
+
         self._server = await websockets.serve(
-            self._ws_handler,
+            handler,
             self._host,
             self._port,
-            # Limit queue per connection to prevent memory bloat on slow clients
-            max_queue=64,
         )
         logger.info("WebSocket server started on %s:%d", self._host, self._port)
 
     async def broadcast(self, event_dict: dict[str, Any]) -> None:
-        """Push an event to all connected clients.
+        """Fan-out an event to every connected client.
 
-        Each client has its own consumer task pulling from _broadcast_queue,
-        so slow clients are isolated and fast clients are not throttled.
+        Serializes the event once and enqueues the string in each client's
+        individual queue. Slow clients are isolated; fast clients proceed
+        immediately.
         """
-        if not self._clients:
+        payload = json.dumps(event_dict, default=str)
+        async with self._queues_lock:
+            queues = list(self._client_queues)
+        if not queues:
             return
-        data = json.dumps(event_dict, default=str)
-        # Enqueue once per broadcast call; each client task dequeues it.
-        await self._broadcast_queue.put(data)
+        await asyncio.gather(
+            *(q.put(payload) for q in queues),
+            return_exceptions=True,
+        )
 
     async def shutdown(self) -> None:
-        if self._server:
+        """Close the WebSocket server gracefully."""
+        if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
 
 
-def create_http_app(store: EventStore, ws_broadcaster: WebSocketServer) -> FastAPI:
+def create_http_app(store: EventStore) -> FastAPI:
     """Build FastAPI app with REST endpoints backed by the event store."""
 
     app = FastAPI(
         title="Smart Factory IoT Gateway API",
         version="0.1.0",
-        description="MQTT ingestion gateway for ESP32-uKit Bridge. "
-        "Normalizes bridge events into canonical envelope and serves them via HTTP/WebSocket.",
+        description="MQTT ingestion gateway for ESP32-uKit Bridge.",
     )
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
         count = await store.count()
-        ws_clients = len(ws_broadcaster._clients)
-        return {
-            "status": "ok",
-            "event_count": count,
-            "ws_clients": ws_clients,
-        }
+        return {"status": "ok", "event_count": count}
 
     @app.get("/events")
     async def list_events(
@@ -115,7 +124,9 @@ def create_http_app(store: EventStore, ws_broadcaster: WebSocketServer) -> FastA
         event_type: str | None = Query(None, description="Filter by event type"),
         limit: int = Query(100, ge=1, le=10000, description="Max events to return"),
     ) -> dict[str, Any]:
-        events = await store.query(device_id=device_id, event_type=event_type, limit=limit)
+        events = await store.query(
+            device_id=device_id, event_type=event_type, limit=limit
+        )
         return {"events": events, "count": len(events)}
 
     @app.get("/events/{event_id}")

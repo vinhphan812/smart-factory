@@ -35,7 +35,7 @@ class Gateway:
         self._store = EventStore(config.database_url, config.max_events)
         self._normalizer = EventNormalizer()
         self._ws = WebSocketServer(config.ws_host, config.ws_port)
-        self._app = create_http_app(self._store, self._ws)
+        self._app = create_http_app(self._store)
         self._mqtt: MqttSubscriber | None = None
         self._runner: Any | None = None
         self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
@@ -44,9 +44,8 @@ class Gateway:
         self._shutdown_event = asyncio.Event()
         self._writers_done: list[asyncio.Task[None]] = []
         # Saved so the MQTT thread callback can schedule async work safely.
-        # Set in start(); do not call create_task() directly in the MQTT callback —
-        # that runs on Paho's internal thread which has no running event loop.
-        self._loop: asyncio.AbstractEventLoop | None = None
+        # Set in start(); the callback always accesses it after start().
+        self._loop: asyncio.AbstractEventLoop
 
     async def _write_worker(self, worker_id: int, stop_event: asyncio.Event) -> None:
         """Worker that drains the write queue and persists events to SQLite.
@@ -119,23 +118,9 @@ class Gateway:
         Calling asyncio.create_task() directly here raises RuntimeError because
         there is no running event loop on that thread.
 
-        When _loop is set (normal operation via start()), schedule the async handler
-        with call_soon_threadsafe so the event loop processes it on its next tick.
-
-        When _loop is not set (e.g. in tests before start()), fall back to a
-        temporary event loop so messages are not silently dropped.
+        Schedule the async handler with call_soon_threadsafe so the event loop
+        processes it on its next tick. _loop is always set by start().
         """
-        if self._loop is None:
-            # Fall back: create a fresh event loop to run the async handler.
-            # This path is hit only in tests or if called before start().
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(self._on_mqtt_message(topic, payload))
-            finally:
-                loop.close()
-            return
-
         self._loop.call_soon_threadsafe(
             lambda: asyncio.create_task(self._on_mqtt_message(topic, payload))
         )
@@ -143,12 +128,14 @@ class Gateway:
     async def start(self) -> None:
         """Start all gateway components."""
         # Save event loop reference before starting any async work.
-        # _mqtt_callback runs on Paho's thread, not the asyncio thread,
-        # so we cannot call asyncio.create_task() directly there.
+        # _mqtt_callback runs on Paho's thread, not the asyncio thread.
         self._loop = asyncio.get_running_loop()
 
         await self._store.init()
         logger.info("Starting IoT Gateway...")
+
+        # Start WebSocket server first so it's ready before MQTT messages arrive
+        await self._ws.start()
 
         # Start write workers before MQTT so they are ready
         self._stop_events = [
