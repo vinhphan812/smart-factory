@@ -8,8 +8,11 @@
 
 #include <ArduinoJson.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #include "bridge_core.h"
 #include "telemetry_frame.h"
@@ -55,7 +58,7 @@ class MqttBridge final : public bridge::TelemetryHandler {
   void publishOnlineStatus();
   static bool due(uint32_t nowMs, uint32_t deadlineMs);
 
-  static MqttBridge* instance_;
+  inline static MqttBridge* instance_;
 
   PubSubClient& client_;
   bridge::BridgeCore& core_;
@@ -144,3 +147,43 @@ std::size_t MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame,
   return len;
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// Inline constructor and begin() — defined here so they are always compiled
+// (both ESP32 via mqtt_bridge.cpp and native tests via this header).
+// ---------------------------------------------------------------------------
+
+inline MqttBridge::MqttBridge(PubSubClient& client, bridge::BridgeCore& core,
+                               const char* host, uint16_t port, const char* username,
+                               const char* password, const char* deviceId)
+    : client_(client),
+      core_(core),
+      host_(host),
+      port_(port),
+      username_(username),
+      password_(password),
+      deviceId_(deviceId) {}
+
+inline void MqttBridge::begin() {
+  enabled_ = host_ != nullptr && host_[0] != '\0' && deviceId_ != nullptr &&
+             deviceId_[0] != '\0';
+  if (!enabled_) {
+    return;
+  }
+
+  std::snprintf(commandTopic_, sizeof(commandTopic_),
+                "smart-factory/%s/command/down", deviceId_);
+  std::snprintf(ackTopic_, sizeof(ackTopic_),
+                "smart-factory/%s/command/ack", deviceId_);
+  std::snprintf(telemetryTopic_, sizeof(telemetryTopic_),
+                "smart-factory/%s/telemetry", deviceId_);
+  std::snprintf(statusTopic_, sizeof(statusTopic_),
+                "smart-factory/%s/status", deviceId_);
+
+  instance_ = this;
+  client_.setServer(host_, port_);
+  client_.setCallback(callbackThunk);
+  client_.setKeepAlive(30);
+  client_.setSocketTimeout(1);
+  client_.setBufferSize(768);
+}
