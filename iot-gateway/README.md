@@ -44,6 +44,9 @@ ESP32 Bridge
 
 ## Quick Start
 
+From repository root, install `python -m pip install -e "./iot-gateway[dev]"` and run `python -m pytest iot-gateway/tests/`. The service is a root-level module, independent from firmware.
+
+
 ```bash
 pip install -e ".[test]"
 iot-gateway --broker localhost --port 1883
@@ -51,10 +54,10 @@ iot-gateway --broker localhost --port 1883
 
 ## API
 
-- **WebSocket**: `ws://localhost:8000/ws`
+- **WebSocket**: `ws://localhost:8000/` (standalone `websockets` server; port configurable via `WS_PORT`)
 - **HTTP REST**: `GET /events` — last N events, filterable by device_id and event_type
 - **HTTP REST**: `GET /events/{event_id}` — single event
-- **HTTP**: `GET /health` — gateway health check
+- **HTTP**: `GET /health` — gateway health check (HTTP defaults to port 8001)
 
 ## Environment Variables
 
@@ -67,4 +70,5 @@ iot-gateway --broker localhost --port 1883
 | `DATABASE_URL` | `sqlite+aiosqlite:///gateway.db` | SQLAlchemy database URL |
 | `WS_HOST` | `0.0.0.0` | WebSocket bind host |
 | `WS_PORT` | `8000` | WebSocket bind port |
+| `WS_HTTP_PORT` | `8001` | HTTP REST bind port (defaults to `WS_PORT + 1`) |
 | `MAX_EVENTS` | `10000` | Max events to keep in SQLite |
