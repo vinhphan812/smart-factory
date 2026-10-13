@@ -8,14 +8,78 @@
 
 #include <ArduinoJson.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 
 #include "bridge_core.h"
 #include "telemetry_frame.h"
+
+namespace bridge {
+
+// Builds a telemetry JSON payload into buffer[BufferSize] and returns the
+// serialised byte count.  Returns 0 on measureJson overflow or serializeJson
+// failure.  This function is the single canonical implementation shared by both
+// production (ESP32) and native unit tests.
+template <std::size_t BufferSize, typename PubSubClientLike>
+std::size_t publishTelemetry(const TelemetryFrame& frame,
+                              PubSubClientLike& client,
+                              char (&buffer)[BufferSize],
+                              const char* device_id,
+                              const char* telemetry_topic,
+                              std::uint32_t& tel_dropped,
+                              std::uint32_t& tel_published) {
+  JsonDocument doc;
+  doc["device_id"] = device_id;
+  doc["received_at_ms"] = frame.received_at_ms;
+
+  if (frame.num_values > 0) {
+    JsonArray vals = doc["values"].to<JsonArray>();
+    for (std::uint8_t i = 0; i < frame.num_values; ++i) {
+      vals.add(frame.values[i].text);
+    }
+  }
+
+  if (frame.num_pairs > 0) {
+    JsonObject pairs = doc["pairs"].to<JsonObject>();
+    for (std::uint8_t i = 0; i < frame.num_pairs; ++i) {
+      pairs[frame.pairs[i].key] = frame.pairs[i].value;
+    }
+  }
+
+  if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
+    doc["truncated"] = true;
+    doc["overflow_dropped_values"] = frame.overflow_dropped_values;
+    doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
+  }
+
+  const std::size_t measured = measureJson(doc);
+  if (measured + 1 > BufferSize) {
+    ++tel_dropped;
+    return 0;
+  }
+
+  char tmp[BufferSize]{};
+  const std::size_t len = serializeJson(doc, tmp, sizeof(tmp));
+  if (len == 0) {
+    ++tel_dropped;
+    return 0;
+  }
+
+  // Copy into caller's buffer so the caller can inspect it.
+  for (std::size_t i = 0; i < len && i < BufferSize; ++i) {
+    buffer[i] = tmp[i];
+  }
+
+  const bool ok = client.publish(telemetry_topic, buffer, false);
+  if (ok) {
+    ++tel_published;
+  } else {
+    ++tel_dropped;
+  }
+  return len;
+}
+
+}  // namespace bridge
 
 class MqttBridge final : public bridge::TelemetryHandler {
  public:
@@ -29,18 +93,58 @@ class MqttBridge final : public bridge::TelemetryHandler {
   // bridge::TelemetryHandler — called by UartAdapter when a TEL frame arrives.
   void onTelemetry(const bridge::TelemetryFrame& frame) override;
 
-#if defined(PLATFORMIO_NATIVE_TEST)
-  // Test-only overload: serializes frame to JSON and calls client.publish().
-  // Allows direct unit testing without a real PubSubClient.
-  // client must implement: bool publish(const char*, const char*, bool retained)
-  template <typename PubSubClientLike>
-  std::size_t publishTelemetry(const bridge::TelemetryFrame& frame,
-                               PubSubClientLike& client);
-#endif
+  // Constructs the telemetry JSON and stores it in buffer (max BufferSize bytes).
+  // Returns the number of bytes written, or 0 on failure.
+  // Tests can call this directly; production publishTelemetry delegates to it.
+  template <std::size_t BufferSize>
+  std::size_t buildTelemetryPayload(const bridge::TelemetryFrame& frame,
+                                   char (&buffer)[BufferSize]) const {
+    JsonDocument doc;
+    doc["device_id"] = deviceId_;
+    doc["received_at_ms"] = frame.received_at_ms;
+
+    if (frame.num_values > 0) {
+      JsonArray vals = doc["values"].to<JsonArray>();
+      for (std::uint8_t i = 0; i < frame.num_values; ++i) {
+        vals.add(frame.values[i].text);
+      }
+    }
+
+    if (frame.num_pairs > 0) {
+      JsonObject pairs = doc["pairs"].to<JsonObject>();
+      for (std::uint8_t i = 0; i < frame.num_pairs; ++i) {
+        pairs[frame.pairs[i].key] = frame.pairs[i].value;
+      }
+    }
+
+    if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
+      doc["truncated"] = true;
+      doc["overflow_dropped_values"] = frame.overflow_dropped_values;
+      doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
+    }
+
+    const std::size_t measured = measureJson(doc);
+    if (measured + 1 > BufferSize) {
+      return 0;
+    }
+
+    const std::size_t len = serializeJson(doc, buffer, BufferSize);
+    return (len == 0) ? 0 : len;
+  }
 
   bool enabled() const { return enabled_; }
   std::uint32_t telDropped() const { return telDropped_; }
   std::uint32_t telPublished() const { return telPublished_; }
+
+  // Exposed for test injection: publishes a frame using an arbitrary client.
+  // Delegates to the shared bridge::publishTelemetry free function.
+  template <typename PubSubClientLike>
+  std::size_t publishWith(const bridge::TelemetryFrame& frame,
+                          PubSubClientLike& client) const {
+    char buffer[384]{};
+    return bridge::publishTelemetry(frame, client, buffer, deviceId_,
+                                   telemetryTopic_, telDropped_, telPublished_);
+  }
 
  private:
   void publishTelemetry(const bridge::TelemetryFrame& frame);
@@ -84,79 +188,6 @@ class MqttBridge final : public bridge::TelemetryHandler {
 };
 
 // ---------------------------------------------------------------------------
-// Test-only publishTelemetry template — defined inline so it is compiled when
-// the header is included in native test translation units.  In the ESP32 build
-// mqtt_bridge.cpp is compiled instead (PLATFORMIO_NATIVE_TEST is not defined).
-// ---------------------------------------------------------------------------
-#if defined(PLATFORMIO_NATIVE_TEST)
-inline void MqttBridge::onTelemetry(const bridge::TelemetryFrame& frame) {
-  if (!enabled_) {
-    ++telDropped_;
-    return;
-  }
-  publishTelemetry(frame, client_);
-}
-
-template <typename PubSubClientLike>
-std::size_t MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame,
-                                        PubSubClientLike& client) {
-  constexpr std::size_t kBufferSize = 384;
-  JsonDocument doc;
-  doc["device_id"] = deviceId_;
-  doc["received_at_ms"] = frame.received_at_ms;
-
-  if (frame.num_values > 0) {
-    JsonArray vals = doc["values"].to<JsonArray>();
-    for (std::uint8_t i = 0; i < frame.num_values; ++i) {
-      vals.add(frame.values[i].text);
-    }
-  }
-
-  if (frame.num_pairs > 0) {
-    JsonObject pairs = doc["pairs"].to<JsonObject>();
-    for (std::uint8_t i = 0; i < frame.num_pairs; ++i) {
-      pairs[frame.pairs[i].key] = frame.pairs[i].value;
-    }
-  }
-
-  if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
-    doc["truncated"] = true;
-    doc["overflow_dropped_values"] = frame.overflow_dropped_values;
-    doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
-  }
-
-  const std::size_t measured = measureJson(doc);
-  if (measured + 1 > kBufferSize) {
-    ++telDropped_;
-    return 0;
-  }
-
-  char buffer[kBufferSize]{};
-  const std::size_t len = serializeJson(doc, buffer, sizeof(buffer));
-  if (len == 0) {
-    ++telDropped_;
-    return 0;
-  }
-
-  const bool ok = client.publish(telemetryTopic_, buffer, false);
-  if (ok) {
-    ++telPublished_;
-  } else {
-    ++telDropped_;
-  }
-  return len;
-}
-#endif
-
-// ---------------------------------------------------------------------------
-// Inline callbackThunk — stub for native tests.  In the ESP32 build the real
-// version from mqtt_bridge.cpp is compiled (PLATFORMIO_NATIVE_TEST is not set).
-// ---------------------------------------------------------------------------
-#if defined(PLATFORMIO_NATIVE_TEST)
-inline void MqttBridge::callbackThunk(char*, uint8_t*, unsigned int) {}
-#endif
-
-// ---------------------------------------------------------------------------
 // Inline constructor and begin() — defined here so they are always compiled
 // (both ESP32 via mqtt_bridge.cpp and native tests via this header).
 // ---------------------------------------------------------------------------
@@ -195,3 +226,11 @@ inline void MqttBridge::begin() {
   client_.setSocketTimeout(1);
   client_.setBufferSize(768);
 }
+
+// ---------------------------------------------------------------------------
+// Inline callbackThunk — stub for native tests.  In the ESP32 build the real
+// version from mqtt_bridge.cpp is compiled (PLATFORMIO_NATIVE_TEST is not set).
+// ---------------------------------------------------------------------------
+#if defined(PLATFORMIO_NATIVE_TEST)
+inline void MqttBridge::callbackThunk(char*, uint8_t*, unsigned int) {}
+#endif

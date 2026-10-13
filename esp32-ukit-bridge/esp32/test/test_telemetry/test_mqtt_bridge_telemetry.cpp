@@ -128,7 +128,7 @@ void test_publishTelemetry_emits_truncated_flag_when_values_overflow(void) {
   bridge.begin();
 
   FakePubSubClient fake{};
-  bridge.publishTelemetry(frame, fake);
+  bridge.publishWith(frame, fake);
 
   TEST_ASSERT_FALSE(fake.lastPayload_.empty());
   TEST_ASSERT_NOT_NULL(fake.lastTopic_);
@@ -156,7 +156,7 @@ void test_publishTelemetry_emits_truncated_flag_when_pairs_overflow(void) {
   bridge.begin();
 
   FakePubSubClient fake{};
-  bridge.publishTelemetry(frame, fake);
+  bridge.publishWith(frame, fake);
 
   TEST_ASSERT_FALSE(fake.lastPayload_.empty());
   TEST_ASSERT_TRUE(fake.lastPayload_.find("\"truncated\":true") !=
@@ -189,7 +189,7 @@ void test_publishTelemetry_normal_frame_has_no_truncated_flag(void) {
   bridge.begin();
 
   FakePubSubClient fake{};
-  bridge.publishTelemetry(frame, fake);
+  bridge.publishWith(frame, fake);
 
   TEST_ASSERT_FALSE(fake.lastPayload_.empty());
   TEST_ASSERT_TRUE(fake.lastPayload_.find("\"truncated\"") ==

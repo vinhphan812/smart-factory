@@ -351,45 +351,11 @@ void MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame) {
     return;
   }
 
-  JsonDocument doc;
-  doc["device_id"] = deviceId_;
-  doc["received_at_ms"] = frame.received_at_ms;
-
-  if (frame.num_values > 0) {
-    JsonArray vals = doc["values"].to<JsonArray>();
-    for (std::uint8_t i = 0; i < frame.num_values; ++i) {
-      vals.add(frame.values[i].text);
-    }
-  }
-
-  if (frame.num_pairs > 0) {
-    JsonObject pairs = doc["pairs"].to<JsonObject>();
-    for (std::uint8_t i = 0; i < frame.num_pairs; ++i) {
-      pairs[frame.pairs[i].key] = frame.pairs[i].value;
-    }
-  }
-
-  // Emit provenance metadata when fields were dropped due to capacity limits.
-  // Downstream Digital Twin consumers can use "truncated" to flag incomplete data.
-  if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
-    doc["truncated"] = true;
-    doc["overflow_dropped_values"] = frame.overflow_dropped_values;
-    doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
-  }
-
-  // Use measureJson to reliably detect oversized payloads BEFORE serializing.
-  // serializeJson returns bytes actually written, bounded by buffer capacity,
-  // so it can return len < sizeof(buffer) for a truncated document.
-  const std::size_t measured = measureJson(doc);
-  if (measured + 1 > sizeof(char[384])) {
-    // Payload would exceed buffer — increment drop counter and skip MQTT publish.
-    ++telDropped_;
-    return;
-  }
-
+  // Delegate to the shared buildTelemetryPayload helper.  This is the single
+  // canonical implementation; both production and native tests call the same
+  // JSON-building logic (tests via bridge::publishTelemetry free function).
   char buffer[384]{};
-  const std::size_t len = serializeJson(doc, buffer, sizeof(buffer));
-  // A len == 0 from serializeJson means object too nested or memory exhausted.
+  const std::size_t len = buildTelemetryPayload(frame, buffer);
   if (len == 0) {
     ++telDropped_;
     return;
