@@ -56,14 +56,21 @@ class WebSocketServer:
             try:
                 while True:
                     try:
-                        # Timeout allows the event loop to process WebSocket frames
-                        # (close handshake, keepalives) so ConnectionClosed is raised.
+                        # Wait for the next message but cap the wait so the event
+                        # loop stays responsive to WebSocket control frames
+                        # (close handshake, ping/pong) and we can detect a
+                        # client disconnect promptly.
                         data = await asyncio.wait_for(
                             client_queue.get(), timeout=5.0
                         )
                     except asyncio.TimeoutError:
-                        # No message in 5 s — yield to allow websockets internals
-                        # to run (ping/pong, close detection). Re-check connection.
+                        # No message in 5 s — actively probe connection state by
+                        # requesting an orderly close. This raises ConnectionClosed
+                        # if the client is gone, letting us exit cleanly.
+                        try:
+                            await conn.close()
+                        except websockets.exceptions.ConnectionClosed:
+                            raise
                         continue
                     await conn.send(data)
             except websockets.exceptions.ConnectionClosed:
@@ -84,18 +91,32 @@ class WebSocketServer:
         """Fan-out an event to every connected client.
 
         Serializes the event once and enqueues the string in each client's
-        individual queue. Slow clients are isolated; fast clients proceed
-        immediately.
+        individual queue. Uses put_nowait so a full client queue does not block
+        the calling write worker — the lagging client is disconnected instead.
         """
         payload = json.dumps(event_dict, default=str)
         async with self._queues_lock:
             queues = list(self._client_queues)
         if not queues:
             return
-        await asyncio.gather(
-            *(q.put(payload) for q in queues),
-            return_exceptions=True,
-        )
+
+        lagging: list[asyncio.Queue[str]] = []
+        for q in queues:
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                lagging.append(q)
+
+        if lagging:
+            async with self._queues_lock:
+                for q in lagging:
+                    self._client_queues.discard(q)
+            logger.warning(
+                "Dropped %d lagging WebSocket client(s) — outbound queue full "
+                "(maxsize=%d)",
+                len(lagging),
+                self.MAX_QUEUE_PER_CLIENT,
+            )
 
     async def shutdown(self) -> None:
         """Close the WebSocket server gracefully."""

@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock
+import websockets
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -135,57 +136,57 @@ class TestWebSocketBroadcast:
         """broadcast() serializes an event once and enqueues it in every client queue.
 
         Verifies the fan-out logic: each queue receives the same JSON string
-        (not double-encoded). Uses a synchronous mock to avoid needing a live
-        asyncio event loop in the test.
+        (not double-encoded). Uses put_nowait so a full queue does not block.
         """
-        import asyncio
-        import json
-        from unittest.mock import AsyncMock, patch
         from iot_gateway.api import WebSocketServer
 
         ws = WebSocketServer("127.0.0.1", 0)
 
-        # Create three mock queues
+        # Create three mock queues (put_nowait succeeds for all)
         mock_q1: asyncio.Queue[str] = AsyncMock(spec=asyncio.Queue)
         mock_q2: asyncio.Queue[str] = AsyncMock(spec=asyncio.Queue)
         mock_q3: asyncio.Queue[str] = AsyncMock(spec=asyncio.Queue)
 
         with patch.object(ws, "_client_queues", {mock_q1, mock_q2, mock_q3}):
-            with patch.object(ws, "_queues_lock", AsyncMock()):
+            lock_mock = AsyncMock()
+            lock_mock.__aenter__ = AsyncMock(return_value=None)
+            lock_mock.__aexit__ = AsyncMock(return_value=None)
+            with patch.object(ws, "_queues_lock", lock_mock):
                 event = {"event_id": "e1", "device_id": "d1"}
                 # Run broadcast synchronously
                 asyncio.get_event_loop().run_until_complete(ws.broadcast(event))
 
-        # Each queue must have received exactly one item
-        assert mock_q1.put.call_count == 1
-        assert mock_q2.put.call_count == 1
-        assert mock_q3.put.call_count == 1
+        # Each queue must have received exactly one item via put_nowait
+        assert mock_q1.put_nowait.call_count == 1
+        assert mock_q2.put_nowait.call_count == 1
+        assert mock_q3.put_nowait.call_count == 1
 
-        # All three must have received the same JSON string (not re-encoded)
-        payloads = [mock_q1.put.call_args[0][0], mock_q2.put.call_args[0][0],
-                    mock_q3.put.call_args[0][0]]
+        # All three must have received the same JSON string (not double-encoded)
+        payloads = [
+            mock_q1.put_nowait.call_args[0][0],
+            mock_q2.put_nowait.call_args[0][0],
+            mock_q3.put_nowait.call_args[0][0],
+        ]
         assert all(p == payloads[0] for p in payloads)
         assert json.loads(payloads[0]) == event
 
     def test_broadcast_empty_when_no_clients(self) -> None:
         """broadcast() returns without enqueuing when no clients are connected."""
-        import asyncio
-        from unittest.mock import AsyncMock, MagicMock, patch
         from iot_gateway.api import WebSocketServer
 
         ws = WebSocketServer("127.0.0.1", 0)
-        mock_lock = AsyncMock()
-        mock_lock.__aenter__ = AsyncMock(return_value=None)
-        mock_lock.__aexit__ = AsyncMock(return_value=None)
+        lock_mock = AsyncMock()
+        lock_mock.__aenter__ = AsyncMock(return_value=None)
+        lock_mock.__aexit__ = AsyncMock(return_value=None)
 
         with patch.object(ws, "_client_queues", set()):
-            with patch.object(ws, "_queues_lock", mock_lock):
+            with patch.object(ws, "_queues_lock", lock_mock):
                 asyncio.get_event_loop().run_until_complete(
                     ws.broadcast({"event_id": "orphan"})
                 )
 
-        # Lock was acquired but no queue.put was called
-        mock_lock.__aenter__.assert_called_once()
+        # Lock was acquired but no queue.put_nowait was called
+        lock_mock.__aenter__.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_broadcast_no_clients_does_not_raise(self) -> None:
@@ -197,4 +198,82 @@ class TestWebSocketBroadcast:
             await ws.broadcast({"event_id": "orphan"})
         finally:
             await ws.shutdown()
+
+    def test_broadcast_disconnects_lagging_clients(self) -> None:
+        """A full client queue causes broadcast() to disconnect that client.
+
+        put_nowait raises QueueFull when the client's outbound buffer is
+        saturated (e.g. network stall). Instead of blocking the write worker,
+        broadcast() removes the lagging client from the registry so fast clients
+        are not held up.
+        """
+        from iot_gateway.api import WebSocketServer
+
+        ws = WebSocketServer("127.0.0.1", 0)
+
+        # Two mock queues: one normal, one already full
+        mock_q1: asyncio.Queue[str] = AsyncMock(spec=asyncio.Queue)
+        mock_q1.put_nowait = MagicMock()  # will succeed
+        mock_q2: asyncio.Queue[str] = AsyncMock(spec=asyncio.Queue)
+        mock_q2.put_nowait = MagicMock(
+            side_effect=asyncio.QueueFull()
+        )  # simulates a stalled client
+
+        # Pin the set to a local name before patching — patch restores the
+        # original attribute value on exit, so we need a reference to the
+        # patched set to inspect it afterwards.
+        patched_set = {mock_q1, mock_q2}
+        with patch.object(ws, "_client_queues", patched_set):
+            lock_mock = AsyncMock()
+            lock_mock.__aenter__ = AsyncMock(return_value=None)
+            lock_mock.__aexit__ = AsyncMock(return_value=None)
+            with patch.object(ws, "_queues_lock", lock_mock):
+                asyncio.get_event_loop().run_until_complete(
+                    ws.broadcast({"event_id": "e1"})
+                )
+            # Inside this outer context, _client_queues == patched_set
+
+        # Q1 received the event; Q2 raised QueueFull and was dropped
+        mock_q1.put_nowait.assert_called_once()
+        mock_q2.put_nowait.assert_called_once()
+        # Q2 (lagging) must have been removed from the set
+        assert mock_q2 not in patched_set
+        # Q1 (healthy) must still be registered
+        assert mock_q1 in patched_set
+
+    @pytest.mark.asyncio
+    async def test_handler_unregisters_client_on_close(self) -> None:
+        """Handler removes client queue when ServerConnection raises ConnectionClosed.
+
+        The handler waits on the client queue with a 5 s timeout and calls
+        conn.close() each time the timeout fires — this raises ConnectionClosed
+        on the next call when the client has gone, so the finally-block runs
+        promptly and the queue is unregistered.  We unblock the handler from
+        its queue.get() with a dummy send before aborting the connection, so
+        the close is detected without waiting for the full 5 s timeout.
+        """
+        from iot_gateway.api import WebSocketServer
+
+        ws = WebSocketServer("127.0.0.1", 0)
+        await ws.start()
+        port = ws._server.sockets[0].getsockname()[1]
+
+        client = await websockets.connect(
+            f"ws://127.0.0.1:{port}", open_timeout=5
+        )
+        await asyncio.sleep(0.3)
+        assert len(ws._client_queues) == 1
+
+        # Put a dummy message so the handler is no longer blocked on queue.get()
+        # and can proceed to the conn.close() call where it will detect the
+        # ConnectionClosed and unregister.
+        queue_ref = next(iter(ws._client_queues))
+        queue_ref.put_nowait('{"event":"unblock"}')
+        # Also abort the transport so the next conn.close() raises ConnectionClosed
+        if client.transport is not None:
+            client.transport.abort()
+        await asyncio.sleep(0.3)
+
+        assert len(ws._client_queues) == 0
+        await ws.shutdown()
 

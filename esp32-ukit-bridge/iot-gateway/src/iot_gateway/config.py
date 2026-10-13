@@ -13,10 +13,12 @@ class GatewayConfig:
     database_url: str
     ws_host: str
     ws_port: int
+    ws_http_port: int
     max_events: int
 
     @classmethod
     def from_env(cls) -> "GatewayConfig":
+        ws_port = int(os.environ.get("WS_PORT", "8000"))
         return cls(
             mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
             mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
@@ -26,7 +28,8 @@ class GatewayConfig:
                 "DATABASE_URL", "sqlite+aiosqlite:///gateway.db"
             ),
             ws_host=os.environ.get("WS_HOST", "0.0.0.0"),
-            ws_port=int(os.environ.get("WS_PORT", "8000")),
+            ws_port=ws_port,
+            ws_http_port=int(os.environ.get("WS_HTTP_PORT", str(ws_port + 1))),
             max_events=int(os.environ.get("MAX_EVENTS", "10000")),
         )
 

@@ -29,6 +29,7 @@ def gateway_config(tmp_path) -> GatewayConfig:
         max_events=100,
         ws_host="127.0.0.1",
         ws_port=0,
+        ws_http_port=0,
     )
 
 

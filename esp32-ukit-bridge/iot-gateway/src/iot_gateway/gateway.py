@@ -158,13 +158,16 @@ class Gateway:
         self._mqtt.start()
 
         # WebSocket + HTTP server
+        # NOTE: ws_http_port != ws_port so Uvicorn and the WebSocket server
+        # do not conflict. WS clients connect to ws_port; REST/WebSocket
+        # browser clients connect to ws_http_port.
         try:
             from uvicorn import Config, Server
 
             config = Config(
                 app=self._app,
                 host=self._config.ws_host,
-                port=self._config.ws_port,
+                port=self._config.ws_http_port,
                 log_level="warning",
             )
             self._runner = Server(config)
