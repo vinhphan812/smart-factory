@@ -8,9 +8,10 @@ This document describes the contract implemented by the current ESP32 firmware a
 | -------------------------------------------- | -------------------- | ----------: | -----: |
 | `smart-factory/{deviceId}/command/down`      | Subscribe            |           1 |     No |
 | `smart-factory/{deviceId}/command/ack`       | Publish              | best effort |     No |
+| `smart-factory/{deviceId}/telemetry`         | Publish              | best effort |     No |
 | `smart-factory/{deviceId}/status`            | Publish              | best effort |    Yes |
 
-`{deviceId}` is provisioned in `bridge_config.h` (e.g. `bridge-001`). All topics are per-device; the bridge subscribes only to its own command topic.
+`{deviceId}` is provisioned from ESP32 chip MAC in `main.cpp` (e.g. `ukit-00000000`). All topics are per-device; the bridge subscribes only to its own command topic.
 
 ## MQTT Command
 
@@ -95,20 +96,43 @@ Example `@ACK,102,OK*22A0\r\n`. Profile status values are `OK`, `UNKNOWN_COMMAND
 uKit reference emits:
 
 ```
-TEL,STATE,<uptime_ms>,<temperature_centi_c>,<humidity_centi_percent>,<digital_inputs>
+TEL,<metric>,<value>[,<value>...]
 ```
 
 Example BODY:
 
 ```
-TEL,STATE,123456,2534,6550,5
+TEL,CONVEYOR,RUNNING,60,SENSOR1=1
+TEL,TEMP,2534,HUMIDITY=6550,SENSOR2=0
 ```
 
-- `temperature_c = temperature_centi_c / 100`.
-- `humidity_percent = humidity_centi_percent / 100`.
-- `digital_inputs` is a decimal 16-bit bitmask.
+Fields after the `TEL` type token are parsed as follows:
+- **key=value pair** — any field containing `=` is split at the first `=`. Both sides are stored as raw strings. Up to 4 pairs per frame are stored; excess pairs are silently dropped.
+- **plain value** — any field without `=` is stored as a raw string. Up to 6 plain values per frame are stored; excess fields are silently dropped.
 
-Current ESP32 firmware does not yet publish TEL to MQTT. The MQTT telemetry contract should only be finalized after this handler is implemented; do not claim a topic/payload that is not in the code.
+All fields must be valid AMLP: printable ASCII 0x21..0x7E, 1..64 bytes, no `,`, `*`, `@`, CR/LF. Empty fields are skipped.
+
+## MQTT Telemetry
+
+The bridge publishes parsed telemetry to `smart-factory/{deviceId}/telemetry` (QoS 0, not retained):
+
+```json
+{
+  "device_id": "ukit-00000000",
+  "received_at_ms": 123456,
+  "values": ["CONVEYOR", "RUNNING", "60"],
+  "pairs": { "SENSOR1": "1" }
+}
+```
+
+- `device_id`: bridge device identifier.
+- `received_at_ms`: monotonic millisecond timestamp at the moment the AMLP frame was recognised as complete.
+- `values`: array of raw string values from plain fields (excluded key=value pairs). Omitted when empty.
+- `pairs`: object mapping key strings to value strings from key=value fields. Omitted when empty.
+
+**Backpressure policy:** If the MQTT write buffer is full (QoS 0), the frame is dropped and a counter is incremented. The UART poll loop is never blocked. Telemetry frames are not retransmitted.
+
+**Duplicate/out-of-order TEL:** Unity should mark telemetry stale when no new frame arrives within `kTelemetryTimeoutMs` (60 s, configurable in `bridge_config.h`). Frames may arrive out of order; use `received_at_ms` for ordering.
 
 ## MQTT Status
 

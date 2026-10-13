@@ -6,8 +6,9 @@
 #include <cstdint>
 
 #include "bridge_core.h"
+#include "telemetry_frame.h"
 
-class MqttBridge {
+class MqttBridge final : public bridge::TelemetryHandler {
  public:
   MqttBridge(PubSubClient& client, bridge::BridgeCore& core,
              const char* host, uint16_t port, const char* username,
@@ -16,7 +17,11 @@ class MqttBridge {
   void begin();
   void tick(uint32_t nowMs, bool networkReady);
 
+  // bridge::TelemetryHandler — called by UartAdapter when a TEL frame arrives.
+  void onTelemetry(const bridge::TelemetryFrame& frame) override;
+
  private:
+  void publishTelemetry(const bridge::TelemetryFrame& frame);
   static void callbackThunk(char* topic, uint8_t* payload,
                             unsigned int length);
   void onMessage(const char* topic, const uint8_t* payload,
@@ -49,4 +54,9 @@ class MqttBridge {
   bool enabled_ = false;
   bool completionPendingPublish_ = false;
   bridge::Completion completionPending_{};
+
+  // Telemetry QoS/backpressure: if the MQTT write buffer is full, drop rather
+  // than block the UART poll loop.  Backpressure accounting is diagnostic only.
+  uint32_t telDropped_ = 0;
+  uint32_t telPublished_ = 0;
 };
