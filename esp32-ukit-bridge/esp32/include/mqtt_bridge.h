@@ -140,7 +140,7 @@ class MqttBridge final : public bridge::TelemetryHandler {
   // Delegates to the shared bridge::publishTelemetry free function.
   template <typename PubSubClientLike>
   std::size_t publishWith(const bridge::TelemetryFrame& frame,
-                          PubSubClientLike& client) const {
+                          PubSubClientLike& client) {
     char buffer[384]{};
     return bridge::publishTelemetry(frame, client, buffer, deviceId_,
                                    telemetryTopic_, telDropped_, telPublished_);
