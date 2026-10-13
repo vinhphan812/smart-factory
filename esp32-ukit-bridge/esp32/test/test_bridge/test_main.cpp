@@ -155,6 +155,189 @@ void test_retry_clock_handles_millis_wraparound() {
 void setUp() {}
 void tearDown() {}
 
+// ---------------------------------------------------------------------------
+// CommandMapper tests — JSON-independent, native-compilable
+// ---------------------------------------------------------------------------
+
+#include "command_mapper.h"
+#include "bridge_core.h"
+
+namespace {
+
+bridge::CommandMapper mapper;
+
+void test_conveyor_start_valid(void) {
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-1", 42,
+                        0, false, 60, 1, "60", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kOk, r.code);
+  TEST_ASSERT_EQUAL_STRING("req-1", r.canonicalRequestId);
+  TEST_ASSERT_EQUAL_UINT16(42, out.sequence);
+  // Wire bytes start with '@'
+  TEST_ASSERT_EQUAL_UINT8('@', out.payload[0]);
+}
+
+void test_conveyor_start_speed_out_of_range(void) {
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-2", 1,
+                        0, false, 0, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+  auto r2 = mapper.build("CONVEYOR_START", "req-3", 2,
+                         0, false, 101, 1, "101", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r2.code);
+}
+
+void test_conveyor_start_wrong_arg_count(void) {
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-4", 3,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_conveyor_stop_valid(void) {
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_STOP", "req-5", 99,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kOk, r.code);
+  TEST_ASSERT_EQUAL_STRING("req-5", r.canonicalRequestId);
+}
+
+void test_conveyor_stop_wrong_arg_count(void) {
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_STOP", "req-6", 7,
+                        0, false, -1, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_ping_valid(void) {
+  bridge::Command out{};
+  auto r = mapper.build("PING", "req-ping", 55,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kOk, r.code);
+}
+
+void test_reset_valid(void) {
+  bridge::Command out{};
+  auto r = mapper.build("RESET", "req-reset", 7,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kOk, r.code);
+}
+
+void test_set_output_valid(void) {
+  bridge::Command out{};
+  auto r = mapper.build("SET_OUTPUT", "req-so", 8,
+                        5, true, -1, 2, "5", "1", out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kOk, r.code);
+}
+
+void test_set_output_channel_out_of_range(void) {
+  bridge::Command out{};
+  auto r = mapper.build("SET_OUTPUT", "req-so2", 9,
+                        256, false, -1, 2, "256", "0", out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_set_output_wrong_arg_count(void) {
+  bridge::Command out{};
+  auto r = mapper.build("SET_OUTPUT", "req-so3", 10,
+                        0, false, -1, 1, "1", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+// Fail-open prevention: malformed channel/value must NOT produce a valid AMLP
+// frame. The JSON adapter (mqtt_bridge.cpp) pre-parses these fields before
+// calling CommandMapper::build(). On parse failure it publishes 'invalid_argument'
+// and never enqueues. These tests verify the CommandMapper layer rejects the
+// parameter combinations that the JSON adapter would encounter.
+
+void test_set_output_wrong_value_rejected(void) {
+  // value "2" — strtoul("2")=2, valid uint but not 0 or 1.
+  // JSON adapter: valueParsed=false → publishes 'invalid_argument', never calls
+  // CommandMapper. Test: CommandMapper must reject value outside {0,1}.
+  bridge::Command out{};
+  auto r = mapper.build("SET_OUTPUT", "req-so-wrongval", 20,
+                        5, true, -1, 2, "5", "2", out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_conveyor_start_non_decimal_speed_rejected(void) {
+  // Speed "abc" — strtol fails; JSON adapter sets speedParsed=false and
+  // speedArg=-1. CommandMapper::build() receives speedArg=-1; validSpeed(-1)=false.
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-cs-nondigit", 21,
+                        0, false, -1, 1, "abc", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_conveyor_start_negative_speed_rejected(void) {
+  // Speed "-1" — strtol("-1")=-1, endptr at end, but validSpeed(-1)=false.
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-cs-neg", 22,
+                        0, false, -1, 1, "-1", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_conveyor_start_float_speed_rejected(void) {
+  // Speed "60.5" — strtol stops at '6', endptr at '.', not end of string.
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-cs-float", 23,
+                        0, false, -1, 1, "60.5", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_conveyor_start_zero_speed_rejected(void) {
+  // Speed 0 — strtol succeeds but validSpeed(0)=false (min is 1).
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-cs-zero", 26,
+                        0, false, 0, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_conveyor_start_101_speed_rejected(void) {
+  // Speed 101 — strtol succeeds but validSpeed(101)=false (max is 100).
+  bridge::Command out{};
+  auto r = mapper.build("CONVEYOR_START", "req-cs-101", 27,
+                        0, false, 101, 1, "101", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_unknown_command_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build("EMERGENCY_STOP", "req-e", 11,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kUnknownCommand, r.code);
+}
+
+void test_null_command_name_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build(nullptr, "req-null", 12,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInternalError, r.code);
+}
+
+void test_null_request_id_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build("PING", nullptr, 13,
+                        0, false, -1, 0, nullptr, nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInternalError, r.code);
+}
+
+void test_ping_with_args_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build("PING", "req-ping-args", 30,
+                        0, false, -1, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+void test_reset_with_args_rejected(void) {
+  bridge::Command out{};
+  auto r = mapper.build("RESET", "req-reset-args", 31,
+                        0, false, -1, 1, "0", nullptr, out);
+  TEST_ASSERT_EQUAL_INT(bridge::CommandMapperResult::kInvalidArgument, r.code);
+}
+
+}  // namespace
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_rejects_invalid_and_bounds_queue);
@@ -162,5 +345,27 @@ int main() {
   RUN_TEST(test_correlates_ack_and_reports_status);
   RUN_TEST(test_retries_each_second_and_stops_after_three_attempts);
   RUN_TEST(test_retry_clock_handles_millis_wraparound);
+  // CommandMapper — JSON-independent command validation
+  RUN_TEST(test_conveyor_start_valid);
+  RUN_TEST(test_conveyor_start_speed_out_of_range);
+  RUN_TEST(test_conveyor_start_wrong_arg_count);
+  RUN_TEST(test_conveyor_stop_valid);
+  RUN_TEST(test_conveyor_stop_wrong_arg_count);
+  RUN_TEST(test_ping_valid);
+  RUN_TEST(test_reset_valid);
+  RUN_TEST(test_set_output_valid);
+  RUN_TEST(test_set_output_channel_out_of_range);
+  RUN_TEST(test_set_output_wrong_arg_count);
+  RUN_TEST(test_set_output_wrong_value_rejected);
+  RUN_TEST(test_conveyor_start_non_decimal_speed_rejected);
+  RUN_TEST(test_conveyor_start_negative_speed_rejected);
+  RUN_TEST(test_conveyor_start_float_speed_rejected);
+  RUN_TEST(test_conveyor_start_zero_speed_rejected);
+  RUN_TEST(test_conveyor_start_101_speed_rejected);
+  RUN_TEST(test_unknown_command_rejected);
+  RUN_TEST(test_null_command_name_rejected);
+  RUN_TEST(test_null_request_id_rejected);
+  RUN_TEST(test_ping_with_args_rejected);
+  RUN_TEST(test_reset_with_args_rejected);
   return UNITY_END();
 }

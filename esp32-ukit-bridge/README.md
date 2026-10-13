@@ -7,6 +7,7 @@ A bridge that connects uKit controllers to an MQTT broker via ESP32. ESP32 recei
 ## Quick diagram
 
 ```mermaid
+
 graph LR
     Broker["MQTT Broker"] <-->|"Wi-Fi"| ESP32["ESP32 Bridge"]
     ESP32 -->|"TX GPIO17"| RX0["uKit RX0"]
