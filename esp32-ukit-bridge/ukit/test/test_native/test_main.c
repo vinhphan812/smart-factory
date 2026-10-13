@@ -43,6 +43,55 @@ static void test_crc_standard_vector(void) {
     TEST_ASSERT_EQUAL_HEX16(0x29B1u, amlp_crc16_ccitt_false(vector, 9u));
 }
 
+static void test_crc_golden_vectors(void) {
+    /* All three AMLP body CRCs from shared/protocol-spec/test-vectors.json */
+    TEST_ASSERT_EQUAL_HEX16(
+        0xC942u,
+        amlp_crc16_ccitt_false((const uint8_t *)"CMD,102,CONVEYOR_START,60", 25u));
+    TEST_ASSERT_EQUAL_HEX16(
+        0x22A0u,
+        amlp_crc16_ccitt_false((const uint8_t *)"ACK,102,OK", 10u));
+    TEST_ASSERT_EQUAL_HEX16(
+        0x0942u,
+        amlp_crc16_ccitt_false((const uint8_t *)"TEL,CONVEYOR,RUNNING,60,SENSOR1=1", 33u));
+}
+
+static void test_encode_ack_golden_vector(void) {
+    amlp_frame_t frame;
+    char encoded[AMLP_MAX_FRAME_LENGTH];
+    size_t encoded_length = 0u;
+    /* Golden vector: ACK,102,OK -> 22A0 */
+    static const char expected[] = "@ACK,102,OK*22A0\r\n";
+
+    amlp_frame_init(&frame, AMLP_TYPE_ACK);
+    TEST_ASSERT_TRUE(amlp_frame_set_field(&frame, 0u, "102"));
+    TEST_ASSERT_TRUE(amlp_frame_set_field(&frame, 1u, "OK"));
+    TEST_ASSERT_EQUAL(AMLP_OK,
+        amlp_encode(&frame, encoded, sizeof(encoded), &encoded_length));
+    TEST_ASSERT_EQUAL_UINT(sizeof(expected) - 1u, encoded_length);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(
+        (const uint8_t *)expected, (const uint8_t *)encoded, encoded_length);
+}
+
+static void test_encode_tel_golden_vector(void) {
+    amlp_frame_t frame;
+    char encoded[AMLP_MAX_FRAME_LENGTH];
+    size_t encoded_length = 0u;
+    /* Golden vector: TEL,CONVEYOR,RUNNING,60,SENSOR1=1 -> 0942 */
+    static const char expected[] = "@TEL,CONVEYOR,RUNNING,60,SENSOR1=1*0942\r\n";
+
+    amlp_frame_init(&frame, AMLP_TYPE_TEL);
+    TEST_ASSERT_TRUE(amlp_frame_set_field(&frame, 0u, "CONVEYOR"));
+    TEST_ASSERT_TRUE(amlp_frame_set_field(&frame, 1u, "RUNNING"));
+    TEST_ASSERT_TRUE(amlp_frame_set_field(&frame, 2u, "60"));
+    TEST_ASSERT_TRUE(amlp_frame_set_field(&frame, 3u, "SENSOR1=1"));
+    TEST_ASSERT_EQUAL(AMLP_OK,
+        amlp_encode(&frame, encoded, sizeof(encoded), &encoded_length));
+    TEST_ASSERT_EQUAL_UINT(sizeof(expected) - 1u, encoded_length);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(
+        (const uint8_t *)expected, (const uint8_t *)encoded, encoded_length);
+}
+
 static void test_shared_vectors_and_lf_decode(void) {
     amlp_frame_t command;
     amlp_frame_t decoded;
@@ -136,7 +185,10 @@ static void test_telemetry_fields(void) {
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_crc_standard_vector);
+    RUN_TEST(test_crc_golden_vectors);
     RUN_TEST(test_shared_vectors_and_lf_decode);
+    RUN_TEST(test_encode_ack_golden_vector);
+    RUN_TEST(test_encode_tel_golden_vector);
     RUN_TEST(test_parser_restart_and_timeout);
     RUN_TEST(test_endpoint_ack_deduplicates_command);
     RUN_TEST(test_telemetry_fields);

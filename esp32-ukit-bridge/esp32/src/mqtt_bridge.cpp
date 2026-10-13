@@ -2,87 +2,49 @@
 
 #include <ArduinoJson.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
 #include "amlp/amlp.hpp"
 #include "bridge_config.h"
+#include "command_mapper.h"
+#include "json_adapter.h"
 
 namespace {
 
 constexpr char kOfflinePayload[] =
     "{\"online\":false,\"reason\":\"mqtt_disconnect\"}";
 
-bool copyText(char* destination, std::size_t capacity, const char* source) {
-  if (destination == nullptr || capacity == 0 || source == nullptr) {
-    return false;
+const char* mapperStatusName(bridge::CommandMapperResult::Code code) {
+  switch (code) {
+    case bridge::CommandMapperResult::kOk:
+      return "queued";
+    case bridge::CommandMapperResult::kUnknownCommand:
+      return "unknown_command";
+    case bridge::CommandMapperResult::kInvalidArgument:
+      return "invalid_argument";
+    case bridge::CommandMapperResult::kInternalError:
+    default:
+      return "internal_error";
   }
-  const std::size_t length = std::strlen(source);
-  if (length == 0 || length >= capacity) {
-    return false;
-  }
-  std::memcpy(destination, source, length + 1);
-  return true;
 }
 
-bool buildAmlpCommand(JsonDocument& document, uint16_t sequence,
-                      bridge::Command& command) {
-  const char* requestId = document["request_id"] | nullptr;
-  const char* commandName = document["command"] | nullptr;
-  if (!copyText(command.requestId, sizeof(command.requestId), requestId) ||
-      !copyText(command.commandName, sizeof(command.commandName), commandName)) {
-    return false;
+int16_t mapperStatusCode(bridge::CommandMapperResult::Code code) {
+  switch (code) {
+    case bridge::CommandMapperResult::kOk:
+      return 0;
+    case bridge::CommandMapperResult::kUnknownCommand:
+      return 1;
+    case bridge::CommandMapperResult::kInvalidArgument:
+      return 2;
+    case bridge::CommandMapperResult::kInternalError:
+    default:
+      return 3;
   }
-
-  amlp::Frame frame{};
-  frame.type = amlp::Type::Cmd;
-  char sequenceText[6]{};
-  std::snprintf(sequenceText, sizeof(sequenceText), "%u",
-                static_cast<unsigned int>(sequence));
-  if (!frame.set_field(0, sequenceText)) {
-    return false;
-  }
-
-  if (std::strcmp(commandName, "ping") == 0) {
-    if (!frame.set_field(1, "PING")) {
-      return false;
-    }
-  } else if (std::strcmp(commandName, "reset") == 0) {
-    if (!frame.set_field(1, "RESET")) {
-      return false;
-    }
-  } else if (std::strcmp(commandName, "set_output") == 0) {
-    const JsonVariant channelValue = document["channel"];
-    const JsonVariant outputValue = document["value"];
-    if (!channelValue.is<unsigned int>() ||
-        channelValue.as<unsigned int>() > 255U || !outputValue.is<bool>()) {
-      return false;
-    }
-    char channelText[4]{};
-    std::snprintf(channelText, sizeof(channelText), "%u",
-                  channelValue.as<unsigned int>());
-    if (!frame.set_field(1, "SET_OUTPUT") ||
-        !frame.set_field(2, channelText) ||
-        !frame.set_field(3, outputValue.as<bool>() ? "1" : "0")) {
-      return false;
-    }
-  } else {
-    return false;
-  }
-
-  char encoded[amlp::kMaxFrameLength]{};
-  std::size_t written = 0;
-  if (amlp::encode(frame, encoded, sizeof(encoded), written) !=
-          amlp::Error::None ||
-      written == 0 || written > bridge::kMaxPayloadSize) {
-    return false;
-  }
-
-  command.sequence = sequence;
-  command.payloadLength = static_cast<uint16_t>(written);
-  std::memcpy(command.payload, encoded, written);
-  return true;
 }
+
+bridge::CommandMapper g_mapper;
 
 const char* statusName(int16_t statusCode) {
   switch (statusCode) {
@@ -181,15 +143,44 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
     return;
   }
 
-  const char* requestId = document["request_id"] | nullptr;
-  const char* commandName = document["command"] | nullptr;
+  // -------------------------------------------------------------------------
+  // Canonical envelope: prefer integer command_id; fall back to request_id.
+  // The incoming field name for the operation is command_name (schema canonical).
+  // -------------------------------------------------------------------------
+  char requestIdBuf[bridge::kMaxRequestIdLength + 1]{};
+  const char* requestId = nullptr;
+
+  if (document["command_id"].is<int64_t>()) {
+    // Integer command_id (uint32) — convert to string.
+    const int64_t idInt = document["command_id"].as<int64_t>();
+    if (idInt > 0 && idInt <= 0xFFFFFFFFLL) {
+      std::snprintf(requestIdBuf, sizeof(requestIdBuf), "%lld",
+                     static_cast<long long>(idInt));
+      requestId = requestIdBuf;
+    }
+  }
+
+  if (requestId == nullptr) {
+    // Fall back to string request_id. Reject if empty or exceeds max length
+    // to prevent dedupe cache collisions from truncation.
+    const char* fallback = document["request_id"] | nullptr;
+    if (fallback != nullptr && fallback[0] != '\0' &&
+        std::strlen(fallback) <= bridge::kMaxRequestIdLength) {
+      std::strncpy(requestIdBuf, fallback, bridge::kMaxRequestIdLength);
+      requestIdBuf[bridge::kMaxRequestIdLength] = '\0';
+      requestId = requestIdBuf;
+    }
+  }
+
+  const char* commandName = document["command_name"] | nullptr;
   if (requestId == nullptr || commandName == nullptr) {
-    publishImmediateAck(requestId == nullptr ? "invalid" : requestId, 0,
-                        commandName == nullptr ? "invalid" : commandName,
+    publishImmediateAck(requestId != nullptr ? requestId : "invalid", 0,
+                        commandName != nullptr ? commandName : "invalid",
                         "invalid_argument", 2);
     return;
   }
 
+  // Check deduplication before allocating a sequence.
   uint16_t existingSequence = 0;
   if (core_.findRequest(requestId, existingSequence)) {
     return;
@@ -201,18 +192,92 @@ void MqttBridge::onMessage(const char* topic, const uint8_t* payload,
     return;
   }
 
-  bridge::Command command{};
-  if (!buildAmlpCommand(document, sequence, command)) {
-    publishImmediateAck(requestId, sequence, commandName, "invalid_argument", 2);
+  // -----------------------------------------------------------------------
+  // Extract arguments from the canonical arguments array.
+  // Strictly require a JSON array — a non-array or absent "arguments" means
+  // zero arguments for all commands (including SET_OUTPUT and CONVEYOR_START).
+  // -----------------------------------------------------------------------
+  unsigned int channel = 0;
+  bool outputValue = false;
+  bool channelParsed = false;
+  bool valueParsed = false;
+  int speedArg = -1;
+  bool speedParsed = false;
+  uint8_t argCount = 0;
+  const char* arg0 = nullptr;
+  const char* arg1 = nullptr;
+
+  if (document["arguments"].is<JsonArray>()) {
+    JsonArrayConst args = document["arguments"].as<JsonArrayConst>();
+    if (args.size() > 2) {
+      publishImmediateAck(requestId, 0, commandName, "invalid_argument", 2);
+      return;
+    }
+    argCount = static_cast<uint8_t>(args.size());
+    if (argCount >= 1) {
+      arg0 = args[0].as<const char*>();
+    }
+    if (argCount >= 2) {
+      arg1 = args[1].as<const char*>();
+    }
+  } else if (document["arguments"].is<JsonVariant>()) {
+    // "arguments" is present but not an array — structural error.
+    publishImmediateAck(requestId, 0, commandName, "invalid_argument", 2);
     return;
   }
 
-  const bridge::EnqueueResult result = core_.enqueue(command);
-  if (result == bridge::EnqueueResult::QueueFull) {
-    publishImmediateAck(requestId, sequence, commandName, "internal_error", 3);
-  } else if (result == bridge::EnqueueResult::Invalid) {
+  // Pre-parse SET_OUTPUT channel and value using the shared adapter helper
+  // (tested in test_json_adapter/). The helper validates: arg0 is 0..255 decimal
+  // digit-only; arg1 is "0" or "1". Track parse success explicitly — a failed
+  // parse must NOT produce a valid command that falls through to the actuator.
+  if (std::strcmp(commandName, "SET_OUTPUT") == 0) {
+    if (bridge::parseSetOutputArgs(arg0, arg1)) {
+      // Helper confirmed digit-only + range + value. Extract actual values.
+      channel = static_cast<unsigned int>(std::strtoul(arg0, nullptr, 10));
+      outputValue = (std::strcmp(arg1, "1") == 0);
+      channelParsed = true;
+      valueParsed = true;
+    }
+    // Fail-open guard: malformed channel or value → reject immediately.
+    // Do NOT fall through with channel=0, value=false defaults.
+    if (!channelParsed || !valueParsed) {
+      publishImmediateAck(requestId, sequence, commandName,
+                          "invalid_argument", 2);
+      return;
+    }
+  }
+
+  // Pre-parse CONVEYOR_START speed using the shared adapter helper
+  // (tested in test_json_adapter/). The helper validates: arg0 is 1..100
+  // decimal digit-only.
+  if (std::strcmp(commandName, "CONVEYOR_START") == 0) {
+    if (bridge::parseConveyorStartArg(arg0)) {
+      speedArg = static_cast<int>(std::strtol(arg0, nullptr, 10));
+      speedParsed = true;
+    }
+  }
+
+  bridge::Command cmd{};
+  bridge::CommandMapperResult result =
+      g_mapper.build(commandName, requestId, sequence,
+                     channel, outputValue, speedArg,
+                     argCount, arg0, arg1, cmd);
+
+  if (result.code != bridge::CommandMapperResult::kOk) {
+    publishImmediateAck(requestId, sequence, commandName,
+                        mapperStatusName(result.code),
+                        mapperStatusCode(result.code));
+    return;
+  }
+
+  const bridge::EnqueueResult enqResult = core_.enqueue(cmd);
+  if (enqResult == bridge::EnqueueResult::QueueFull) {
+    publishImmediateAck(requestId, sequence, commandName, "queue_full", 4);
+  } else if (enqResult == bridge::EnqueueResult::Invalid) {
     publishImmediateAck(requestId, sequence, commandName, "invalid_argument", 2);
   }
+  // On EnqueueResult::Accepted and EnqueueResult::Duplicate: silently swallow.
+  // Accepted gets a completion ACK later; Duplicate is already deduped.
 }
 
 void MqttBridge::connectOnce(uint32_t nowMs) {
@@ -286,6 +351,7 @@ bool MqttBridge::publishCompletion(const bridge::Completion& completion) {
     document["status"] = "timeout";
     document["status_code"] = nullptr;
   } else {
+    // Map MEGA ACK status code (0..3) to named string.
     document["status"] = statusName(completion.statusCode);
     document["status_code"] = completion.statusCode;
   }

@@ -63,19 +63,53 @@ void test_crc_vectors() {
 }
 
 void test_encode_canonical_crlf() {
-  amlp::Frame frame;
-  frame.type = amlp::Type::Cmd;
-  TEST_ASSERT_TRUE(frame.set_field(0, "102"));
-  TEST_ASSERT_TRUE(frame.set_field(1, "CONVEYOR_START"));
-  TEST_ASSERT_TRUE(frame.set_field(2, "60"));
+  // ---- CMD golden vector: CMD,102,CONVEYOR_START,60 -> C942 ----
+  {
+    amlp::Frame frame;
+    frame.type = amlp::Type::Cmd;
+    TEST_ASSERT_TRUE(frame.set_field(0, "102"));
+    TEST_ASSERT_TRUE(frame.set_field(1, "CONVEYOR_START"));
+    TEST_ASSERT_TRUE(frame.set_field(2, "60"));
 
-  char output[amlp::kMaxFrameLength];
-  std::size_t written = 0;
-  TEST_ASSERT_EQUAL_INT(
-      static_cast<int>(amlp::Error::None),
-      static_cast<int>(amlp::encode(frame, output, sizeof(output), written)));
-  TEST_ASSERT_EQUAL_STRING_LEN("@CMD,102,CONVEYOR_START,60*C942\r\n",
-                               output, written);
+    char output[amlp::kMaxFrameLength];
+    std::size_t written = 0;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(amlp::Error::None),
+        static_cast<int>(amlp::encode(frame, output, sizeof(output), written)));
+    TEST_ASSERT_EQUAL_STRING_LEN("@CMD,102,CONVEYOR_START,60*C942\r\n",
+                                 output, written);
+  }
+  // ---- ACK golden vector: ACK,102,OK -> 22A0 ----
+  {
+    amlp::Frame frame;
+    frame.type = amlp::Type::Ack;
+    TEST_ASSERT_TRUE(frame.set_field(0, "102"));
+    TEST_ASSERT_TRUE(frame.set_field(1, "OK"));
+
+    char output[amlp::kMaxFrameLength];
+    std::size_t written = 0;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(amlp::Error::None),
+        static_cast<int>(amlp::encode(frame, output, sizeof(output), written)));
+    TEST_ASSERT_EQUAL_STRING_LEN("@ACK,102,OK*22A0\r\n", output, written);
+  }
+  // ---- TEL golden vector: TEL,CONVEYOR,RUNNING,60,SENSOR1=1 -> 0942 ----
+  {
+    amlp::Frame frame;
+    frame.type = amlp::Type::Tel;
+    TEST_ASSERT_TRUE(frame.set_field(0, "CONVEYOR"));
+    TEST_ASSERT_TRUE(frame.set_field(1, "RUNNING"));
+    TEST_ASSERT_TRUE(frame.set_field(2, "60"));
+    TEST_ASSERT_TRUE(frame.set_field(3, "SENSOR1=1"));
+
+    char output[amlp::kMaxFrameLength];
+    std::size_t written = 0;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(amlp::Error::None),
+        static_cast<int>(amlp::encode(frame, output, sizeof(output), written)));
+    TEST_ASSERT_EQUAL_STRING_LEN("@TEL,CONVEYOR,RUNNING,60,SENSOR1=1*0942\r\n",
+                                 output, written);
+  }
 }
 
 void test_decode_cmd_ack_tel() {
