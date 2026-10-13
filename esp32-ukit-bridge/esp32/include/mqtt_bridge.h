@@ -102,10 +102,18 @@ class MqttBridge final : public bridge::TelemetryHandler {
   void tick(uint32_t nowMs, bool networkReady);
 
   // bridge::TelemetryHandler — called by UartAdapter when a TEL frame arrives.
-  // Inline for native tests (vtable must be complete without mqtt_bridge.cpp).
+  // Inline definition for native tests (vtable must be complete without mqtt_bridge.cpp).
   // Production ESP32 uses the definition from mqtt_bridge.cpp.
 #if defined(PLATFORMIO_NATIVE_TEST)
-  void onTelemetry(const bridge::TelemetryFrame& frame) override;
+  void onTelemetry(const bridge::TelemetryFrame& frame) override {
+    if (!enabled_) {
+      ++telDropped_;
+      return;
+    }
+    char buffer[384]{};
+    bridge::publishTelemetry(frame, client_, buffer, deviceId_,
+                             telemetryTopic_, telDropped_, telPublished_);
+  }
 #else
   void onTelemetry(const bridge::TelemetryFrame& frame) override;
 #endif
