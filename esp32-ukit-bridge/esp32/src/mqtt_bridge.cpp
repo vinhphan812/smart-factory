@@ -374,8 +374,10 @@ void MqttBridge::publishOnlineStatus() {
   client_.publish(statusTopic_, buffer, true);
 }
 
+#if !defined(PLATFORMIO_NATIVE_TEST)
 void MqttBridge::onTelemetry(const bridge::TelemetryFrame& frame) {
   if (!enabled_ || !client_.connected()) {
+    ++telDropped_;  // Count drops from disabled or disconnected MQTT path.
     return;
   }
   publishTelemetry(frame);
@@ -404,15 +406,28 @@ void MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame) {
     }
   }
 
-  char buffer[384]{};
-  const std::size_t len = serializeJson(doc, buffer, sizeof(buffer));
-  if (len == 0) {
-    // Serialization failed entirely — object too nested or memory exhausted.
+  // Emit provenance metadata when fields were dropped due to capacity limits.
+  // Downstream Digital Twin consumers can use "truncated" to flag incomplete data.
+  if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
+    doc["truncated"] = true;
+    doc["overflow_dropped_values"] = frame.overflow_dropped_values;
+    doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
+  }
+
+  // Use measureJson to reliably detect oversized payloads BEFORE serializing.
+  // serializeJson returns bytes actually written, bounded by buffer capacity,
+  // so it can return len < sizeof(buffer) for a truncated document.
+  const std::size_t measured = measureJson(doc);
+  if (measured + 1 > sizeof(char[384])) {
+    // Payload would exceed buffer — increment drop counter and skip MQTT publish.
     ++telDropped_;
     return;
   }
-  if (len >= sizeof(buffer)) {
-    // Payload exceeds fixed buffer — frame had too many fields to encode.
+
+  char buffer[384]{};
+  const std::size_t len = serializeJson(doc, buffer, sizeof(buffer));
+  // A len == 0 from serializeJson means object too nested or memory exhausted.
+  if (len == 0) {
     ++telDropped_;
     return;
   }
@@ -425,6 +440,7 @@ void MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame) {
     ++telDropped_;
   }
 }
+#endif  // !PLATFORMIO_NATIVE_TEST
 
 bool MqttBridge::due(uint32_t nowMs, uint32_t deadlineMs) {
   return static_cast<int32_t>(nowMs - deadlineMs) >= 0;

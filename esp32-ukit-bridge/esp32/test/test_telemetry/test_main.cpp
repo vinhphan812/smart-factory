@@ -21,6 +21,16 @@ void test_dispatch_frame_ignores_cmd_frames(void);
 void test_multiple_tel_frames_all_dispatched(void);
 void test_dispatch_frame_timestamp_matches_input(void);
 void test_feed_bytes_multiple_sensors_one_frame(void);
+void test_dispatch_telemetry_tracks_overflow_dropped_values(void);
+void test_dispatch_telemetry_tracks_overflow_dropped_pairs(void);
+void test_dispatch_telemetry_no_overflow_when_within_limits(void);
+
+// MqttBridge telemetry tests (test_mqtt_bridge_telemetry.cpp)
+void test_publishTelemetry_rejects_oversize_json_exceeding_384_bytes(void);
+void test_publishTelemetry_emits_truncated_flag_when_values_overflow(void);
+void test_publishTelemetry_emits_truncated_flag_when_pairs_overflow(void);
+void test_publishTelemetry_normal_frame_has_no_truncated_flag(void);
+void test_onTelemetry_increments_telDropped_when_disabled(void);
 
 namespace {
 
@@ -97,6 +107,8 @@ void parseTelemetryFrame(const amlp::Frame& frame, uint32_t nowMs,
         std::memcpy(pair.value, field.data() + eq + 1, valLen);
         pair.value[valLen] = '\0';
         ++out.num_pairs;
+      } else {
+        ++out.overflow_dropped_pairs;
       }
     } else {
       if (out.num_values < bridge::kMaxTelemetryValues) {
@@ -108,6 +120,8 @@ void parseTelemetryFrame(const amlp::Frame& frame, uint32_t nowMs,
         val.text[copyLen] = '\0';
         val.length = static_cast<std::uint8_t>(copyLen);
         ++out.num_values;
+      } else {
+        ++out.overflow_dropped_values;
       }
     }
   }
@@ -214,7 +228,9 @@ void test_tel_frame_truncates_at_max_values(void) {
   TEST_ASSERT_EQUAL_UINT8(bridge::kMaxTelemetryValues, tel.num_values);
   TEST_ASSERT_EQUAL_STRING("A", tel.values[0].text);
   TEST_ASSERT_EQUAL_STRING("F", tel.values[5].text);
-  // G and H were truncated.
+  // G and H were truncated — overflow counter must be set.
+  TEST_ASSERT_EQUAL_UINT8(2, tel.overflow_dropped_values);
+  TEST_ASSERT_EQUAL_UINT8(0, tel.overflow_dropped_pairs);
 }
 
 void test_tel_frame_truncates_at_max_pairs(void) {
@@ -238,6 +254,9 @@ void test_tel_frame_truncates_at_max_pairs(void) {
   TEST_ASSERT_EQUAL_STRING("K0", tel.pairs[0].key);
   TEST_ASSERT_EQUAL_STRING("K3", tel.pairs[3].key);
   // kMaxTelemetryPairs = 4: only first 4 pairs stored (indices 0-3).
+  // K4 and K5 were truncated — overflow counter must be set.
+  TEST_ASSERT_EQUAL_UINT8(0, tel.overflow_dropped_values);
+  TEST_ASSERT_EQUAL_UINT8(2, tel.overflow_dropped_pairs);
 }
 
 void test_tel_frame_with_mixed_values_and_pairs(void) {
@@ -372,5 +391,14 @@ int main() {
   RUN_TEST(test_multiple_tel_frames_all_dispatched);
   RUN_TEST(test_dispatch_frame_timestamp_matches_input);
   RUN_TEST(test_feed_bytes_multiple_sensors_one_frame);
+  RUN_TEST(test_dispatch_telemetry_tracks_overflow_dropped_values);
+  RUN_TEST(test_dispatch_telemetry_tracks_overflow_dropped_pairs);
+  RUN_TEST(test_dispatch_telemetry_no_overflow_when_within_limits);
+  // MqttBridge telemetry tests
+  RUN_TEST(test_publishTelemetry_rejects_oversize_json_exceeding_384_bytes);
+  RUN_TEST(test_publishTelemetry_emits_truncated_flag_when_values_overflow);
+  RUN_TEST(test_publishTelemetry_emits_truncated_flag_when_pairs_overflow);
+  RUN_TEST(test_publishTelemetry_normal_frame_has_no_truncated_flag);
+  RUN_TEST(test_onTelemetry_increments_telDropped_when_disabled);
   return UNITY_END();
 }

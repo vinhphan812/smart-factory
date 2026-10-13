@@ -131,6 +131,8 @@ void UartAdapter::dispatchTelemetry(const amlp::Frame& frame, uint32_t nowMs,
         std::memcpy(pair.value, field.data() + eq + 1, valLen);
         pair.value[valLen] = '\0';
         ++tel.num_pairs;
+      } else {
+        ++tel.overflow_dropped_pairs;
       }
     } else {
       if (tel.num_values < bridge::kMaxTelemetryValues) {
@@ -142,6 +144,8 @@ void UartAdapter::dispatchTelemetry(const amlp::Frame& frame, uint32_t nowMs,
         val.text[copyLen] = '\0';
         val.length = static_cast<std::uint8_t>(copyLen);
         ++tel.num_values;
+      } else {
+        ++tel.overflow_dropped_values;
       }
     }
   }

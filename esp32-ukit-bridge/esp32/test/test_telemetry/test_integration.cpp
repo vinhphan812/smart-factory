@@ -195,3 +195,80 @@ void test_feed_bytes_multiple_sensors_one_frame(void) {
   TEST_ASSERT_EQUAL_STRING("SENSOR2", kLastTelemetry.pairs[2].key);
   TEST_ASSERT_EQUAL_STRING("0", kLastTelemetry.pairs[2].value);
 }
+
+void test_dispatch_telemetry_tracks_overflow_dropped_values(void) {
+  // When a frame has more plain values than kMaxTelemetryValues (6),
+  // dispatchTelemetry() must set overflow_dropped_values on the received frame.
+  reset_telemetry_state();
+  FakeTelemetryHandler handler{};
+  HardwareSerial serial(0);
+  UartAdapter adapter(serial);
+
+  // Construct a frame with 8 plain value fields (exceeds kMaxTelemetryValues=6).
+  amlp::Frame frame{};
+  frame.type = amlp::Type::Tel;
+  for (std::uint8_t i = 0; i < 8; ++i) {
+    char val[8];
+    std::snprintf(val, sizeof(val), "V%u", static_cast<unsigned int>(i));
+    TEST_ASSERT_TRUE(frame.set_field(i, val));
+  }
+
+  adapter.dispatchFrame(frame, 9000, &handler);
+
+  TEST_ASSERT_TRUE(kTelemetryCalled);
+  // Only 6 values stored (kMaxTelemetryValues).
+  TEST_ASSERT_EQUAL_UINT8(bridge::kMaxTelemetryValues, kLastTelemetry.num_values);
+  // 2 extra values were silently dropped — overflow counter must be set.
+  TEST_ASSERT_EQUAL_UINT8(2, kLastTelemetry.overflow_dropped_values);
+  TEST_ASSERT_EQUAL_UINT8(0, kLastTelemetry.overflow_dropped_pairs);
+}
+
+void test_dispatch_telemetry_tracks_overflow_dropped_pairs(void) {
+  // When a frame has more key=value pairs than kMaxTelemetryPairs (4),
+  // dispatchTelemetry() must set overflow_dropped_pairs on the received frame.
+  reset_telemetry_state();
+  FakeTelemetryHandler handler{};
+  HardwareSerial serial(0);
+  UartAdapter adapter(serial);
+
+  // Construct a frame with 6 key=value fields (exceeds kMaxTelemetryPairs=4).
+  amlp::Frame frame{};
+  frame.type = amlp::Type::Tel;
+  for (std::uint8_t i = 0; i < 6; ++i) {
+    char pair[16];
+    std::snprintf(pair, sizeof(pair), "K%u=V%u",
+                  static_cast<unsigned int>(i),
+                  static_cast<unsigned int>(i));
+    TEST_ASSERT_TRUE(frame.set_field(i, pair));
+  }
+
+  adapter.dispatchFrame(frame, 10000, &handler);
+
+  TEST_ASSERT_TRUE(kTelemetryCalled);
+  // Only 4 pairs stored (kMaxTelemetryPairs).
+  TEST_ASSERT_EQUAL_UINT8(bridge::kMaxTelemetryPairs, kLastTelemetry.num_pairs);
+  // 2 extra pairs were silently dropped — overflow counter must be set.
+  TEST_ASSERT_EQUAL_UINT8(0, kLastTelemetry.overflow_dropped_values);
+  TEST_ASSERT_EQUAL_UINT8(2, kLastTelemetry.overflow_dropped_pairs);
+}
+
+void test_dispatch_telemetry_no_overflow_when_within_limits(void) {
+  // Within capacity limits, overflow counters must remain zero.
+  reset_telemetry_state();
+  FakeTelemetryHandler handler{};
+  HardwareSerial serial(0);
+  UartAdapter adapter(serial);
+
+  amlp::Frame frame{};
+  frame.type = amlp::Type::Tel;
+  TEST_ASSERT_TRUE(frame.set_field(0, "STATUS"));
+  TEST_ASSERT_TRUE(frame.set_field(1, "OK"));
+  TEST_ASSERT_TRUE(frame.set_field(2, "A=1"));
+  TEST_ASSERT_TRUE(frame.set_field(3, "B=2"));
+
+  adapter.dispatchFrame(frame, 11000, &handler);
+
+  TEST_ASSERT_TRUE(kTelemetryCalled);
+  TEST_ASSERT_EQUAL_UINT8(0, kLastTelemetry.overflow_dropped_values);
+  TEST_ASSERT_EQUAL_UINT8(0, kLastTelemetry.overflow_dropped_pairs);
+}

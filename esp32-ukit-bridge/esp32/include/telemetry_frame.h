@@ -42,6 +42,12 @@ struct TelemetryFrame {
   std::uint8_t num_pairs = 0;
   TelemetryPair pairs[kMaxTelemetryPairs]{};
 
+  // Overflow tracking: set by UartAdapter::dispatchTelemetry() when one or more
+  // fields were silently dropped due to capacity limits.  Used by MqttBridge to
+  // emit "truncated":true in the JSON payload and update diagnostics.
+  std::uint8_t overflow_dropped_values = 0;
+  std::uint8_t overflow_dropped_pairs = 0;
+
   // True if at least one field was parsed into pairs or values.
   bool has_data() const {
     return num_values > 0 || num_pairs > 0;

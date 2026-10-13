@@ -1,6 +1,12 @@
 #pragma once
 
+#if defined(PLATFORMIO_NATIVE_TEST)
+#include "../test/stubs/PubSubClient.h"
+#else
 #include <PubSubClient.h>
+#endif
+
+#include <ArduinoJson.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +25,19 @@ class MqttBridge final : public bridge::TelemetryHandler {
 
   // bridge::TelemetryHandler — called by UartAdapter when a TEL frame arrives.
   void onTelemetry(const bridge::TelemetryFrame& frame) override;
+
+#if defined(PLATFORMIO_NATIVE_TEST)
+  // Test-only overload: serializes frame to JSON and calls client.publish().
+  // Allows direct unit testing without a real PubSubClient.
+  // client must implement: bool publish(const char*, const char*, bool retained)
+  template <typename PubSubClientLike>
+  std::size_t publishTelemetry(const bridge::TelemetryFrame& frame,
+                               PubSubClientLike& client);
+#endif
+
+  bool enabled() const { return enabled_; }
+  std::uint32_t telDropped() const { return telDropped_; }
+  std::uint32_t telPublished() const { return telPublished_; }
 
  private:
   void publishTelemetry(const bridge::TelemetryFrame& frame);
@@ -60,3 +79,68 @@ class MqttBridge final : public bridge::TelemetryHandler {
   uint32_t telDropped_ = 0;
   uint32_t telPublished_ = 0;
 };
+
+// ---------------------------------------------------------------------------
+// Test-only publishTelemetry template — defined inline so it is compiled when
+// the header is included in native test translation units.  In the ESP32 build
+// mqtt_bridge.cpp is compiled instead (PLATFORMIO_NATIVE_TEST is not defined).
+// ---------------------------------------------------------------------------
+#if defined(PLATFORMIO_NATIVE_TEST)
+inline void MqttBridge::onTelemetry(const bridge::TelemetryFrame& frame) {
+  if (!enabled_) {
+    ++telDropped_;
+    return;
+  }
+  publishTelemetry(frame, client_);
+}
+
+template <typename PubSubClientLike>
+std::size_t MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame,
+                                        PubSubClientLike& client) {
+  constexpr std::size_t kBufferSize = 384;
+  JsonDocument doc;
+  doc["device_id"] = deviceId_;
+  doc["received_at_ms"] = frame.received_at_ms;
+
+  if (frame.num_values > 0) {
+    JsonArray vals = doc["values"].to<JsonArray>();
+    for (std::uint8_t i = 0; i < frame.num_values; ++i) {
+      vals.add(frame.values[i].text);
+    }
+  }
+
+  if (frame.num_pairs > 0) {
+    JsonObject pairs = doc["pairs"].to<JsonObject>();
+    for (std::uint8_t i = 0; i < frame.num_pairs; ++i) {
+      pairs[frame.pairs[i].key] = frame.pairs[i].value;
+    }
+  }
+
+  if (frame.overflow_dropped_values > 0 || frame.overflow_dropped_pairs > 0) {
+    doc["truncated"] = true;
+    doc["overflow_dropped_values"] = frame.overflow_dropped_values;
+    doc["overflow_dropped_pairs"] = frame.overflow_dropped_pairs;
+  }
+
+  const std::size_t measured = measureJson(doc);
+  if (measured + 1 > kBufferSize) {
+    ++telDropped_;
+    return 0;
+  }
+
+  char buffer[kBufferSize]{};
+  const std::size_t len = serializeJson(doc, buffer, sizeof(buffer));
+  if (len == 0) {
+    ++telDropped_;
+    return 0;
+  }
+
+  const bool ok = client.publish(telemetryTopic_, buffer, false);
+  if (ok) {
+    ++telPublished_;
+  } else {
+    ++telDropped_;
+  }
+  return len;
+}
+#endif
