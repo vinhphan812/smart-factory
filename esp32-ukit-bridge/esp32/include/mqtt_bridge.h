@@ -149,6 +149,14 @@ std::size_t MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame,
 #endif
 
 // ---------------------------------------------------------------------------
+// Inline callbackThunk — stub for native tests.  In the ESP32 build the real
+// version from mqtt_bridge.cpp is compiled (PLATFORMIO_NATIVE_TEST is not set).
+// ---------------------------------------------------------------------------
+#if defined(PLATFORMIO_NATIVE_TEST)
+inline void MqttBridge::callbackThunk(char*, uint8_t*, unsigned int) {}
+#endif
+
+// ---------------------------------------------------------------------------
 // Inline constructor and begin() — defined here so they are always compiled
 // (both ESP32 via mqtt_bridge.cpp and native tests via this header).
 // ---------------------------------------------------------------------------
