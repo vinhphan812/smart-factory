@@ -28,7 +28,7 @@ This document maps every module and component in the Smart Factory project again
 | Python AMLP codec (`tools/amlp/`) | Tool | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | Pure codec, no transport. |
 | Python CLI (`amlp`) | Tool | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | CRC, encode, decode, command generation. |
 | Python TCP simulator (`amlp-sim`) | Tool | Stub | Implemented | N/A | N/A | N/A | N/A | N/A | Implemented | N/A | N/A | Replaces UART with TCP for bridge dev; valid ACK responses; periodic fake telemetry. |
-| IoT Gateway (SCADA/cloud) | External | Implemented | N/A | N/A | Planned | Stub | Stub | N/A | N/A | N/A | N/A | MQTT publisher/subscriber; event store and auth are future work. |
+| IoT Gateway (SCADA/cloud) | External | Implemented | N/A | N/A | Implemented | Implemented | Stub | N/A | N/A | N/A | N/A | MQTT subscriber; event store (bounded SQLite); WebSocket and HTTP REST API. Auth (TLS) planned. |
 | Device Registry | Data | Stub | N/A | N/A | N/A | N/A | Stub | N/A | N/A | N/A | Planned | Flat JSON in SPIFFS (current); etcd or MQTT discovery planned. See `docs/device-registry.md`. |
 | Shared protocol spec (`shared/protocol-spec/`) | Spec | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | Canonical AMLP v1 spec and golden test vectors. |
 
