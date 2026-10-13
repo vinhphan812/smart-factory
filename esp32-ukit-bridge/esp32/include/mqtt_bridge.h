@@ -136,6 +136,19 @@ class MqttBridge final : public bridge::TelemetryHandler {
   std::uint32_t telDropped() const { return telDropped_; }
   std::uint32_t telPublished() const { return telPublished_; }
 
+  // bridge::TelemetryHandler override — inline for native tests so the vtable is
+  // complete without compiling mqtt_bridge.cpp.  The ESP32 build uses the version
+  // from mqtt_bridge.cpp (PLATFORMIO_NATIVE_TEST is not defined there).
+#if defined(PLATFORMIO_NATIVE_TEST)
+  void onTelemetry(const bridge::TelemetryFrame& frame) override {
+    if (!enabled_) {
+      ++telDropped_;
+      return;
+    }
+    publishWith(frame, client_);
+  }
+#endif
+
   // Exposed for test injection: publishes a frame using an arbitrary client.
   // Delegates to the shared bridge::publishTelemetry free function.
   template <typename PubSubClientLike>
