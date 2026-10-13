@@ -80,7 +80,6 @@ To enable TLS:
 3. Configure `PubSubClient` to use TLS:
 
 ```cpp
-// Inside WiFiClient, BearSSL is used on ESP32 variants.
 // Pass the WiFiClientSecure instance to PubSubClient:
 WiFiClientSecure wifiClient;
 wifiClient.setCACert(spiffs_ca_cert);  // load from SPIFFS

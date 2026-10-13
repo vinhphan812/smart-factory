@@ -38,7 +38,7 @@ PENDING → SENT → ACKNOWLEDGED
 |--------------|-----------------------------------------------------------------------------|
 | **PENDING**  | The MQTT broker has delivered the JSON to the bridge; the bridge has either enqueued it successfully or published an immediate negative ACK. |
 | **SENT**     | The bridge has popped the command from the queue and transmitted the AMLP frame over UART to the MEGA endpoint. First transmission is immediate; subsequent transmissions are retries. |
-| **ACKNOWLEDGED** | The MEGA endpoint returned `ACK,<id>,OK`. The bridge publishes `status: "acknowledged"` on the ACK topic. |
+| **ACKNOWLEDGED** | The MEGA endpoint returned `ACK,<id>,OK`. The bridge publishes `status: "ok"` on the ACK topic. |
 | **FAILED**   | The MEGA endpoint returned a non-OK ACK (`UNKNOWN_COMMAND`, `INVALID_ARGUMENT`, `INTERNAL_ERROR`). The bridge maps the AMLP status to an MQTT status string and publishes `status: "failed"` or the named error on the ACK topic. |
 | **EXPIRED**  | After `maxAttempts` retries (default 3) without receiving any ACK, the bridge abandons the command. It publishes `status: "timeout"` on the ACK topic. |
 
@@ -47,7 +47,7 @@ PENDING → SENT → ACKNOWLEDGED
 ```json
 // SENT / ACKNOWLEDGED completion
 { "request_id": "abc123", "sequence": 42, "command": "CONVEYOR_START",
-  "status": "acknowledged", "status_code": 0, "attempts": 1 }
+  "status": "ok", "status_code": 0, "attempts": 1 }
 
 // FAILED — application error from MEGA
 { "request_id": "abc123", "sequence": 42, "command": "CONVEYOR_START",
@@ -58,15 +58,20 @@ PENDING → SENT → ACKNOWLEDGED
   "status": "timeout" }
 ```
 
-Immediate ACKs are published synchronously during `onMessage()` for errors detected before enqueue:
+**Note on completion statuses:** The code uses `status: "ok"` (not `"acknowledged"`). `status: "timeout"` means all retry attempts were exhausted without receiving any MEGA ACK. `status: "unknown_command"` and other error strings reflect the MEGA's own ACK status, not a generic `"failed"`.
 
-| MQTT ACK `status`          | When published                                          | `status_code` |
-|----------------------------|---------------------------------------------------------|---------------|
-| `queued`                   | Command successfully enqueued (future completion follows) | 0             |
-| `duplicate`                | `request_id` already in pending / queue / recent cache | — (omitted)   |
-| `queue_full`               | Command queue at capacity (8)                           | — (omitted)   |
-| `invalid_argument`         | JSON structurally valid but AMLP frame cannot be built  | 2             |
-| `internal_error`           | Sequence allocation failed or queue operation failed    | 3             |
+**Immediate ACKs** are published synchronously during `onMessage()` for errors detected before enqueue:
+
+| MQTT ACK `status`      | When published                                       | `status_code` |
+|-----------------------|-----------------------------------------------------|---------------|
+| `invalid_argument`    | JSON structurally valid but AMLP frame cannot be built | 2           |
+| `unknown_command`     | `command_name` not in allowlist                     | 1             |
+| `queue_full`          | Command queue at capacity (8 entries)                | 4             |
+| `internal_error`      | Sequence allocation failed or queue operation failed | 3             |
+
+On success (`kOk`), no immediate ACK is published. There is no `queued` status — the completion ACK follows asynchronously after the MEGA ACK is received.
+
+**Duplicate handling:** If `request_id` (or `command_id` converted to string) is already in the pending queue, the pending cache, or the recent dedupe cache, the command is silently dropped with no ACK published. This prevents re-execution of stale or replayed commands.
 
 ---
 
@@ -261,7 +266,7 @@ The MEGA endpoint returns one of four ACK statuses over UART. The bridge maps th
 
 | MEGA ACK status       | MQTT `status`        | `status_code` | Meaning for the caller                           |
 |-----------------------|----------------------|---------------|--------------------------------------------------|
-| `OK`                  | `acknowledged`       | 0             | Command was executed successfully                |
+| `OK`                  | `ok`                | 0             | Command was executed successfully                |
 | `UNKNOWN_COMMAND`     | `unknown_command`    | 1             | MEGA does not recognise the command name         |
 | `INVALID_ARGUMENT`    | `invalid_argument`   | 2             | Arguments failed MEGA-level validation           |
 | `INTERNAL_ERROR`      | `internal_error`     | 3             | MEGA had an internal fault processing the command |
@@ -270,7 +275,7 @@ The MEGA endpoint returns one of four ACK statuses over UART. The bridge maps th
 
 | Status              | What the caller should do                                                      |
 |---------------------|--------------------------------------------------------------------------------|
-| `acknowledged`      | Success; command completed. Update application state.                          |
+| `ok`                | Success; command completed. Update application state.                          |
 | `unknown_command`   | The SCADA firmware or MEGA firmware version is outdated; upgrade required.      |
 | `invalid_argument`  | Re-check argument values before retrying; command was structurally valid but semantically rejected. |
 | `internal_error`    | Transient MEGA fault; retry after a short delay (1-2 seconds). If persistent, inspect MEGA hardware. |
@@ -305,7 +310,7 @@ A command that was transmitted to MEGA but never got an ACK before the MQTT conn
 - **Stays pending** in RAM with its current retry count frozen.
 - **On reconnect**: the bridge resumes retrying it from where it left off. The retry interval timer continues from `lastAttemptMs_` (which is not updated during disconnect, so the first reconnect tick will likely immediately trigger the next attempt if `elapsed()` returns true).
 - **If `maxAttempts` is exhausted** during or after reconnect, the command is completed with `status: "timeout"`.
-- **MEGA deduplication**: if the MEGA endpoint already executed the command and returned the ACK (which was lost in transit), the retry will be a duplicate on MEGA's side. MEGA will return a cached `ACK,<id>,OK` and the bridge will publish a second `acknowledged` completion. Callers must handle this idempotently.
+- **MEGA deduplication**: if the MEGA endpoint already executed the command and returned the ACK (which was lost in transit), the retry will be a duplicate on MEGA's side. MEGA will return a cached `ACK,<id>,OK` and the bridge will publish a second `ok` completion. Callers must handle this idempotently.
 
 ### 7.4 Commands Queued But Not Yet Sent
 

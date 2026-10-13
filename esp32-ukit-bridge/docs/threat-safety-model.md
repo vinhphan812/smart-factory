@@ -41,12 +41,13 @@ It supplements:
 |---|---|---|
 | Bridge firmware | ESP32 binary (`esp32/src/`) | Integrity only |
 | MEGA actuator firmware | uKit firmware on MEGA microcontroller | Integrity only |
-| MQTT broker | Brokering `smart-factory/{device_id}/#` topics | Authentication + authorization |
+| MQTT broker credentials | Username/password transmitted in plaintext (no TLS) | **Confidential** |
+| `deviceId` in MQTT topics | Device identifier exposed in topic names | Confidentiality not required (topic name is not secret) |
 | Wi-Fi network | Bridge transport layer | WPA2-PSK or WPA3 minimum |
-| Command/telemetry data | JSON payloads on the wire | Integrity; telemetry is read-only |
+| Command/telemetry data | JSON payloads on the wire | Integrity only; confidentiality not required for command data |
 | AMLP frame stream | UART framing between ESP32 and MEGA | Integrity via CRC-16/CCITT-FALSE |
 
-No asset requires confidentiality of its contents. All assets require **integrity** and **availability**.
+> **Note on MQTT confidentiality:** The current firmware uses plain MQTT (`WiFiClient`) with no TLS. All credentials and command/telemetry payloads are transmitted in the clear on the local network. This is the primary reason for the production-blocked banner at the top of this document. Deploy only behind a trusted network segment or after TLS is wired.
 
 ### 1.2 Threat Actors
 
@@ -97,16 +98,16 @@ All MQTT JSON is validated in `MqttBridge::onMessage()` and `CommandMapper::buil
 |---|---|---|---|
 | JSON structure | top-level | Must be a JSON object; `deserializeJson` must succeed | `invalid_argument` |
 | Required fields | `command_id` (integer) or `request_id` (string), `command_name` | Correlation ID must be present; `command_name` must be non-null | `invalid_argument` |
-| Field count | `arguments` array | Max 10 items (`maxItems: 10` in schema) | `invalid_argument` |
+| Field count | `arguments` array | Max 2 items (`maxItems: 2` in schema) | `invalid_argument` |
 | String length | `request_id`, `command_name`, each `arguments` item | Max 64 bytes each (AMLP field limit) | `invalid_argument` |
 | Allowed characters | `arguments` items | Printable ASCII 0x21..0x7E; prohibited: `,` `*` `@` CR LF | `invalid_argument` |
 | `command_name` allowlist | `command_name` field | Must be one of the five tokens below | `unknown_command` |
 | Argument range -- CONVEYOR_START | `arguments[0]` | Integer string 1..100 | `invalid_argument` |
 | Argument range -- SET_OUTPUT | `arguments[0]` | Integer string 0..255; `arguments[1]` must be `"0"` or `"1"` | `invalid_argument` |
 | Payload size | AMLP-encoded frame | Must be <= 256 bytes | `invalid_argument` |
-| `command_id` / `request_id` uniqueness | pending / queue / recent cache | Reject if `findRequest()` returns true | `duplicate` (no re-enqueue) |
+| `command_id` / `request_id` uniqueness | pending / queue / recent cache | Rejected; silently dropped (no ACK published) |
 
-All rejected commands result in an **immediate** MQTT ACK (`status: "duplicate"`, `"invalid_argument"`, `"unknown_command"`, `"internal_error"`). Commands are never silently dropped or forwarded with invalid data.
+All rejected commands (except duplicates) result in an **immediate** MQTT ACK (`status: "invalid_argument"`, `"unknown_command"`, `"queue_full"`, `"internal_error"`). **Duplicates are silently dropped** — no ACK is published and the command is not re-enqueued. Commands are never forwarded with invalid data.
 
 ### 2.3 Command Allowlist
 

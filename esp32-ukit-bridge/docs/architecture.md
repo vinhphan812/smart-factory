@@ -49,12 +49,12 @@ graph LR
 
 ### ESP32 bridge
 
-- Subscribe to `smart-factory/bridge/command`.
-- Validate JSON `{ "id": number, "fields": [string, ...] }`.
-- Encode as `CMD`, placing `id` as the first field and the array `fields` elements after.
+- Subscribe to `smart-factory/{deviceId}/command/down`.
+- Validate JSON `{ "command_id": number, "request_id": string, "command_name": string, "arguments": [string, ...] }`.
+- Encode as `CMD`, placing the correlation ID as the first field and the command name and arguments after.
 - Queue, retry the full wire frame, and deduplicate correlation ids.
 - Parse AMLP from UART; the first ACK field is used to complete the pending command.
-- Publish results and status to MQTT.
+- Publish results and status to `smart-factory/{deviceId}/command/ack`.
 
 ### uKit endpoint
 
