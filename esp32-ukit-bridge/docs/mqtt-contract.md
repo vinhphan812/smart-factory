@@ -4,37 +4,40 @@ This document describes the contract implemented by the current ESP32 firmware a
 
 ## Topics
 
-| Topic                          | Direction from ESP32 |         QoS | Retain |
-| ------------------------------ | -------------------- | ----------: | -----: |
-| `smart-factory/bridge/command` | Subscribe            |           1 |     No |
-| `smart-factory/bridge/result`  | Publish              | best effort |     No |
-| `smart-factory/bridge/status`  | Publish              | best effort |    Yes |
+| Topic                                        | Direction from ESP32 |         QoS | Retain |
+| -------------------------------------------- | -------------------- | ----------: | -----: |
+| `smart-factory/{deviceId}/command/down`      | Subscribe            |           1 |     No |
+| `smart-factory/{deviceId}/command/ack`       | Publish              | best effort |     No |
+| `smart-factory/{deviceId}/status`            | Publish              | best effort |    Yes |
 
-Topics are currently compile-time constants in `esp32/include/bridge_config.h`. To support multiple devices, a per-device topic/client id must be provisioned when extending the firmware; do not assume that a `{device_id}` placeholder is already supported.
+`{deviceId}` is provisioned in `bridge_config.h` (e.g. `bridge-001`). All topics are per-device; the bridge subscribes only to its own command topic.
 
 ## MQTT Command
 
 ```json
 {
-    "id": 102,
-    "fields": ["CONVEYOR_START", "60"]
+    "command_id": 102,
+    "command_name": "CONVEYOR_START",
+    "arguments": ["60"]
 }
 ```
 
-- `id`: non-zero integer, max uint32; used for correlation, queue/retry and deduplication.
-- `fields`: optional but the command name must be the first element for the endpoint to execute it.
-- Each element must be a valid AMLP string: printable ASCII, 1..64 bytes, no `,`, `*`, `@`, CR/LF.
-- AMLP payload fields max 11. Since `id` occupies one field, `fields` max 10 elements.
+- `command_id`: non-zero integer uint32; preferred correlation ID. Converted to a string for deduplication and ACK correlation. Mutually exclusive with `request_id`; if both are present, `command_id` takes precedence.
+- `request_id`: string correlation ID (max 64 bytes); accepted for UUID-based or legacy callers.
+- `command_name`: one of the five allowlisted tokens.
+- `arguments`: positional arguments; `maxItems: 2` per schema. Only the first 2 are processed (channel + value for `SET_OUTPUT`; speed for `CONVEYOR_START`).
+- Each element must be a valid AMLP string: printable ASCII 0x21..0x7E, 1..64 bytes, no `,`, `*`, `@`, CR/LF.
+- AMLP payload fields max 11. `command_id`/`request_id` occupies one field, leaving 10 for the command name and arguments — but only the first 2 arguments are processed by the firmware.
 - Complete AMLP frame must not exceed 256 bytes.
 
 Mapping:
 
 ```
-{"id":102,"fields":["CONVEYOR_START","60"]}
+{"command_id":102,"command_name":"CONVEYOR_START","arguments":["60"]}
     -> @CMD,102,CONVEYOR_START,60*C942\r\n
 
-{"id":43,"fields":["CONVEYOR_STOP"]}
-    -> CMD,43,CONVEYOR_STOP (CRC computed at encode time)
+{"request_id":"abc123","command_name":"CONVEYOR_STOP","arguments":[]}
+    -> @CMD,abc123,CONVEYOR_STOP*XXXX\r\n
 ```
 
 Command profile:
@@ -46,32 +49,36 @@ Command profile:
 
 ## MQTT Result
 
-Immediate on enqueue:
+The bridge publishes to `smart-factory/{deviceId}/command/ack`.
+
+**Immediate ACKs** are published synchronously during `onMessage()` for errors detected before or during enqueue. There is no immediate ACK on success — the completion ACK follows asynchronously after the UART round-trip.
+
+| `status`             | When published                                       | `status_code` |
+|---------------------|-----------------------------------------------------|---------------|
+| `invalid_argument`   | JSON structurally valid but AMLP frame cannot be built | 2           |
+| `unknown_command`    | `command_name` not in allowlist                     | 1             |
+| `queue_full`         | Command queue at capacity (8 entries)                | 4             |
+| `internal_error`     | Sequence allocation failed or queue operation failed | 3             |
+
+On success (`kOk`), no immediate ACK is sent. The bridge waits for the completion ACK from the MEGA endpoint.
+
+**Completion ACKs** are published asynchronously after the MEGA endpoint responds:
 
 ```json
-{ "id": 102, "status": "queued" }
+// Success — MEGA returned ACK,OK
+{ "request_id": "abc123", "sequence": 42, "command": "CONVEYOR_START",
+  "status": "ok", "status_code": 0, "attempts": 1 }
+
+// Failure — MEGA returned non-OK status
+{ "request_id": "abc123", "sequence": 42, "command": "CONVEYOR_START",
+  "status": "unknown_command", "status_code": 1 }
+
+// Timeout — no MEGA ACK after all retries
+{ "request_id": "abc123", "sequence": 42, "command": "CONVEYOR_START",
+  "status": "timeout" }
 ```
 
-Enqueue status can be:
-
-- `queued`: entered the queue.
-- `duplicate`: id is already pending/queued or still in ESP32 cache.
-- `queue_full`: queue is full.
-- `invalid`: JSON/profile cannot produce a valid AMLP frame.
-
-When a command completes:
-
-```json
-{ "id": 102, "status": "acknowledged", "attempts": 1 }
-```
-
-or:
-
-```json
-{ "id": 102, "status": "failed", "attempts": 3 }
-```
-
-`failed` currently means attempts were exhausted, not an application-level status from uKit.
+Note: `status: "ok"` means the MEGA endpoint returned ACK with OK status (not a generic success). `status: "timeout"` means the bridge exhausted all retry attempts without receiving any MEGA ACK.
 
 ## UART ACK
 
@@ -81,7 +88,7 @@ uKit reference returns:
 ACK,<id>,<status>
 ```
 
-Example `@ACK,102,OK*22A0\r\n`. Profile status values are `OK`, `UNKNOWN_COMMAND`, `INVALID_ARGUMENT`, `INTERNAL_ERROR`. Current ESP32 firmware reads the `<id>` field to stop retrying; the status is not yet forwarded in the result JSON.
+Example `@ACK,102,OK*22A0\r\n`. Profile status values are `OK`, `UNKNOWN_COMMAND`, `INVALID_ARGUMENT`, `INTERNAL_ERROR`. The ESP32 firmware reads the `<id>` field to stop retrying and forwards the status as `status_code` in the completion ACK JSON.
 
 ## UART Telemetry
 
