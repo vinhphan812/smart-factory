@@ -23,7 +23,11 @@ This repository is a **modular monorepo**. GitHub Issues describe planned delive
 | Physical factory | Forklift, Dump Truck, Bracket, Packaging, Conveyor, Sorting, Tower Crane, Parking Lot and integration | ESP32–UKIT communication bridge exists; full 9-module hardware proof pending |
 | Digital Twin | Unreal Engine, 3D visualization synchronized with observed physical events | Planned; see Issues #11 #12 #33–#35 |
 | AI Edge Robot | MiniAlpha alerts and validated, bounded on-site response | Planned; see Issues #13 #14 #36–#38 |
-| Supporting services | MQTT gateway, event store, dashboard, safe commands, tests and deployment | Some contracts and bridge firmware exist; most services planned |
+| Supporting services | Root `iot-gateway/` ingests MQTT and serves event API; other services and deployment | IoT Gateway software implemented; deployment/HIL evidence pending |
+
+## Independent IoT Gateway (root module)
+
+The Python MQTT gateway is in [`iot-gateway/`](iot-gateway/README.md), **not** inside the ESP32 firmware module. For a software-only check: `python -m pip install -e "./iot-gateway[dev]"` then `python -m pytest iot-gateway/tests/`. Hardware/MQTT end-to-end proof is separate.
 
 ## Existing bridge: what is actually present
 
