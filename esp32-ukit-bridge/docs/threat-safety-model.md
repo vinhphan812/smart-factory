@@ -132,7 +132,7 @@ The JSON schema (`command.schema.json`) encodes this as `enum: ["CONVEYOR_START"
 
 - **Dedup window**: The bridge maintains a 16-entry FIFO cache (`kDedupeCapacity`) and the MEGA uKit maintains an 8-entry cache. A `command_id` evicted from either cache is treated as new. The window is throughput-dependent — at ≤1 command/s the ESP32 cache holds 16 seconds of history, but at higher rates it shrinks. Publishers must not assume any minimum reuse window; use UUIDs or monotonic counters.
 - **TTL enforcement**: `ttl_seconds` (schema default 10 s, range 1..300 s) is the wall-clock deadline for the command. The ESP32 should stop retransmitting once the deadline is reached rather than waiting for all `maxAttempts`. (Currently `ttl_seconds` is parsed but not wired into the retry budget; firmware update required.)
-- A command that is in the cache is acknowledged with `status: "duplicate"` and **not re-enqueued or re-sent**.
+- A command whose `request_id` (or `command_id` as string) is found in the cache is **silently dropped** — no ACK is published and the command is not re-enqueued or re-sent. Callers should not rely on an ACK to detect duplicates; use monotonic IDs or UUIDs instead.
 
 ### 2.5 Rate Limiting
 
@@ -186,7 +186,7 @@ Every command received by the ESP32 (including rejected ones) generates an MQTT 
 - `command_name`
 - Source client ID and IP
 - Timestamp (UTC)
-- Resulting `status` (queued, duplicate, invalid_argument, unknown_command, acknowledged, failed, timeout)
+- Resulting `status` (ok, invalid_argument, unknown_command, queue_full, internal_error, timeout)
 
 ---
 

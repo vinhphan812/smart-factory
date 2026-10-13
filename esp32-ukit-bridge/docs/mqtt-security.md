@@ -137,7 +137,7 @@ Copy `esp32/include/secrets.example.h` to `esp32/include/secrets.h` and fill in 
 | `BRIDGE_MQTT_USERNAME` | `"bridge-device-001"` | Must be non-empty to enable authentication. |
 | `BRIDGE_MQTT_PASSWORD` | `"***"` | Strong, unique per device recommended. |
 | `BRIDGE_MQTT_CLIENT_ID` | `"sf-bridge-001"` | Must be unique per device. |
-| `BRIDGE_MQTT_TLS_FINGERPRINT` | SHA-256 hex string | Optional. Used with `setFingerprint()` for pinning. Not currently called by firmware — TLS not wired. |
+| `BRIDGE_MQTT_TLS_FINGERPRINT` | SHA-256 hex string | Optional. Fingerprint pinning via `setFingerprint()`. Not verified on target ESP32 Arduino / mbedTLS version; test before use. Not currently called by firmware — TLS not wired. |
 | `BRIDGE_MQTT_CA_CERT_PATH` | `"/spiffs/certs/ca.crt"` | Path in SPIFFS. Empty when TLS is disabled. |
 
 ### Never Commit secrets.h
@@ -213,7 +213,7 @@ Do not add hardcoded fallback credentials. If provisioning fails, the device sho
 Before deploying any device outside a fully isolated lab:
 
 - [ ] **Enable TLS on the MQTT broker.** Set port to 8883. Do not run port 1883 on any network with untrusted actors.
-- [ ] **Configure certificate pinning on the ESP32.** Use `WiFiClientSecure::setFingerprint()` or `setCACert()` with the broker CA loaded from SPIFFS.
+- [ ] **Configure TLS on the ESP32.** Load the broker CA certificate from SPIFFS (`wifiClient.setCACert(spiffs_ca_cert)`). `WiFiClientSecure` is not yet wired in firmware — this is a planned step. Do not use `setInsecure()` in production.
 - [ ] **Rotate default MQTT broker credentials.** Do not use admin/admin or any well-known default.
 - [ ] **Assign a unique `BRIDGE_MQTT_CLIENT_ID` per device.** This is required for broker ACL enforcement.
 - [ ] **Configure broker ACLs.** Restrict each client to its own topic prefix (`smart-factory/{deviceId}/#`). Do not allow cross-device topic access.
@@ -238,7 +238,7 @@ Flash encryption alone (without secure boot) prevents casual flash dumps but doe
 ### TLS Implementation Roadmap
 
 1. **Phase 1 (short term)**: Broker TLS with self-signed CA, CA embedded at compile time. No pinning; use `setCACert()`. Set `BRIDGE_MQTT_PORT=8883`.
-2. **Phase 2 (medium term)**: Load CA from SPIFFS. Add certificate fingerprint pinning via `setFingerprint()`. Add `BRIDGE_MQTT_CA_CERT_PATH` to `secrets.h`.
+2. **Phase 2 (medium term)**: Load CA from SPIFFS with `setCACert()`. Add `BRIDGE_MQTT_CA_CERT_PATH` to `secrets.h`. Certificate fingerprint pinning via `setFingerprint()` is an option but has not been verified on the targeted ESP32 Arduino / mbedTLS version — test before using.
 3. **Phase 3 (production)**: Client certificate authentication. Generate per-device client certs, store in SPIFFS or external secure element. Enable broker `require_certificate true`.
 4. **Phase 4 (long term)**: Vault integration with device attestation. Eliminate compile-time secrets entirely.
 
