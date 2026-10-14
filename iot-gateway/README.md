@@ -4,7 +4,7 @@ Implements `iot-gateway/` per issue #7.
 
 Subscribes to ESP32 bridge MQTT topics, normalizes events into a canonical
 envelope, stores them durably in SQLite, and exposes them via WebSocket and
-HTTP for the Digital Twin and dashboard.
+HTTP for the Digital Twin and dashboard (supports verified uKit Explore SDK bridge specifications per issue #56).
 
 ## Topics subscribed
 
