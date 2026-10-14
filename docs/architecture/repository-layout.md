@@ -9,7 +9,7 @@
 | `esp32-ukit-bridge/` | ESP32–uKit firmware, AMLP, bridge tests | MQTT JSON commands | MQTT JSON results/status/telemetry | **Implemented** | #4 #5 #28 #29 #66 |
 | `iot-gateway/` | MQTT ingest, normalization, event store, WebSocket/HTTP | MQTT broker | REST, WebSocket, SQLite snapshots | **Implemented** | #7 #8 #31 #32 |
 | `factory-control/` | Nine-module device adapters, safe state machines, production orchestration | MQTT commands (via bridge) | MQTT telemetry, physical actuators | **PLANNED** | #9 #10 #22–#27 |
-| `digital-twin/` | Unreal Engine 3D Digital Twin, telemetry-to-state mapping, reconnect/replay | Event store snapshots, REST/WebSocket | — | **PLANNED** | #11 #12 #33–#35 |
+| `digital-twin/` | Unity 3D Digital Twin, telemetry-to-state mapping, reconnect/replay | Event store snapshots, REST/WebSocket | — | **PLANNED** | #11 #12 #33–#35 |
 | `edge-ai-robot/` | MiniAlpha adapter, anomaly detection, bounded robot skills, action guard | Event store snapshots, alerts | MQTT (bounded commands) | **PLANNED** | #13 #14 #36–#38 |
 | `dashboard/` | Role-specific operator display, read-only telemetry, incident log | Event store snapshots, REST/WebSocket | — | **PLANNED** | #15 #39 #40 |
 | `integration-tests/` | E2E scenario harness, HIL/E2E reliability evidence | All module outputs | — | **PLANNED** | #16 #20 #42–#45 |
