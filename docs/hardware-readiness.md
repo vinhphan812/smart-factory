@@ -1,18 +1,22 @@
-# Hardware Readiness
+# Hardware Readiness & HIL Status (Issue #42 / Issue #98)
 
 Status for each physical component in the Smart Factory installation.
 
+## Important Note on HIL Requirements
+All physical Hardware-in-the-Loop (HIL) integration, electrical validation, and physical actuation requirements are **explicitly BLOCKED by Issue #98** (Hardware-in-the-Loop Integration & Safety Certification). No unsupported hardware claims are permitted.
+
 ## Status Table
 
-| Component | Available | SDK | Tested | Simulation | Notes |
+| Component | Available | SDK | Tested | Simulation | Notes / HIL Blockers (Issue #98) |
 |---|---|---|---|---|---|
-| ESP32-S3 (bridge) | Yes | Partial | Partial | N/A | Wi-Fi, MQTT client, and UART AMLP encode/decode are implemented. GPIO sensor reads and PWM actuator writes are stubs. |
-| Arduino MEGA 2560 | Yes | No | No | Yes (Python TCP simulator) | C99 reference endpoint implemented; UART and AMLP complete. Real firmware blocked on official uKit SDK/toolchain. |
-| uKit actuators (motors, sensors) | No | No | No | Yes (Python simulator) | Procurement not started. Electrical integration with MEGA not designed. |
-| MX0508 level shifter | Yes | N/A | No | N/A | 4-channel BSS138 module. Required for MEGA TX0 (5 V) -> ESP32 GPIO18 (3.3 V). Wiring documented in `esp32-ukit-bridge/docs/wiring.md`. |
-| Logic analyzer / oscilloscope | Recommended | N/A | N/A | N/A | Not required but highly recommended for UART bring-up. Verify signal levels before connecting. |
-| MQTT broker | Yes | N/A | Yes | N/A | External. Any MQTT 3.1.1+ broker works (Mosquitto, EMQX, HiveMQ). Broker ACLs not yet configured. |
-| Wi-Fi access point | Yes | N/A | Yes | N/A | Must be on the same LAN as the MQTT broker. ESP32 connects as a standard Wi-Fi client. |
+| **ESP32-S3 (bridge)** | Yes | Partial | Partial | N/A | Wi-Fi, MQTT client, and UART AMLP encode/decode implemented. GPIO sensor reads and PWM actuator writes are stubs (BLOCKED by #98 / uKit SDK). |
+| **Arduino MEGA 2560** | Yes | No | No | Yes (Python TCP simulator) | C99 reference endpoint implemented; UART and AMLP complete. Real hardware firmware and UART test blocked on #98. |
+| **uKit actuators (motors, sensors)** | No | No | No | Yes (Python simulator) | Procurement not started. Electrical integration with MEGA not designed (BLOCKED by #98). |
+| **MX0508 level shifter** | Yes | N/A | No | N/A | 4-channel BSS138 module. Required for MEGA TX0 (5 V) -> ESP32 GPIO18 (3.3 V). Physical connection verification BLOCKED by #98. |
+| **Nine Physical Modules** | No | No | No | Yes (Python mocks) | Factory floor cells pending procurement and interface mapping (BLOCKED by #98). |
+| **MiniAlpha Robot** | No | No | No | Yes (Mock responses) | Edge AI robot pending procurement and vendor SDK documentation (BLOCKED by #98). |
+| **MQTT broker** | Yes | N/A | Yes | N/A | External. Any MQTT 3.1.1+ broker works (Mosquitto, EMQX, HiveMQ). Broker ACLs not yet configured. |
+| **Wi-Fi access point** | Yes | N/A | Yes | N/A | Must be on the same LAN as the MQTT broker. ESP32 connects as a standard Wi-Fi client. |
 
 ## Component Details
 
