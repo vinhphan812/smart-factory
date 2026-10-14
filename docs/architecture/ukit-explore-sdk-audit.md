@@ -1,7 +1,7 @@
 # Issue #56 Audit Report: uKit Explore v1/v2 SDK, Arduino Mega Pinout, Dependencies, and Licensing
 
-**Status:** Completed L0/L1 Architectural Audit & Evidence Review (Physical HIL and Vendor Redistribution: **BLOCKED** pending bench signoff and licensing clearance).
-**Owner Task:** Kanban `t_6784d6e7` / GitHub Issue [#56](https://github.com/vinhphan812/smart-factory/issues/56).
+**Status:** Completed L0/L1 Architectural Audit & Evidence Review (Physical HIL, Vendor Redistribution, and OTA Sizing: **BLOCKED** pending bench signoff, licensing clearance, and partition-table evidence).
+**Owner Task:** Kanban `t_ad3bb3c4` / GitHub Issue [#56](https://github.com/vinhphan812/smart-factory/issues/56).
 **Target Branch:** `docs/issue-56-ukit-explore-sdk-audit` (derived from `origin/master`).
 
 ---
@@ -19,7 +19,7 @@ In accordance with system design principles and `docs/architecture/ukit-mega-sdk
 The audit examined official upstream vendor resources cited in project specifications:
 1. **UBTECH GitBook Documentation:**
    - [Getting the SDK](https://ubtechedu.gitbook.io/ukit-explore/ukit-explore-quick-start/get-sdk): Instructs installation via Arduino IDE library ZIP and selection of Arduino Mega / Mega 2560 board profile.
-   - [Library & V1/V2 Support Guide](https://ubtechedu.gitbook.io/ukit-explore/standard/ukit-explore-library-file): Identifies the primary controller as Arduino Mega 2560, details header variations between v1 and v2 controller revisions, and mandates explicit calls to `Initialization()`.
+   - [Library & V1/V2 Support Guide](https://ubtechedu.gitbook.io/ukit-explore/standard/ukit-explore-library-file): Identifies the primary controller as Arduino Mega 2560, details header variations between v1 and v2 controller revisions (subject to physical board verification), and mandates explicit calls to `Initialization()`.
 2. **Official Vendor Code Repository:**
    - [GitHub: UBTEDU/uKitExplore-library](https://github.com/UBTEDU/uKitExplore-library):
      - **Declared Version:** `library.properties` specifies version `1.2.28-1`.
@@ -28,7 +28,7 @@ The audit examined official upstream vendor resources cited in project specifica
 
 ---
 
-## 3. Arduino Mega Target & V1/V2 Board Architecture
+## 3. Arduino Mega Target & V1/V2 Board Architecture (Proposed / Subject to Bench Verification)
 
 ### 3.1 Microcontroller Specifications
 - **MCU:** ATmega2560 (8-bit AVR RISC architecture)
@@ -36,14 +36,14 @@ The audit examined official upstream vendor resources cited in project specifica
 - **Memory:** 256 KB Flash (8 KB used by bootloader), 8 KB SRAM, 4 KB EEPROM.
 - **Implication:** Constrained memory footprint requires careful static allocation and prevents running heavy JSON parsing libraries concurrently with complex application logic unless strictly bounded.
 
-### 3.2 Board Revisions (v1 vs v2)
-- **v1 Controllers:** Utilize legacy pin headers (`uKitExplore.h`), distinct port mappings for DC motors, servos, and analog/digital sensors.
-- **v2 Controllers:** Introduce updated header layouts (`uKitExplore2.h`), expanded sensor multiplexing, and revised power distribution.
-- **Requirement:** Firmware abstraction must conditionally include headers based on board revision compile flags (`-DUBTECH_UKIT_V1` vs `-DUBTECH_UKIT_V2`).
+### 3.2 Board Revisions (v1 vs v2) — Proposed Architecture
+- **v1 Controllers:** Utilize legacy pin headers (`uKitExplore.h`), distinct port mappings for DC motors, servos, and analog/digital sensors (proposed design, pending physical inspection).
+- **v2 Controllers:** Introduce updated header layouts (`uKitExplore2.h`), expanded sensor multiplexing, and revised power distribution (proposed design, pending vendor documentation or bench verification).
+- **Requirement:** Firmware abstraction is proposed to conditionally include headers based on board revision compile flags (`-DUBTECH_UKIT_V1` vs `-DUBTECH_UKIT_V2`), subject to verification during physical bring-up.
 
-### 3.3 Initialization & Serial Communication
+### 3.3 Initialization & Serial Communication — Proposed Behavior
 - The vendor library mandates `Initialization()` during `setup()`.
-- **Serial Conflict Warning:** The vendor library initializes hardware serial interfaces (`Serial`, `Serial1`, etc.) for internal sensor/servo bus communication. Debug logging directly over the primary UART bus will corrupt framing. A dedicated, isolated serial channel or software serial must be established for AMLP transport.
+- **Serial Conflict Consideration (Proposed):** Based on common Arduino Mega pin layouts, the vendor library initializes hardware serial interfaces for internal sensor/servo bus communication. Debug logging directly over the primary UART bus is proposed to be isolated or routed via software serial for AMLP transport, subject to oscilloscope and protocol analyzer verification on the physical bench.
 
 ---
 
@@ -71,10 +71,22 @@ Physical hardware integration and HIL testing are **BLOCKED** absent verified em
 
 ---
 
-## 6. Next Steps & Unblocks for Downstream Tasks
+## 6. OTA Hardware Gate (Explicitly BLOCKED for Issue #72 Sizing & Recovery)
+
+Concrete sizing, partition mapping, and recovery behavior for Over-The-Air (OTA) updates referenced in #72 are **BLOCKED** pending collection of verified physical evidence:
+1. **Exact Board Model & Revision:** Precise hardware identification (e.g., ATmega2560 bootloader variant, USB-to-UART bridge chip) must be documented from physical inspection.
+2. **Actual Flash Capacity & Usable Space:** Verification of available non-volatile flash memory after accounting for application binary size and bootloader footprint.
+3. **Bootloader OTA Capabilities:** Empirical verification of whether the equipped bootloader supports remote/serial OTA flashing or requires physical ICSP/USB flashing.
+4. **Partition-Table & Memory Map Evidence:** Explicit memory layout documentation.
+
+Until these four items are established empirically, any downstream claims regarding OTA sizing, dual-bank update capability, or automated recovery in #72 remain strictly provisional/proposed.
+
+---
+
+## 7. Next Steps & Unblocks for Downstream Tasks
 
 - **Issue #57 (Separate Firmware Target):** Create isolated PlatformIO project structure under `esp32-ukit-bridge/ukit/mega/` targeting `megaatmega2560`, pin version 1.2.28-1 of vendor library and ArduinoJson 6.19.5.
-- **Issue #58 (AMLP Transport Port):** Implement non-blocking AMLP v1 frame reception on Arduino Mega serial port, integrating CRC-16/CCITT-FALSE validation and ACK generation without blocking main loop execution.
+- **Issue #58 (AMLP Transport Port):** Implement non-blocking AMLP v1 frame reception on Arduino Mega serial port, integrating CRC-16/CCITT-FALSE validation and ACK generation without blocking main loop execution (subject to bench verification).
 - **Issue #59 (Bounded Driver Functions):** Wrap vendor functions (`setMotorTurn`, `setServoAngle`, etc.) with parameter bounds checking, local watchdog timers, and safe default states on timeout.
 - **Issue #60 (CI, Evidence & HIL):** Establish CI compilation checks (without flashing unverified hardware) and conduct supervised L3/L4 bench tests with verified level shifting and physical E-stop.
-- **Issue #72:** System integration coordination.
+- **Issue #72:** System integration coordination (contingent upon satisfying the OTA hardware gate in Section 6).
