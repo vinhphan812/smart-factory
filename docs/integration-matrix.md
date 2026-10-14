@@ -23,14 +23,14 @@ This document maps every module and component in the Smart Factory project again
 
 | Component | Type | MQTT | AMLP | UART | WS | EVSTORE | AUTH | GPIO | SIM | HLW | FLASH | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ESP32 Bridge firmware | Firmware | Implemented | Implemented | Implemented | N/A | Stub | Stub | Stub | N/A | Implemented | Stub | Wi-Fi and MQTT client are implemented; GPIO/telemetry stubs must be replaced with uKit SDK. |
+| ESP32 Bridge firmware | Firmware | Implemented | Implemented | Implemented | N/A | Stub | Stub | Stub | N/A | Implemented | Stub | Wi-Fi and MQTT client implemented; UART telemetry → MQTT implemented (QoS 0, lag-drop); GPIO stubs replace real SDK calls. |
 | MEGA reference (C99) | Firmware | N/A | Implemented | Implemented | N/A | N/A | N/A | Stub | N/A | Stub | N/A | Portable C99; UART and AMLP complete; GPIO/sensor stubs replace real SDK calls. |
 | Python AMLP codec (`tools/amlp/`) | Tool | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | Pure codec, no transport. |
 | Python CLI (`amlp`) | Tool | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | CRC, encode, decode, command generation. |
 | Python TCP simulator (`amlp-sim`) | Tool | Stub | Implemented | N/A | N/A | N/A | N/A | N/A | Implemented | N/A | N/A | Replaces UART with TCP for bridge dev; valid ACK responses; periodic fake telemetry. |
-| IoT Gateway | External | Implemented | N/A | N/A | Implemented | Implemented | Stub | N/A | N/A | N/A | N/A | MQTT subscriber; event store (bounded SQLite); WebSocket and HTTP REST API. Auth (TLS) planned. |
-| Device Registry | Data | Stub | N/A | N/A | N/A | N/A | Stub | N/A | N/A | N/A | Planned | Flat JSON in SPIFFS (current); etcd or MQTT discovery planned. See `esp32-ukit-bridge/docs/device-registry.md`. |
-| Shared protocol spec (`esp32-ukit-bridge/shared/protocol-spec/`) | Spec | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | Canonical AMLP v1 spec and golden test vectors. |
+| IoT Gateway (SCADA/cloud) | External | Implemented | N/A | N/A | Implemented | Implemented | Stub | N/A | N/A | N/A | N/A | MQTT subscriber; event store (bounded SQLite); WebSocket and HTTP REST API. Auth (TLS) planned. |
+| Device Registry | Data | Stub | N/A | N/A | N/A | N/A | Stub | N/A | N/A | N/A | Planned | Flat JSON in SPIFFS (current); etcd or MQTT discovery planned. See `docs/device-registry.md`. |
+| Shared protocol spec (`shared/protocol-spec/`) | Spec | N/A | Implemented | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | Canonical AMLP v1 spec and golden test vectors. |
 
 ### Status legend
 
@@ -46,7 +46,7 @@ This document maps every module and component in the Smart Factory project again
 
 ## Hardware Readiness Summary
 
-See `esp32-ukit-bridge/docs/hardware-readiness.md` for the full per-component table.
+See `docs/hardware-readiness.md` for the full per-component table.
 
 | Component | Has Hardware? | Has SDK? | Tested? |
 |---|---|---|---|
@@ -97,7 +97,7 @@ Items that must be resolved before another item can move from Planned/Stub to Im
 
 | Item | Blocked by | Blocking |
 |---|---|---|
-| ESP32 GPIO telemetry (Stub) | uKit SDK with GPIO/sensor API | Firmware end-to-end test on hardware |
+| ESP32 GPIO sensor telemetry (Stub) | uKit SDK with GPIO/sensor API | Firmware end-to-end sensor read-out on hardware |
 | MEGA GPIO integration (Stub) | Official uKit SDK, toolchain, pinout | Real hardware integration |
 | ESP32 OTA flashing (Stub) | Partition table layout; Wi-Fi reliability testing | Fleet firmware updates |
 | MQTT broker ACLs (Stub) | Per-device MQTT client auth design | Multi-device secure deployment |
@@ -113,7 +113,6 @@ Items that must be resolved before another item can move from Planned/Stub to Im
 ```
 MEGA reference (C99 Implemented)
   + uKit SDK (Blocked: No SDK)        --> Real MEGA firmware (Blocked)
-  + ESP32 GPIO stubs (Stub)           --> ESP32 telemetry handler (Blocked)
   + Level shifter wiring (Implemented hardware, not tested)
                                           --> Full UART loopback test (Blocked)
                                                --> End-to-end command on hardware (Blocked)

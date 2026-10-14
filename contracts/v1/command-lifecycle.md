@@ -13,13 +13,14 @@ It supplements the [MQTT contract](./mqtt-contract.md) and assumes familiarity w
 | JSON envelope parsing (command_id / request_id, command_name, arguments) | ✅ Implemented | `MqttBridge::onMessage()` + `CommandMapper` |
 | Command allowlist: CONVEYOR_START, CONVEYOR_STOP, RESET, PING, SET_OUTPUT | ✅ Implemented | All five commands in `CommandMapper::build()` |
 | Argument range validation | ✅ Implemented | `CommandMapper` validates channel 0..255, speed 1..100 |
+| AMLP TEL frame parsing and MQTT telemetry publication | ✅ Implemented | `UartAdapter::handleFrame()` dispatches `Type::Tel` to `MqttBridge::onTelemetry()` → `publishTelemetry()`; QoS 0 with lag-drop |
 | TTL / deadline enforcement | 🔒 Planned | `ttl_seconds` field is accepted but not used in retry budget |
 | E-stop / priority command | 🔒 Planned | No `estop_active_` flag; E-stop command returns `unknown_command` |
 | Replay deduplication (16-entry LRU cache) | ✅ Implemented | `BridgeCore::recent_[]` |
 | Duplicate ACK suppression (MEGA side) | ✅ Implemented | 8-entry cache in `ukit_endpoint_t` |
 | Exponential backoff for MQTT reconnect | 🔒 Planned | Fixed `kMqttRetryMs` interval; `kMqttBackoffInitialMs/MaxMs` unused |
 | Heartbeat publication | 🔒 Planned | `publishHeartbeat()` defined but not called in `MqttBridge::tick()` |
-| Telemetry health monitoring | 🔒 Planned | `checkTelemetryHealth()` defined but not called; `lastTelReceivedMs_` not tracked |
+| Telemetry health monitoring (stale/recovered events) | 🔒 Planned | `checkTelemetryHealth()` defined but not called; `lastFrameAgeMs()` wired in `UartAdapter` |
 | SPIFFS device registry | 🔒 Planned | Not wired; topics are hard-coded in `MqttBridge::begin()` |
 
 ---

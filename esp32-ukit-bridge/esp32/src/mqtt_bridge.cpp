@@ -63,43 +63,6 @@ const char* statusName(int16_t statusCode) {
 
 }  // namespace
 
-MqttBridge* MqttBridge::instance_ = nullptr;
-
-MqttBridge::MqttBridge(PubSubClient& client, bridge::BridgeCore& core,
-                       const char* host, uint16_t port, const char* username,
-                       const char* password, const char* deviceId)
-    : client_(client),
-      core_(core),
-      host_(host),
-      port_(port),
-      username_(username),
-      password_(password),
-      deviceId_(deviceId) {}
-
-void MqttBridge::begin() {
-  enabled_ = host_ != nullptr && host_[0] != '\0' && deviceId_ != nullptr &&
-             deviceId_[0] != '\0';
-  if (!enabled_) {
-    return;
-  }
-
-  std::snprintf(commandTopic_, sizeof(commandTopic_),
-                "smart-factory/%s/command/down", deviceId_);
-  std::snprintf(ackTopic_, sizeof(ackTopic_),
-                "smart-factory/%s/command/ack", deviceId_);
-  std::snprintf(telemetryTopic_, sizeof(telemetryTopic_),
-                "smart-factory/%s/telemetry", deviceId_);
-  std::snprintf(statusTopic_, sizeof(statusTopic_),
-                "smart-factory/%s/status", deviceId_);
-
-  instance_ = this;
-  client_.setServer(host_, port_);
-  client_.setCallback(callbackThunk);
-  client_.setKeepAlive(30);
-  client_.setSocketTimeout(1);
-  client_.setBufferSize(768);
-}
-
 void MqttBridge::tick(uint32_t nowMs, bool networkReady) {
   if (!enabled_) {
     return;
@@ -373,6 +336,28 @@ void MqttBridge::publishOnlineStatus() {
   serializeJson(document, buffer, sizeof(buffer));
   client_.publish(statusTopic_, buffer, true);
 }
+
+#if !defined(PLATFORMIO_NATIVE_TEST)
+void MqttBridge::onTelemetry(const bridge::TelemetryFrame& frame) {
+  if (!enabled_ || !client_.connected()) {
+    ++telDropped_;  // Count drops from disabled or disconnected MQTT path.
+    return;
+  }
+  publishTelemetry(frame);
+}
+
+void MqttBridge::publishTelemetry(const bridge::TelemetryFrame& frame) {
+  if (telemetryTopic_[0] == '\0') {
+    return;
+  }
+
+  // Delegate to the single canonical bridge::publishTelemetry() free function.
+  // Both production ESP32 and native unit tests call this same function.
+  char buffer[384]{};
+  bridge::publishTelemetry(frame, client_, buffer, deviceId_,
+                           telemetryTopic_, telDropped_, telPublished_);
+}
+#endif  // !PLATFORMIO_NATIVE_TEST
 
 bool MqttBridge::due(uint32_t nowMs, uint32_t deadlineMs) {
   return static_cast<int32_t>(nowMs - deadlineMs) >= 0;

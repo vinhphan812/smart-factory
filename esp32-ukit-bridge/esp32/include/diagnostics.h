@@ -32,6 +32,14 @@ struct DiagnosticsCounters {
 };
 
 // Global diagnostics instance.
+// In native unit tests PLATFORMIO_NATIVE_TEST is defined by the native build system
+// and we provide the definition here to avoid compiling diagnostics.cpp (which
+// depends on Arduino/WiFi/ArduinoJson).  In the ESP32 build the real diagnostics.cpp
+// provides the strong definition.
+#if defined(PLATFORMIO_NATIVE_TEST)
+DiagnosticsCounters g_diagnostics;
+#else
 extern DiagnosticsCounters g_diagnostics;
+#endif
 
 }  // namespace bridge

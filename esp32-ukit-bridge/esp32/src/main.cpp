@@ -44,6 +44,10 @@ void setup() {
                          BRIDGE_MQTT_PASSWORD, mqttClientId);
   mqttBridge = &mqtt;
 
+  // Register MQTT bridge as the telemetry consumer so that AMLP TEL frames
+  // received from MEGA are published to the MQTT telemetry topic.
+  uart.setTelemetryHandler(mqttBridge);
+
   const uint32_t now = millis();
   wifi.begin(now);
   mqttBridge->begin();
