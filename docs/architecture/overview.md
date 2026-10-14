@@ -1,6 +1,6 @@
 # Smart Factory — Architecture (baseline and target)
 
-**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The scientific target uses Unreal Engine 3D and MiniAlpha. Earlier repository material mentions Three.js and unimplemented MQTT topics; those are not authoritative implementation claims.
+**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The current engineering target uses **Unity 3D** and MiniAlpha. The original research proposal specified Unreal Engine; this is a historical reference and its formal amendment/approval status is unverified. Earlier material also mentioned Three.js and unimplemented MQTT topics, which are not implementation claims.
 
 ## Existing bridge baseline
 
@@ -26,7 +26,7 @@ flowchart TD
   Bridge <-->|authenticated MQTT| Broker[Broker]
   Broker --> Gateway[IoT Gateway: validate normalize trace]
   Gateway --> Store[(Event store snapshots)]
-  Gateway --> Twin[Unreal Digital Twin]
+  Gateway --> Twin[Unity Digital Twin]
   Gateway --> Dash[Dashboard]
   Gateway --> Edge[Edge anomaly detector]
   Edge --> Robot[MiniAlpha notification / bounded skills]
@@ -46,11 +46,11 @@ Operator/AI intent → role/capability authorization → current context and saf
 2. Industrial / IoT communication (UART AMLP, MQTT; OPC UA is a potential extension)
 3. Edge / control (ESP32, local UKIT controllers, safe motion)
 4. Data / AI (gateway, event store, anomalous conditions, robot adapter)
-5. Applications (Unreal Twin, dashboard, educational interfaces)
+5. Applications (Unity Twin, dashboard, educational interfaces)
 
 ## Open architecture decisions
 - ADR-001: canonical system event schema and device IDs; compatibility with existing bridge MQTT.
-- ADR-002: Unreal engine version, renderer/runtime, Git LFS and 3D asset policy.
+- Unity editor/LTS selection, renderer/runtime, scene/prefab/meta/Git LFS and 3D asset policy: Issue #11; ADR-0003 is proposed in PR #89 (not yet merged).
 - ADR-003: verified per-device controller/voltage/SDK and emergency-stop mechanism.
 - ADR-004: actual MiniAlpha API and allowed response skills.
 - ADR-005: latency thresholds from instrumented baselines rather than untested declarations.

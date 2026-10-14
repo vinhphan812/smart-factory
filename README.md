@@ -1,6 +1,6 @@
 # Smart Factory — AIBOT
 
-**A 12-month research and engineering project** at AIBOT / Dong Nai Technology University (DNTU): a nine-module physical miniature factory, a **real-time Unreal Engine Digital Twin**, and an **AI Edge MiniAlpha Robot** for bounded monitoring and incident response.
+**A 12-month research and engineering project** at AIBOT / Dong Nai Technology University (DNTU): a nine-module physical miniature factory, a **real-time Unity Digital Twin**, and an **AI Edge MiniAlpha Robot** for bounded monitoring and incident response.
 
 This repository is a **modular monorepo**. GitHub Issues describe planned deliverables; they are not proof that the requested features or hardware are already implemented.
 
@@ -21,7 +21,7 @@ This repository is a **modular monorepo**. GitHub Issues describe planned delive
 | System | Research target | Current repository status |
 |---|---|---|
 | Physical factory | Forklift, Dump Truck, Bracket, Packaging, Conveyor, Sorting, Tower Crane, Parking Lot and integration | ESP32–UKIT communication bridge exists; full 9-module hardware proof pending |
-| Digital Twin | Unreal Engine, 3D visualization synchronized with observed physical events | Planned; see Issues #11 #12 #33–#35 |
+| Digital Twin | Unity, 3D visualization synchronized with observed physical events | Planned; see Issues #11 #12 #33–#35 |
 | AI Edge Robot | MiniAlpha alerts and validated, bounded on-site response | Planned; see Issues #13 #14 #36–#38 |
 | Supporting services | Root `iot-gateway/` ingests MQTT and serves event API; other services and deployment | IoT Gateway software implemented; deployment/HIL evidence pending |
 

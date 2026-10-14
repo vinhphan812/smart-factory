@@ -8,7 +8,7 @@
 | L2 | simulated UART/MQTT, mock device | software protocol/application behavior |
 | L3 | ESP32 connected to real controller (bench) | verified electrical and link interoperability |
 | L4 | actual moving 9-module subsystem, operator/E-stop | physical safety and actuation |
-| L5 | integrated factory→gateway→Unreal→MiniAlpha | stated end-to-end scenarios with declared mock/real mix |
+| L5 | integrated factory→gateway→Unity→MiniAlpha | stated end-to-end scenarios with declared mock/real mix |
 
 ## End-to-end acceptance scenarios
 | ID | Stimulus | Expected result |

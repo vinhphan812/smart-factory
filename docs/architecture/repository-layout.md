@@ -33,9 +33,9 @@
 5. **Physical safety:** local device controllers own motion limits and E-stop; AI/Twin/dashboard cannot bypass these.
 6. **Evidence over claims:** mark status as **Implemented**, **Simulated**, **Planned**, **Blocked**, or **Verified hardware**.
 
-## Design note: Unreal Engine vs Unity
+## Design note: Unity selected; original proposal specified Unreal Engine
 
-The original research proposal (2026) specifies **Unreal Engine** for the Digital Twin. Earlier repository drafts mentioned Unity. The authoritative source is `docs/PROJECT_CONTEXT.md`, which references Unreal Engine. The `digital-twin/` module will use Unreal Engine; Issue #11 tracks its bootstrap.
+The original 2026 research proposal specifies **Unreal Engine**, but the project's CURRENT engineering decision is **Unity**, confirmed by Unity-specific Issues #11/#12/#33–#35. Unity is the intended implementation in `digital-twin/`; see #11 for project setup and ADR-0003 proposed in PR #89. Any required institutional approval of the proposal's technology change remains **PENDING / NOT VERIFIED**; historical proposal text is not an active engineering requirement.
 
 ## Ownership
 

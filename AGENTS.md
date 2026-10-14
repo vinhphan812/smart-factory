@@ -3,7 +3,7 @@
 Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/repository-layout.md`, `docs/architecture/overview.md`, `docs/contracts-and-data.md`, the affected module README/source/tests and GitHub Issue, then `docs/testing-and-acceptance.md`.
 
 ## Fixed context
-- Research system = **nine-module physical mini-factory + Unreal Engine real-time Digital Twin + MiniAlpha Edge AI Robot**. Not a retail twin and not a generic chatbot demo.
+- Research system = **nine-module physical mini-factory + Unity real-time Digital Twin + MiniAlpha Edge AI Robot**. Not a retail twin and not a generic chatbot demo.
 - Modular monorepo: do not split repos, create nested `.git`, or duplicate bridge implementation without an approved architecture decision.
 - **Root module ownership (P0 #65):** `esp32-ukit-bridge/` is only the ESP32 ↔ MEGA-uKit firmware, AMLP and bridge-local tests/contracts. Independent backend services such as `iot-gateway/` MUST be siblings at repository root. Never nest services under `esp32-ukit-bridge/`. Cross-system schemas belong to root `contracts/`, subject to compatibility audit; AMLP stays in the bridge.
 - Existing bridge is source of truth for its wire/JSON interface; AMLP v1 at `esp32-ukit-bridge/shared/protocol-spec/AMLP-v1.md`, MQTT contract at `esp32-ukit-bridge/docs/mqtt-contract.md`.
@@ -12,6 +12,8 @@ Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/repository-layout.m
 - AI/Twin/dashboard cannot bypass device-local interlocks, operator override, physical E-stop, fresh context checks, permissions or actuator limits.
 - Do not treat queued or ACK as verified physical completion.
 - No secrets, identifiable participant data or proprietary SDK/3D assets in the public repository.
+
+**Engine decision:** Unity is the CURRENT engineering target. The original institutional proposal referenced Unreal Engine; keep that only as historical scope information and flag institutional approval as unverified. See #11, #62, and proposed ADR-0003 in PR #89. Do not build Unreal assets or instruct agents to use Unreal.
 
 ## Work policy
 1. Check Issue, dependency and current PR; claim an unassigned task with plan, ETA, tests. `/claim` is a manual convention, not an installed bot.

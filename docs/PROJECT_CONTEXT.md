@@ -34,7 +34,7 @@ Pipeline: incoming material → transport → conveyor → sorting → packaging
 ## 4. Current evidence (repository reviewed on 2026-10-12)
 `esp32-ukit-bridge/` contains ESP32-S3 PlatformIO firmware, MQTT-to-AMLP UART path, C99 UKIT **portable reference endpoint**, Python AMLP simulator/CLI, tests and protocol documentation. The reference endpoint is **not the vendor SDK**. Real UKIT wiring, electrical levels, firmware flashing, nine-module interfaces and MiniAlpha SDK remain separately gated by documented hardware evidence.
 
-The bridge documentation currently states ESP32 does **not yet** publish UART TEL as MQTT telemetry. Do not claim a live Digital Twin pipeline is finished. Planned IoT gateway, Unreal scene, AI detection, physical controllers and integration tests are represented by Issues, not automatically delivered.
+The bridge documentation currently states ESP32 does **not yet** publish UART TEL as MQTT telemetry. Do not claim a live Digital Twin pipeline is finished. Planned IoT gateway, **Unity scene**, AI detection, physical controllers and integration tests are represented by Issues, not automatically delivered.
 
 ## 5. Research objectives and measurements
 The proposal's research tasks encompass (i) overall architecture, (ii) physical integration, (iii) acquisition/transmission/storage/realtime sync, (iv) 3D Twin, and (v) AI Edge Robot integration. Research metrics should include sync latency distributions, loss, duplicate handling, recovery, run stability, bounded robot response and detection accuracy **only when actually measured**. Log run conditions, hardware versus simulated components, source commit and raw data.
