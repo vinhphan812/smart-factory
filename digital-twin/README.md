@@ -1,6 +1,6 @@
 # Digital Twin — Smart Factory
 
-**Status: PLANNED** | Engine: **Unreal Engine** | Related issues: #11 #12 #33–#35
+**Status: PLANNED** | Engine: **Unity** | Related issues: #11 #12 #33–#35
 
 ## Purpose
 
