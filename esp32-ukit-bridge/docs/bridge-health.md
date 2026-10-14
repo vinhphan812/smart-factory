@@ -9,12 +9,12 @@ This document describes the health monitoring, heartbeat, and reconnection behav
 | Feature | Status | Evidence |
 |---------|--------|---------|
 | `publishHeartbeat()` function body | ✅ Implemented | `esp32/src/diagnostics.cpp` |
-| Heartbeat called in `MqttBridge::tick()` | 🔒 Planned | Not wired; `lastHeartbeatMs_` not in `MqttBridge` |
+| Heartbeat called in `MqttBridge::tick()` | ✅ Implemented | `mqtt_bridge.cpp`; publishes every `kHeartbeatIntervalMs` (30 s) |
 | `checkTelemetryHealth()` function body | ✅ Implemented | `esp32/src/diagnostics.cpp` |
-| Telemetry health called in `MqttBridge::tick()` | 🔒 Planned | `lastTelReceivedMs_` not tracked in `UartAdapter` |
-| `telemetry_timeout` event on critical | 🔒 Planned | Branch exists but not called; no rate guard |
+| Telemetry health called in `MqttBridge::tick()` | ✅ Implemented | `mqtt_bridge.cpp`; called every tick |
+| `telemetry_timeout` event on critical | ✅ Implemented | `checkTelemetryHealth()` publishes to `smart-factory/{id}/health` on 2x timeout |
 | `DiagnosticsCounters` struct | ✅ Implemented | Defined in `diagnostics.h` |
-| Counter increments at call sites | 🔒 Planned | No call sites increment any counter |
+| Counter increments at call sites | ✅ Implemented | All counters wired: tx_frames, rx_frames, crc_errors, parse_errors, retries, mqtt_publishes, mqtt_connects, mqtt_connect_fails, wifi_reconnects |
 | MQTT exponential backoff | 🔒 Planned | `kMqttBackoffInitialMs/MaxMs` unused; fixed `kMqttRetryMs` used |
 | SPIFFS device registry | 🔒 Planned | Not wired; hard-coded topic names |
 
@@ -53,7 +53,7 @@ The bridge periodically publishes a heartbeat message to advertise its presence 
 | `queue_depth`   | uint16  | Number of commands currently pending in the queue               |
 | `last_tel_s`   | uint32  | Seconds since the last `TEL` frame was received from uKit       |
 
-> **TODO**: Full heartbeat implementation is pending. Currently `publishOnlineStatus()` sends a retained status JSON to `smart-factory/{id}/status`; the dedicated heartbeat topic and payload fields are not yet wired in `MqttBridge`.
+> **Note**: `publishOnlineStatus()` sends a retained status JSON to `smart-factory/{id}/status`. The dedicated heartbeat topic `smart-factory/{id}/heartbeat` publishes every 30 s with `queue_depth`, `telemetry_age_s`, and `uptime_s`. Both topics coexist: status carries the `online` flag, heartbeat carries operational metrics.
 
 ---
 
@@ -75,10 +75,7 @@ Stale state is reflected in the heartbeat payload:
 | Stale (>= timeout, < 2x)       | Value >= `TELEMETRY_TIMEOUT_MS / 1000`; bridge marks `tel_stale: true` in status |
 | Disconnected (>= 2x timeout)   | Bridge may publish a `telemetry_timeout` event to `smart-factory/bridge/{id}/event` |
 
-> **TODO**: `checkTelemetryHealth()` is a stub. Full implementation must:
-> - Track `lastTelReceivedMs_` in `MqttBridge` or a new `TelemetryMonitor` class.
-> - Set `telStale_` flag when `nowMs - lastTelReceivedMs_ >= TELEMETRY_TIMEOUT_MS`.
-> - Publish an event when `nowMs - lastTelReceivedMs_ >= 2 * TELEMETRY_TIMEOUT_MS`.
+> `checkTelemetryHealth()` is implemented in `diagnostics.cpp`. It monitors `UartAdapter::lastFrameAgeMs()` (which tracks the last received TEL frame timestamp) and publishes health events to `smart-factory/{id}/health`: warning on first stale detection (>= 60 s), critical event on `>= 2 * kTelemetryTimeoutMs` (120 s), and recovery event when telemetry resumes after stale.
 
 ### Recovery
 
@@ -133,25 +130,24 @@ Exponential backoff for MQTT reconnect is not yet implemented; `kMqttRetryMs` (5
 
 ## 5. Diagnostics Counters
 
-The bridge tracks the following counters for diagnostics and operational monitoring. These are currently **stubs**; they must be incremented by the relevant transport and protocol layers.
+The bridge tracks the following counters for diagnostics and operational monitoring. All counters are implemented in `bridge::g_diagnostics` and incremented at the relevant call sites.
 
-| Counter              | Description                                                        | Location to increment                          |
-|----------------------|--------------------------------------------------------------------|------------------------------------------------|
-| `tx_frames`          | AMLP frames sent to uKit over UART                                 | `UartAdapter::send()`                          |
-| `rx_frames`          | AMLP frames received from uKit over UART                           | `UartAdapter::handleFrame()`                   |
-| `crc_errors`         | Frames rejected due to CRC mismatch                                 | `amlp::Parser` (in `uart_adapter.cpp`)        |
-| `parse_errors`       | Frames rejected due to syntax/format errors (no `@`, bad field)    | `amlp::Parser`                                 |
-| `retries`            | Command retransmission attempts (same sequence number)              | `BridgeCore` retry logic                       |
-| `queue_depth`        | Current number of pending commands in the queue                    | `BridgeCore::enqueue()` / `acknowledge()`     |
-| `mqtt_publishes`     | MQTT packets published (commands/acks)                              | `MqttBridge::publishCompletion()`               |
-| `mqtt_connects`      | Successful MQTT connect attempts                                    | `MqttBridge::connectOnce()` success branch     |
-| `wifi_reconnects`    | Wi-Fi reconnection events (Connecting → Connected)                  | `WifiStateMachine` Connected transition        |
-| `heartbeats_sent`    | Heartbeat messages published                                        | `publishHeartbeat()`                           |
-| `telemetry_timeout_count` | Number of times telemetry became stale                         | `checkTelemetryHealth()`                       |
+| Counter              | Description                                                   | Location incremented                          |
+|----------------------|---------------------------------------------------------------|-----------------------------------------------|
+| `tx_frames`          | AMLP frames sent to uKit over UART                            | ✅ `UartAdapter::send()`                     |
+| `rx_frames`          | AMLP frames received from uKit over UART                      | ✅ `UartAdapter::handleFrame()`              |
+| `crc_errors`         | Frames rejected due to CRC mismatch                            | ✅ `UartAdapter::consume()` (InvalidCrc)     |
+| `parse_errors`       | Frames rejected due to syntax/format errors (no `@`, bad field) | ✅ `UartAdapter::consume()` (non-CRC)       |
+| `retries`            | Command retransmission attempts (same sequence number)         | ✅ `BridgeCore::attemptSend()` (when > 0)   |
+| `mqtt_publishes`     | MQTT packets published (commands/acks/status/heartbeat)         | ✅ `MqttBridge::publishCompletion()` etc.    |
+| `mqtt_connects`      | Successful MQTT connect attempts                               | ✅ `MqttBridge::connectOnce()` success       |
+| `mqtt_connect_fails` | Failed MQTT connect attempts                                  | ✅ `MqttBridge::connectOnce()` fail branch   |
+| `wifi_reconnects`    | Wi-Fi reconnection events (Connecting → Connected)              | ✅ `WifiStateMachine::tick()` Connected      |
+| `heartbeats_sent`    | Heartbeat messages published                                   | ✅ `MqttBridge::tick()` (via `publishHeartbeat`) |
+| `telemetry_timeout_count` | Number of times telemetry became stale                  | ✅ `checkTelemetryHealth()`                  |
+| `telemetry_recovered_count` | Number of times telemetry recovered after stale      | ✅ `checkTelemetryHealth()`                  |
 
 Counters are reset only on boot. They are included in the heartbeat payload as a cumulative snapshot.
-
-> **TODO**: Implement a `DiagnosticsCounters` struct in `diagnostics.h`, expose it via `BridgeCore` or a standalone `Diagnostics` singleton, and increment counters at the identified locations.
 
 ---
 
@@ -176,11 +172,11 @@ External monitors (SCADA, home automation) can subscribe to the status topic and
 
 ## Stub Implementation Notes
 
-| Stub function            | Location                  | Status    |
-|--------------------------|---------------------------|-----------|
-| `publishHeartbeat()`     | `mqtt_bridge.cpp`         | TODO      |
-| `checkTelemetryHealth()` | `mqtt_bridge.cpp`         | TODO      |
-| `DiagnosticsCounters`    | `include/diagnostics.h`   | TODO      |
-| `updateCounters()`       | `src/diagnostics.cpp`     | TODO      |
-| MQTT backoff             | `mqtt_bridge.cpp`         | TODO      |
-| Connection-up callback   | `mqtt_bridge.cpp`         | TODO      |
+| Stub function              | Location              | Status      |
+|---------------------------|-----------------------|-------------|
+| `publishHeartbeat()`      | `diagnostics.cpp`     | ✅ Implemented |
+| `checkTelemetryHealth()`  | `diagnostics.cpp`     | ✅ Implemented |
+| `DiagnosticsCounters`       | `include/diagnostics.h` | ✅ Implemented |
+| `heartbeatTopic_`        | `mqtt_bridge.h/cpp`  | ✅ Implemented |
+| MQTT exponential backoff  | `mqtt_bridge.cpp`     | 🔒 Planned   |
+| Connection-up callback    | `mqtt_bridge.cpp`     | 🔒 Planned   |

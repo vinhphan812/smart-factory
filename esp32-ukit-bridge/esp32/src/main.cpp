@@ -58,6 +58,6 @@ void loop() {
   wifi.tick(now);
   uart.poll(now, bridgeCore);
   bridgeCore.tick(now, uart);
-  mqttBridge->tick(now, wifi.connected());
+  mqttBridge->tick(now, wifi.connected(), uart.lastFrameAgeMs(now));
   yield();
 }

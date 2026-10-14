@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 #include "bridge_config.h"
+#include "diagnostics.h"
 
 WifiStateMachine::WifiStateMachine(const char* ssid, const char* password)
     : ssid_(ssid), password_(password) {}
@@ -32,6 +33,7 @@ void WifiStateMachine::tick(uint32_t nowMs) {
       state_ = State::Connected;
       stateSinceMs_ = nowMs;
       retryDelayMs_ = bridge_config::kWifiInitialRetryMs;
+      ++bridge::g_diagnostics.wifi_reconnects;
     }
     return;
   }
