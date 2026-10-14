@@ -41,16 +41,17 @@ struct DiagnosticsCounters {
 // and we provide the definition here to avoid compiling diagnostics.cpp (which
 // depends on Arduino/WiFi/ArduinoJson).  In the ESP32 build the real diagnostics.cpp
 // provides the strong definition.
-// Global diagnostics instance (strong definition lives in diagnostics.cpp for ESP32,
-// or diagnostics_stub.cpp for the native_test build).
+#if defined(PLATFORMIO_NATIVE_TEST)
+DiagnosticsCounters g_diagnostics;
+#else
 extern DiagnosticsCounters g_diagnostics;
+#endif
 
 }  // namespace bridge
 
 // ---------------------------------------------------------------------------
-// Diagnostics functions (defined in diagnostics.cpp for ESP32 build;
-// diagnostics_stub.cpp provides g_diagnostics for native_test).
-// Both files are compiled for ESP32 via platformio.ini build_src_filter.
+// Diagnostics functions — defined in diagnostics.cpp (ESP32 build).
+// The native_test build exercises these via stubs or direct calls.
 // ---------------------------------------------------------------------------
 
 // Publishes a heartbeat JSON to smart-factory/{deviceId}/heartbeat every
