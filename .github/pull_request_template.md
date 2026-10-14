@@ -1,0 +1,16 @@
+## Description
+[Provide a clear and concise description of what this PR accomplishes.]
+
+## Architecture & ADR Checklist
+- [ ] Does this PR introduce or modify architectural components (`docs/architecture/`, `src/`, `iot-gateway/src/`, `esp32-ukit-bridge/`)?
+- [ ] If yes, have you created or updated an Architecture Decision Record (ADR) under `docs/adr/` in accordance with Issue #79 / ADR governance?
+- [ ] ADR ID(s) associated with this PR: `ADR-XXXX` (or N/A with justification below)
+- [ ] If architecture was modified without an ADR, did you apply the `skip-adr` label or include `[skip-adr]` in the commit message?
+
+## Related Issues
+Closes #[Issue Number]
+
+## Testing & CI Evidence
+- [ ] All tests passed (`pytest`, etc.)
+- [ ] `python scripts/check_adrs.py` passed successfully
+- [ ] CI build evidence attached/linked
