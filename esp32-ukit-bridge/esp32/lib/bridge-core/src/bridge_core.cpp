@@ -209,7 +209,7 @@ void BridgeCore::pushCompletion(const Completion& completion) {
 
 void BridgeCore::attemptSend(uint32_t nowMs, Transport& transport) {
   if (pendingAttempts_ > 0) {
-    ++g_diagnostics.retries;  // Count as retry (first attempt: pendingAttempts_ == 0).
+    ++bridge::g_diagnostics.retries;  // Count as retry (first attempt: pendingAttempts_ == 0).
   }
   transport.send(pending_.payload, pending_.payloadLength);
   ++pendingAttempts_;

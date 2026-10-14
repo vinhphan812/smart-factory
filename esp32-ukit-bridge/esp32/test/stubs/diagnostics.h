@@ -23,11 +23,7 @@ struct DiagnosticsCounters {
   uint32_t telemetry_recovered_count = 0;
 };
 
-// Tentative definition: every TU that includes this header gets one.
-// The linker merges all tentative definitions for the same symbol into a single
-// instance (C++ standard [basic.link]/3).  This avoids both multiple-definition
-// errors (no strong definition elsewhere in the TU) and undefined-reference
-// errors (the tentative definition provides the object).
-DiagnosticsCounters g_diagnostics;
+// Declaration — definition lives in diagnostics_stub.cpp.
+extern DiagnosticsCounters g_diagnostics;
 
 }  // namespace bridge
