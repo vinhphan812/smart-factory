@@ -99,7 +99,7 @@ class MqttBridge final : public bridge::TelemetryHandler {
              const char* password, const char* deviceId);
 
   void begin();
-  void tick(uint32_t nowMs, bool networkReady);
+  void tick(uint32_t nowMs, bool networkReady, uint32_t lastTelemetryAgeMs);
 
   // bridge::TelemetryHandler — called by UartAdapter when a TEL frame arrives.
   // Inline definition for native tests (vtable must be complete without mqtt_bridge.cpp).
@@ -121,6 +121,7 @@ class MqttBridge final : public bridge::TelemetryHandler {
   bool enabled() const { return enabled_; }
   std::uint32_t telDropped() const { return telDropped_; }
   std::uint32_t telPublished() const { return telPublished_; }
+  std::size_t queueDepth() const { return core_.queuedCount(); }
 
   // Accessors exposed so tests can call bridge::publishTelemetry() directly.
   const char* deviceId() const { return deviceId_; }
@@ -157,8 +158,11 @@ class MqttBridge final : public bridge::TelemetryHandler {
   char ackTopic_[128]{};
   char telemetryTopic_[128]{};
   char statusTopic_[128]{};
+  char heartbeatTopic_[128]{};
   uint16_t nextSequence_ = 0;
   uint32_t reconnectAtMs_ = 0;
+  uint32_t lastHeartbeatAtMs_ = 0;
+  bool wasTelemetryStale_ = false;
   bool enabled_ = false;
   bool completionPendingPublish_ = false;
   bridge::Completion completionPending_{};
@@ -200,6 +204,8 @@ inline void MqttBridge::begin() {
                 "smart-factory/%s/telemetry", deviceId_);
   std::snprintf(statusTopic_, sizeof(statusTopic_),
                 "smart-factory/%s/status", deviceId_);
+  std::snprintf(heartbeatTopic_, sizeof(heartbeatTopic_),
+                "smart-factory/%s/heartbeat", deviceId_);
 
   instance_ = this;
   client_.setServer(host_, port_);

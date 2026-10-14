@@ -60,7 +60,11 @@ bool UartAdapter::send(const uint8_t* data, std::size_t length) {
   if (data == nullptr || length == 0) {
     return false;
   }
-  return serial_.write(data, length) == length;
+  const bool ok = serial_.write(data, length) == length;
+  if (ok) {
+    ++bridge::g_diagnostics.tx_frames;
+  }
+  return ok;
 }
 
 void UartAdapter::consume(uint8_t byte, uint32_t nowMs,
@@ -69,7 +73,11 @@ void UartAdapter::consume(uint8_t byte, uint32_t nowMs,
   if (result.status == amlp::ParseStatus::FrameReady) {
     handleFrame(receivedFrame_, nowMs, core);
   } else if (result.status == amlp::ParseStatus::Error) {
-    ++bridge::g_diagnostics.parse_errors;
+    if (result.error == amlp::Error::InvalidCrc) {
+      ++bridge::g_diagnostics.crc_errors;
+    } else {
+      ++bridge::g_diagnostics.parse_errors;
+    }
   }
 }
 

@@ -9,6 +9,7 @@
 #include "amlp/amlp.hpp"
 #include "bridge_config.h"
 #include "command_mapper.h"
+#include "diagnostics.h"
 #include "json_adapter.h"
 
 namespace {
@@ -63,7 +64,7 @@ const char* statusName(int16_t statusCode) {
 
 }  // namespace
 
-void MqttBridge::tick(uint32_t nowMs, bool networkReady) {
+void MqttBridge::tick(uint32_t nowMs, bool networkReady, uint32_t lastTelemetryAgeMs) {
   if (!enabled_) {
     return;
   }
@@ -84,6 +85,18 @@ void MqttBridge::tick(uint32_t nowMs, bool networkReady) {
 
   client_.loop();
   publishCompletions();
+
+  // Publish heartbeat on interval.
+  if (due(nowMs, lastHeartbeatAtMs_ + bridge_config::kHeartbeatIntervalMs)) {
+    lastHeartbeatAtMs_ = nowMs;
+    publishHeartbeat(client_, deviceId_,
+                    static_cast<uint16_t>(core_.queuedCount()),
+                    lastTelemetryAgeMs);
+  }
+
+  // Check telemetry health every tick — wasTelemetryStale_ persists across calls.
+  checkTelemetryHealth(client_, deviceId_, nowMs, lastTelemetryAgeMs,
+                       wasTelemetryStale_);
 }
 
 void MqttBridge::callbackThunk(char* topic, uint8_t* payload,
@@ -257,8 +270,10 @@ void MqttBridge::connectOnce(uint32_t nowMs) {
                      password_ == nullptr ? "" : password_, statusTopic_,
                      1, true, kOfflinePayload);
   if (!connected) {
+    ++bridge::g_diagnostics.mqtt_connect_fails;
     return;
   }
+  ++bridge::g_diagnostics.mqtt_connects;
 
   if (client_.subscribe(commandTopic_, 1)) {
     publishOnlineStatus();
@@ -290,6 +305,7 @@ void MqttBridge::publishImmediateAck(const char* requestId, uint16_t sequence,
   char buffer[256]{};
   serializeJson(document, buffer, sizeof(buffer));
   client_.publish(ackTopic_, buffer, false);
+  ++bridge::g_diagnostics.mqtt_publishes;
 }
 
 void MqttBridge::publishCompletions() {
@@ -324,7 +340,11 @@ bool MqttBridge::publishCompletion(const bridge::Completion& completion) {
 
   char buffer[256]{};
   serializeJson(document, buffer, sizeof(buffer));
-  return client_.publish(ackTopic_, buffer, false);
+  const bool ok = client_.publish(ackTopic_, buffer, false);
+  if (ok) {
+    ++bridge::g_diagnostics.mqtt_publishes;
+  }
+  return ok;
 }
 
 void MqttBridge::publishOnlineStatus() {
@@ -335,6 +355,7 @@ void MqttBridge::publishOnlineStatus() {
   char buffer[160]{};
   serializeJson(document, buffer, sizeof(buffer));
   client_.publish(statusTopic_, buffer, true);
+  ++bridge::g_diagnostics.mqtt_publishes;
 }
 
 #if !defined(PLATFORMIO_NATIVE_TEST)
