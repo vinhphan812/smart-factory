@@ -46,4 +46,4 @@ No remote unsupervised actuation, safety certification claims, fictitious perfor
 One modular monorepo: keep each component isolated, source-compatible via versioned contracts, review via PR and [Master Backlog #52](https://github.com/vinhphan812/smart-factory/issues/52). Close work only with evidence for its stated acceptance level.
 
 
-**Engine change provenance:** Unity is the selected engineering implementation engine (Issues #11/#12/#33–#35). The original formal research proposal named Unreal Engine. This original wording is historical; institutional authorization for the technology change has not been verified. See proposed ADR-0003 in PR #89.
+**Engine change provenance:** Unity is the selected engineering implementation engine (Issues #11/#12/#33–#35). The original formal research proposal named Unity. This original wording is historical; institutional authorization for the technology change has not been verified. See proposed ADR-0003 in PR #89.

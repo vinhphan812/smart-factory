@@ -49,10 +49,22 @@ Operator/AI intent → role/capability authorization → current context and saf
 5. Applications (Unity Twin, dashboard, educational interfaces)
 
 ## Open architecture decisions
-- ADR-001: canonical system event schema and device IDs; compatibility with existing bridge MQTT.
-- Unity editor/LTS selection, renderer/runtime, scene/prefab/meta/Git LFS and 3D asset policy: Issue #11; ADR-0003 is proposed in PR #89 (not yet merged).
-- ADR-003: verified per-device controller/voltage/SDK and emergency-stop mechanism.
-- ADR-004: actual MiniAlpha API and allowed response skills.
-- ADR-005: latency thresholds from instrumented baselines rather than untested declarations.
+
+> ⚠️ The ADR backfill is in progress (Issue #81). Placeholder IDs below will be replaced with links to actual records.
+
+- [ADR-0001](adr-0001-modular-monorepo.md): modular monorepo structure and module boundaries
+- [ADR-0002](adr-0002-bridge-mqtt-amlp-contract.md): bridge MQTT ↔ AMLP contract and topic patterns
+- [ADR-0003](adr-0003-digital-twin-engine.md): Digital Twin engine: Unity selected (institutional approval unverified)
+- [ADR-0004](adr-0004-mega-sdk-boundary.md): Mega SDK boundary: portable C99 vs UBTEDU vendor SDK
+- [ADR-0005](adr-0005-gateway-canonical-events.md): gateway canonical event envelope and normalization
+- [ADR-0006](adr-0006-local-physical-safety.md): local physical command safety and AI fail-closed guard
+- [ADR-0007](adr-0007-signed-ota-ab-rollback.md): signed HTTPS OTA with A/B rollback
+- [ADR-0008](adr-0008-ota-manager-event-driven.md): event-driven OtaManager (no dedicated FreeRTOS task)
+- [ADR-0009](adr-0009-telemetry-schema-compatibility.md): telemetry schema compatibility ⚠️ KNOWN MISMATCH
+- ~~ADR-001~~: canonical system event schema and device IDs → see ADR-0005
+- ~~ADR-002~~: Unreal engine version → see ADR-0003
+- ~~ADR-003~~: per-device controller/voltage/SDK and E-stop → see ADR-0004 / ADR-0006
+- ~~ADR-004~~: MiniAlpha API and skills → see Issue #13
+- ~~ADR-005~~: latency thresholds → see Issue #43
 
 See [component boundaries](components.md), [contracts](../contracts-and-data.md) and [acceptance](../testing-and-acceptance.md).

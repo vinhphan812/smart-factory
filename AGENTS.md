@@ -13,7 +13,7 @@ Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/repository-layout.m
 - Do not treat queued or ACK as verified physical completion.
 - No secrets, identifiable participant data or proprietary SDK/3D assets in the public repository.
 
-**Engine decision:** Unity is the CURRENT engineering target. The original institutional proposal referenced Unreal Engine; keep that only as historical scope information and flag institutional approval as unverified. See #11, #62, and proposed ADR-0003 in PR #89. Do not build Unreal assets or instruct agents to use Unreal.
+**Engine decision:** Unity is the CURRENT engineering target. The original institutional proposal referenced Unity Engine; keep that only as historical scope information and flag institutional approval as unverified. See #11, #62, and proposed ADR-0003 in PR #89. Do not build Unity assets or instruct agents to use Unity.
 
 ## Work policy
 1. Check Issue, dependency and current PR; claim an unassigned task with plan, ETA, tests. `/claim` is a manual convention, not an installed bot.

@@ -33,9 +33,9 @@
 5. **Physical safety:** local device controllers own motion limits and E-stop; AI/Twin/dashboard cannot bypass these.
 6. **Evidence over claims:** mark status as **Implemented**, **Simulated**, **Planned**, **Blocked**, or **Verified hardware**.
 
-## Design note: Unity selected; original proposal specified Unreal Engine
+## Design note: Unity selected; original proposal specified Unity Engine
 
-The original 2026 research proposal specifies **Unreal Engine**, but the project's CURRENT engineering decision is **Unity**, confirmed by Unity-specific Issues #11/#12/#33–#35. Unity is the intended implementation in `digital-twin/`; see #11 for project setup and ADR-0003 proposed in PR #89. Any required institutional approval of the proposal's technology change remains **PENDING / NOT VERIFIED**; historical proposal text is not an active engineering requirement.
+The original 2026 research proposal specifies **Unity Engine**, but the project's CURRENT engineering decision is **Unity**, confirmed by Unity-specific Issues #11/#12/#33–#35. Unity is the intended implementation in `digital-twin/`; see #11 for project setup and ADR-0003 proposed in PR #89. Any required institutional approval of the proposal's technology change remains **PENDING / NOT VERIFIED**; historical proposal text is not an active engineering requirement.
 
 ## Ownership
 

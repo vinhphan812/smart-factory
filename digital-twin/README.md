@@ -28,7 +28,7 @@ digital-twin/
 
 ## Design note
 
-**Current implementation target: Unity.** The original research proposal named Unreal Engine; that historical reference is not a requirement to build Unreal. Issue #11 tracks Unity bootstrap and exact editor version. Formal institutional approval of the research-proposal scope change remains unverified; see ADR-0003 in PR #89.
+**Current implementation target: Unity.** The original research proposal named Unity Engine; that historical reference is not a requirement to build Unity. Issue #11 tracks Unity bootstrap and exact editor version. Formal institutional approval of the research-proposal scope change remains unverified; see ADR-0003 in PR #89.
 
 ## Readiness
 
