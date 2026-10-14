@@ -1,6 +1,6 @@
 # Architecture Decision Records — Smart Factory
 
-Owner: Issue #65 (monorepo foundation)
+Owner: Issue #65 (monorepo foundation) | Task t_e6179730 verification
 
 ## Index
 
