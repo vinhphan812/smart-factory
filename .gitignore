@@ -1,1 +1,53 @@
+# === Smart Factory Monorepo ===
+
+# Git worktrees
 .worktrees/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# === PlatformIO (ESP32 + uKit) ===
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+
+# === PlatformIO firmware builds ===
+esp32-ukit-bridge/.pio/
+esp32-ukit-bridge/esp32/.pio/
+esp32-ukit-bridge/ukit/.pio/
+
+# === Unity ===
+# Preserve .meta files — they are source
+Library/
+Temp/
+Obj/
+Logs/
+UserSettings/
+Plugins/**/*.dll
+Builds/
+
+# === Stale local copies (real modules are at repository root) ===
+esp32-ukit-bridge/iot-gateway/
+esp32-ukit-bridge/dashboard/
+esp32-ukit-bridge/integration-tests/
+esp32-ukit-bridge/scripts/
+
+# === IDE / OS ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vs/
+.vscode/settings.json
+*.code-workspace
