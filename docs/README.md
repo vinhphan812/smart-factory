@@ -14,6 +14,7 @@ This is the engineering documentation hub for AIBOT Smart Factory. Read [Project
 | [Roadmap](ROADMAP.md) | 12-month sequencing and issue map |
 | [Risks](risks.md) | Hardware, safety, software and research risk register |
 | [Research/training](research-and-training.md) | Experiments, labs and deliverables |
+| [Experiment baselines](experiment-baselines.md) | Reproducible experiment designs, baselines and runbook |
 
 ## Source precedence
 1. Current source code and passing tests define **what is implemented**.
