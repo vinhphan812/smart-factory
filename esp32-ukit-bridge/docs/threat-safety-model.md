@@ -6,8 +6,8 @@ This document defines the threat model, command authorization rules, AI command 
 
 It supplements:
 - [MQTT contract](./mqtt-contract.md) -- topics, QoS, framing
-- [Command lifecycle & authorization](./contracts/v1/command-lifecycle.md) -- state machine, TTL, dedupe, error codes
-- [Command schema](./contracts/v1/schemas/command.schema.json) -- JSON field constraints
+- [Command lifecycle & authorization](../../contracts/v1/command-lifecycle.md) -- state machine, TTL, dedupe, error codes
+- [Command schema](../../contracts/v1/schemas/command.schema.json) -- JSON field constraints
 
 ---
 
@@ -327,4 +327,4 @@ Commands that do not receive an ACK within `maxAttempts * retryIntervalMs` are c
 
 ---
 
-*Document version 1.0 -- aligned with contracts/v1/command-lifecycle.md and ESP32 firmware v0.1.0.*
+*Document version 1.0 -- aligned with ../../contracts/v1/command-lifecycle.md and ESP32 firmware v0.1.0.*
