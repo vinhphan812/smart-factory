@@ -5,6 +5,7 @@ This is the engineering documentation hub for AIBOT Smart Factory. Read [Project
 | Document | Purpose |
 |---|---|
 | [Project context](PROJECT_CONTEXT.md) | Identity, objectives, hardware/software readiness, evidence boundaries |
+| [Repository layout](architecture/repository-layout.md) | Module map, purpose, contracts, ownership and design decisions |
 | [Architecture](architecture/overview.md) | Three systems, integration flows, existing versus target interfaces |
 | [Components](architecture/components.md) | Responsibility boundaries and module contracts |
 | [Integration contracts](contracts-and-data.md) | AMLP/MQTT reality and proposed canonical schema |
