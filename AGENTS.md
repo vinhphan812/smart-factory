@@ -1,6 +1,6 @@
 # AIBOT Smart Factory — Instructions for coding agents
 
-Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/overview.md`, `docs/contracts-and-data.md`, the affected module README/source/tests and GitHub Issue, then `docs/testing-and-acceptance.md`.
+Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/repository-layout.md`, `docs/architecture/overview.md`, `docs/contracts-and-data.md`, the affected module README/source/tests and GitHub Issue, then `docs/testing-and-acceptance.md`.
 
 ## Fixed context
 - Research system = **nine-module physical mini-factory + Unreal Engine real-time Digital Twin + MiniAlpha Edge AI Robot**. Not a retail twin and not a generic chatbot demo.
