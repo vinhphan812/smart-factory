@@ -2,6 +2,11 @@
 
 #include <cstdint>
 
+// Forward declaration — PubSubClient.h is included by the caller
+// (mqtt_bridge.cpp / diagnostics.cpp) to avoid pulling Arduino headers into
+// every file that only needs the diagnostics counters.
+class PubSubClient;
+
 namespace bridge {
 
 // Diagnostics counters tracked by the bridge.
@@ -41,3 +46,22 @@ struct DiagnosticsCounters {
 extern DiagnosticsCounters g_diagnostics;
 
 }  // namespace bridge
+
+// ---------------------------------------------------------------------------
+// Diagnostics functions (defined in diagnostics.cpp for ESP32 build;
+// diagnostics_stub.cpp provides g_diagnostics for native_test).
+// Both files are compiled for ESP32 via platformio.ini build_src_filter.
+// ---------------------------------------------------------------------------
+
+// Publishes a heartbeat JSON to smart-factory/{deviceId}/heartbeat every
+// kHeartbeatIntervalMs (30 s). Increments heartbeats_sent counter.
+bool publishHeartbeat(PubSubClient& client, const char* deviceId,
+                      uint16_t queueDepth, uint32_t lastTelAgeMs);
+
+// Checks telemetry staleness. On first stale detection: increments
+// telemetry_timeout_count and publishes warning event. On critical timeout
+// (2x): publishes critical event. On recovery: publishes recovery event and
+// increments telemetry_recovered_count.
+bool checkTelemetryHealth(PubSubClient& client, const char* deviceId,
+                          uint32_t nowMs, uint32_t lastTelAgeMs,
+                          bool& wasStale);
