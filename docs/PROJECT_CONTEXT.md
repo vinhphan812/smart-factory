@@ -11,7 +11,7 @@
 
 ## 2. Exactly three principal systems
 - **S1 Physical Smart Factory:** nine modular hardware elements, coordinated production/logistics, instrumented state and safely bounded control.
-- **S2 Real-time Digital Twin:** an **Unreal Engine** 3D model reflecting observed factory states, events, alarms, reconnect and stale/offline conditions. An offline animation is not evidence of synchronization with real machines.
+- **S2 Real-time Digital Twin:** a **Unity** 3D model reflecting observed factory states, events, alarms, reconnect and stale/offline conditions. An offline animation is not evidence of synchronization with real machines.
 - **S3 AI Edge Robot:** **MiniAlpha** to monitor, receive alerts, provide bounded supported on-site responses and interact with users. AI may not override physical safety interlocks or initiate unapproved physical rescue.
 
 Supporting infrastructure is cross-cutting, not an additional principal system: ESP32–UKIT bridge, gateway/MQTT, schema registry, event store, dashboard, alarm processing, CI/HIL/E2E and deployment tools.
@@ -44,3 +44,6 @@ No remote unsupervised actuation, safety certification claims, fictitious perfor
 
 ## 7. Governance
 One modular monorepo: keep each component isolated, source-compatible via versioned contracts, review via PR and [Master Backlog #52](https://github.com/vinhphan812/smart-factory/issues/52). Close work only with evidence for its stated acceptance level.
+
+
+**Engine change provenance:** Unity is the selected engineering implementation engine (Issues #11/#12/#33–#35). The original formal research proposal named Unreal Engine. This original wording is historical; institutional authorization for the technology change has not been verified. See proposed ADR-0003 in PR #89.
