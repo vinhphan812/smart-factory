@@ -72,3 +72,4 @@ iot-gateway --broker localhost --port 1883
 | `WS_PORT` | `8000` | WebSocket bind port |
 | `WS_HTTP_PORT` | `8001` | HTTP REST bind port (defaults to `WS_PORT + 1`) |
 | `MAX_EVENTS` | `10000` | Max events to keep in SQLite |
+# CI Trigger
