@@ -23,10 +23,6 @@ struct DiagnosticsCounters {
   uint32_t telemetry_recovered_count = 0;
 };
 
-#if defined(PLATFORMIO_NATIVE_TEST)
-DiagnosticsCounters g_diagnostics;
-#else
 extern DiagnosticsCounters g_diagnostics;
-#endif
 
 }  // namespace bridge
