@@ -1,10 +1,10 @@
 # Digital Twin — Smart Factory
 
-**Status: PLANNED** | Engine: **Unreal Engine** | Related issues: #11 #12 #33–#35
+**Status: PLANNED** | Engine: **Unity** | Related issues: #11 #12 #33–#35
 
 ## Purpose
 
-Real-time Unreal Engine 3D visualization of the nine-module physical factory. The Twin reflects observed device states, events, alarms, reconnect behavior and stale/offline conditions. An offline animation is **not** evidence of synchronization with real machines.
+Real-time Unity 3D visualization of the nine-module physical factory. The Twin reflects observed device states, events, alarms, reconnect behavior and stale/offline conditions. An offline animation is **not** evidence of synchronization with real machines.
 
 ## Inbound contracts
 
@@ -20,7 +20,7 @@ Real-time Unreal Engine 3D visualization of the nine-module physical factory. Th
 ```
 digital-twin/
 ├── README.md            ← this file
-├── Assets/              ← Unreal Engine assets (actors, materials, blueprints)
+├── Assets/              ← Unity scenes, prefabs, scripts, materials
 ├── Config/             ← Engine and project settings
 ├── Source/             ← C++ Twin logic
 └── Tests/              ← Twin synchronization tests
@@ -28,7 +28,7 @@ digital-twin/
 
 ## Design note
 
-The original research proposal specifies **Unreal Engine** (not Unity). This module uses Unreal Engine 5+. Issue #11 tracks bootstrap and architecture decisions.
+**Current implementation target: Unity.** The original research proposal named Unity Engine; that historical reference is not a requirement to build Unity. Issue #11 tracks Unity bootstrap and exact editor version. Formal institutional approval of the research-proposal scope change remains unverified; see ADR-0003 in PR #89.
 
 ## Readiness
 

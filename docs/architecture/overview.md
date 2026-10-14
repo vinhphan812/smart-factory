@@ -1,6 +1,6 @@
 # Smart Factory — Architecture (baseline and target)
 
-**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The scientific target uses Unreal Engine 3D and MiniAlpha. Earlier repository material mentions Three.js and unimplemented MQTT topics; those are not authoritative implementation claims.
+**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The current engineering target uses **Unity 3D** and MiniAlpha. The original research proposal specified Unreal Engine; this is a historical reference and its formal amendment/approval status is unverified. Earlier material also mentioned Three.js and unimplemented MQTT topics, which are not implementation claims.
 
 ## Existing bridge baseline
 
@@ -26,7 +26,7 @@ flowchart TD
   Bridge <-->|authenticated MQTT| Broker[Broker]
   Broker --> Gateway[IoT Gateway: validate normalize trace]
   Gateway --> Store[(Event store snapshots)]
-  Gateway --> Twin[Unreal Digital Twin]
+  Gateway --> Twin[Unity Digital Twin]
   Gateway --> Dash[Dashboard]
   Gateway --> Edge[Edge anomaly detector]
   Edge --> Robot[MiniAlpha notification / bounded skills]
@@ -46,7 +46,7 @@ Operator/AI intent → role/capability authorization → current context and saf
 2. Industrial / IoT communication (UART AMLP, MQTT; OPC UA is a potential extension)
 3. Edge / control (ESP32, local UKIT controllers, safe motion)
 4. Data / AI (gateway, event store, anomalous conditions, robot adapter)
-5. Applications (Unreal Twin, dashboard, educational interfaces)
+5. Applications (Unity Twin, dashboard, educational interfaces)
 
 ## Open architecture decisions
 
@@ -54,7 +54,7 @@ Operator/AI intent → role/capability authorization → current context and saf
 
 - [ADR-0001](adr-0001-modular-monorepo.md): modular monorepo structure and module boundaries
 - [ADR-0002](adr-0002-bridge-mqtt-amlp-contract.md): bridge MQTT ↔ AMLP contract and topic patterns
-- [ADR-0003](adr-0003-digital-twin-engine.md): Digital Twin engine: Unreal vs Unity ⚠️ UNRESOLVED
+- [ADR-0003](adr-0003-digital-twin-engine.md): Digital Twin engine: Unity selected (institutional approval unverified)
 - [ADR-0004](adr-0004-mega-sdk-boundary.md): Mega SDK boundary: portable C99 vs UBTEDU vendor SDK
 - [ADR-0005](adr-0005-gateway-canonical-events.md): gateway canonical event envelope and normalization
 - [ADR-0006](adr-0006-local-physical-safety.md): local physical command safety and AI fail-closed guard

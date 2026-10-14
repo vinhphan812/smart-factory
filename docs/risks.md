@@ -7,7 +7,7 @@
 | Bridge UART TEL not yet MQTT | Twin cannot be real-time | Implement telemetry path + tested gateway + stale semantics | #7 #12 #29 |
 | AI or UI bypasses local interlocks | Unsafe motion | Fail-closed policy, device bounds, local E-stop | #5 #37 #40 |
 | MiniAlpha hardware/software API unknown | Robot demo unavailable | Capability matrix, mocks and vendor-supported tests | #13 #36 |
-| Unreal binary assets large/licensing uncertain | Bad Git performance / legal exposure | Pin engine, Git LFS, asset-license review | #11 #33 |
+| Unity scene/model asset size and licensing uncertain | Bad Git performance / legal exposure | Pin engine, Git LFS, asset-license review | #11 #33 |
 | Duplicates, stale messages, clock skew | Incorrect twin or repeated command | sequence/version, expiry, idempotency, snapshot | #3 #30 #34 |
 | Sensitive keys or vendor SDK committed to public repo | Security/IP disclosure | secret scanning, placeholder env, legal review | #19 #41 |
 | Simulation results mistaken for physical results | Invalid research reports | Explicit test evidence levels + reproducibility | #18 #46 #48 |

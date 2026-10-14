@@ -11,7 +11,7 @@
 
 ## 2. Exactly three principal systems
 - **S1 Physical Smart Factory:** nine modular hardware elements, coordinated production/logistics, instrumented state and safely bounded control.
-- **S2 Real-time Digital Twin:** an **Unreal Engine** 3D model reflecting observed factory states, events, alarms, reconnect and stale/offline conditions. An offline animation is not evidence of synchronization with real machines.
+- **S2 Real-time Digital Twin:** a **Unity** 3D model reflecting observed factory states, events, alarms, reconnect and stale/offline conditions. An offline animation is not evidence of synchronization with real machines.
 - **S3 AI Edge Robot:** **MiniAlpha** to monitor, receive alerts, provide bounded supported on-site responses and interact with users. AI may not override physical safety interlocks or initiate unapproved physical rescue.
 
 Supporting infrastructure is cross-cutting, not an additional principal system: ESP32–UKIT bridge, gateway/MQTT, schema registry, event store, dashboard, alarm processing, CI/HIL/E2E and deployment tools.
@@ -34,7 +34,7 @@ Pipeline: incoming material → transport → conveyor → sorting → packaging
 ## 4. Current evidence (repository reviewed on 2026-10-12)
 `esp32-ukit-bridge/` contains ESP32-S3 PlatformIO firmware, MQTT-to-AMLP UART path, C99 UKIT **portable reference endpoint**, Python AMLP simulator/CLI, tests and protocol documentation. The reference endpoint is **not the vendor SDK**. Real UKIT wiring, electrical levels, firmware flashing, nine-module interfaces and MiniAlpha SDK remain separately gated by documented hardware evidence.
 
-The bridge documentation currently states ESP32 does **not yet** publish UART TEL as MQTT telemetry. Do not claim a live Digital Twin pipeline is finished. Planned IoT gateway, Unreal scene, AI detection, physical controllers and integration tests are represented by Issues, not automatically delivered.
+The bridge documentation currently states ESP32 does **not yet** publish UART TEL as MQTT telemetry. Do not claim a live Digital Twin pipeline is finished. Planned IoT gateway, **Unity scene**, AI detection, physical controllers and integration tests are represented by Issues, not automatically delivered.
 
 ## 5. Research objectives and measurements
 The proposal's research tasks encompass (i) overall architecture, (ii) physical integration, (iii) acquisition/transmission/storage/realtime sync, (iv) 3D Twin, and (v) AI Edge Robot integration. Research metrics should include sync latency distributions, loss, duplicate handling, recovery, run stability, bounded robot response and detection accuracy **only when actually measured**. Log run conditions, hardware versus simulated components, source commit and raw data.
@@ -44,3 +44,6 @@ No remote unsupervised actuation, safety certification claims, fictitious perfor
 
 ## 7. Governance
 One modular monorepo: keep each component isolated, source-compatible via versioned contracts, review via PR and [Master Backlog #52](https://github.com/vinhphan812/smart-factory/issues/52). Close work only with evidence for its stated acceptance level.
+
+
+**Engine change provenance:** Unity is the selected engineering implementation engine (Issues #11/#12/#33–#35). The original formal research proposal named Unity. This original wording is historical; institutional authorization for the technology change has not been verified. See proposed ADR-0003 in PR #89.
