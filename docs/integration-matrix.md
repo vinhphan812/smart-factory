@@ -21,15 +21,30 @@ Every module, capability, and integration path in the Smart Factory project is c
 
 ## 2. Comprehensive Component Capability Matrix
 
-| Component | Target System | Evidence Level | MQTT | AMLP v1 | UART | WS / API | Event Store | Safety Interlocks | Simulation Fallback | Status / Notes & Evidence Link |
+> **P2-1 column mapping:** The capability columns below (MQTT · AMLP v1 · UART · GPIO · WS/API · Event Store · Safety Interlocks · FLASH) are the historical protocol/subsystem coverage columns. The **Evidence Level** column uses the canonical taxonomy from Section 1 (L0–L5). These are orthogonal axes: a component may have an "Implemented" protocol capability at one evidence level while a different subsystem on the same component remains "Planned" at a lower evidence level.
+
+**Capability column key:**
+| Column | Maps to evidence taxonomy | Notes |
+|---|---|---|
+| MQTT | L2 — simulated MQTT broker in CI | Also L1 for host-unit publish/subscribe mocks |
+| AMLP v1 | L1 — host-unit protocol parser tests | L2 for end-to-end AMLP simulation |
+| UART | L3 (bench) / blocked | Physical UART HIL blocked by #98 |
+| GPIO | L3 (bench) / blocked | ESP32 GPIO blocked by official uKit SDK |
+| WS / API | L2 — gateway REST/WS in CI | Also L1 for host-unit route tests |
+| Event Store | L2 — SQLite persistence in CI | Also L1 for unit tests |
+| Safety Interlocks | L2 (stub) / **PLANNED** | Firmware interlock blocked by #98; contracts in ADR-0006/0007 |
+| Simulation Fallback | L2 | Explicit offline/loopback path per component |
+| FLASH | L3 (bench) / blocked | OTA FLASH blocked by #98; design in ADR-0007/0008 |
+
+|| Component | Target System | Evidence Level | MQTT | AMLP v1 | UART | GPIO | WS / API | Event Store | Safety Interlocks | FLASH | Simulation Fallback | Status / Notes & Evidence Link |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **ESP32 Bridge** | Firmware (`esp32/`) | **L2** (Simulated / Host Unit) / **L3** (Bench: **NOT VERIFIED / BLOCKED**) | Implemented | Implemented | Implemented | N/A | Stub | Stub (Firmware) | TCP AMLP loopback (`amlp-sim`) | Wi-Fi & MQTT client implemented; UART telemetry -> MQTT operational in simulation. GPIO sensor/actuator reads are stubs pending uKit SDK (BLOCKED by #98). |
-| **Arduino MEGA 2560 (Reference)** | Firmware (`ukit/`) | **L1** (Host Unit) / **L2** (Simulated) / **L3** (Bench: **NOT VERIFIED / BLOCKED**) | N/A | Implemented | Implemented | N/A | N/A | N/A (Firmware) | Python TCP Simulator (`amlp-sim`) | Portable C99 reference endpoint; AMLP parsing, CRC, ACK, and telemetry generation tested via unit tests (L1/L2). Real hardware firmware blocked on official uKit SDK & pinout (#98). |
-| **Nine Physical Modules** | Factory Floor (`factory-control/`) | **L1** (Specified / Planned) | Planned | Planned | Planned | Planned | Planned | Planned | Python software module mocks | Modular factory cells (conveyors, sorters, robotic arms). Hardware procurement and interface mapping pending (**BLOCKED by #98**). |
-| **Unity Digital Twin** | Digital Twin (`digital-twin/`) | **L1** (Specified / Planned) | Planned | N/A | N/A | Planned (REST/WS) | Planned (Snapshots) | Read-only view | Offline animation / mock telemetry playback | Unity selected as engineering engine per ADR-0003. Scene prefabs, state reducers, and reconnect logic planned. Live real-time synchronization is **NOT VERIFIED / BLOCKED**. |
-| **MiniAlpha Edge AI** | Edge Robot (`edge-ai-robot/`) | **L1** (Specified / Planned) | Planned | N/A | N/A | Planned (MQTT/API) | Planned | Bounded Action Guard | Mock LLM / synthetic vision responses | On-site assistant and anomaly detection. Hardware procurement and official SDK pending (**BLOCKED by #98**). Bounded action guard prevents unauthorized physical override. |
-| **MQTT Ingestion Gateway** | SCADA / Cloud (`iot-gateway/`) | **L2** (Simulated / CI Tested) | Implemented | N/A | N/A | Implemented | Implemented (SQLite) | N/A | Local Mosquitto broker + `mqtt-cli` | MQTT subscriber, event store, WebSocket and HTTP REST API operational in CI (`python3 -m pytest iot-gateway/tests/`). TLS auth planned. |
-| **Safety Gate / Interlocks** | Safety & OTA (`shared/` / Firmware) | **L2** (Simulated) | Implemented (Abort signals) | N/A | N/A | N/A | Implemented (Audit log) | Implemented (Firmware check: **L1/L2**) | Software simulation of watchdog and emergency stop | Monitors UART/MQTT health; aborts OTA staging and halts actuation if telemetry degrades in software simulation. Physical actuation interlock is **NOT VERIFIED / BLOCKED**. |
+| **ESP32 Bridge** | Firmware (`esp32/`) | **L2** (Simulated / Host Unit) / **L3** (Bench: **NOT VERIFIED / BLOCKED**) | Implemented | Implemented | Implemented | Stub | N/A | Stub | Stub (Firmware) | STUB — OTA FLASH design in ADR-0007; no HIL yet (BLOCKED by #98) | TCP AMLP loopback (`amlp-sim`) | Wi-Fi & MQTT client implemented; UART telemetry -> MQTT operational in simulation. GPIO sensor/actuator reads are stubs pending uKit SDK (BLOCKED by #98). |
+| **Arduino MEGA 2560 (Reference)** | Firmware (`ukit/`) | **L1** (Host Unit) / **L2** (Simulated) / **L3** (Bench: **NOT VERIFIED / BLOCKED**) | N/A | Implemented | Implemented | N/A | N/A | N/A | N/A | N/A | Python TCP Simulator (`amlp-sim`) | Portable C99 reference endpoint; AMLP parsing, CRC, ACK, and telemetry generation tested via unit tests (L1/L2). Real hardware firmware blocked on official uKit SDK & pinout (#98). |
+| **Nine Physical Modules** | Factory Floor (`factory-control/`) | **L0** (Static / Schema) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Python software module mocks | Modular factory cells (conveyors, sorters, robotic arms). No executable code yet. Interface contracts, schema, and requirements documented (**BLOCKED by #98**). |
+| **Unity Digital Twin** | Digital Twin (`digital-twin/`) | **L0** (Static / Schema) | Planned | N/A | N/A | N/A | Planned (REST/WS) | Planned (Snapshots) | Read-only view | N/A | Offline animation / mock telemetry playback | Unity selected as engineering engine per ADR-0003. Scene prefabs, state reducers, reconnect logic, and event snapshot schema are documented design artefacts — no executable code yet. Live real-time synchronization is **NOT VERIFIED / BLOCKED**. |
+| **MiniAlpha Edge AI** | Edge Robot (`edge-ai-robot/`) | **L0** (Static / Schema) | Planned | N/A | N/A | N/A | Planned (MQTT/API) | Planned | Bounded Action Guard | N/A | Mock LLM / synthetic vision responses | On-site assistant and anomaly detection. Hardware procurement and official SDK pending (**BLOCKED by #98**). Bounded action guard prevents unauthorized physical override. No executable code yet — only documented design artefacts and API schema. |
+| **MQTT Ingestion Gateway** | SCADA / Cloud (`iot-gateway/`) | **L2** (Simulated / CI Tested) | Implemented | N/A | N/A | N/A | Implemented | Implemented (SQLite) | N/A | N/A | Local Mosquitto broker + `mqtt-cli` | MQTT subscriber, event store, WebSocket and HTTP REST API operational in CI (`python3 -m pytest iot-gateway/tests/`). TLS auth planned. |
+| **Safety Gate / Interlocks** | Safety & OTA (`shared/` / Firmware) | **L2** (Simulated) / **PLANNED** (Firmware) | STUB — abort signals in MQTT payload schema ([`docs/architecture/esp32-ota-design.md`](docs/architecture/esp32-ota-design.md)) | N/A | N/A | N/A | N/A | STUB — `EventStore` records all events; no dedicated safety-audit log schema yet ([`iot-gateway/src/iot_gateway/event_store.py:1`](iot-gateway/src/iot_gateway/event_store.py)) | STUB — firmware interlock contract in ADR-0006; no executable logic yet ([`docs/adr/adr-0006-local-physical-safety.md`](docs/adr/adr-0006-local-physical-safety.md)) | STUB — ADR-0007/0008 describe watchdog/estop; no simulation impl. | All Safety Gate capabilities are **STUB or PLANNED**. No executable abort, safety audit log, or firmware interlock in code. ADR contracts define required behaviour; implementation pending Issue #98. |
 
 ---
 
@@ -55,7 +70,7 @@ Verifies MQTT message normalization, SQLite event store persistence, and REST/WS
 ```bash
 python3 -m pytest iot-gateway/tests/ -v
 ```
-*(Source: `iot-gateway/tests/` — 46 passing tests in CI)*
+*(Source: `iot-gateway/tests/` — CI tests passing; exact count varies by Python version matrix)*
 
 ### B. Python AMLP Codec & TCP Simulator (L2)
 Exercises protocol framing, CRC validation, command ACK generation, duplicate request rejection, and TCP socket communication locally:
