@@ -5,144 +5,98 @@
 **Deciders:** Issue #41
 **Related issues:** #41
 
-**ID Ownership Note:** ADR-0010 is reserved for MQTT broker security (this document). ADR-0010 for dashboard safety is in PR #100 (branch `feat/dashboard-safety-adr`); this ADR will be renumbered by the dependent task after PR #102 is merged.
-
----
-
 ## Context
 
 Issue #41 (Harden MQTT broker authentication, TLS and secret management) is a P1 open implementation issue that introduces or materially changes a security mechanism. Per ADR Trigger Rule 3, this requires an ADR before implementation merge.
 
-ADR-0006 (Local Physical Command Safety) documents Layer 1 MQTT broker ACL enforcement at a high level ("per Issue #41") but does not specify broker identity verification, TLS trust chain configuration, or the full authorization boundary. ADR-0007 (Signed HTTPS OTA) does not address MQTT broker security. Neither ADR contains documented evidence of broker identity, TLS certificate trust anchor, credential storage, or session authorization scope.
+ADR-0006 (Local Physical Command Safety) documents Layer 1 MQTT broker ACL enforcement at a high level ("per Issue #41") but does not specify broker identity verification, TLS trust chain configuration, or the authorization boundary. ADR-0007 (Signed HTTPS OTA) does not address MQTT broker security. Neither ADR records broker identity, TLS certificate trust-anchor, credential-storage, or session-authorization evidence.
 
-Without a dedicated ADR, implementation of Issue #41 lacks an auditable decision record, and the coverage claim in the issue-to-ADR table is unsupported.
+ADR-0010 is reserved for this broker-security decision. PR #100 must use ADR-0011; this ADR must not be renumbered or repurposed.
+
+The current bridge MQTT contract defines only these per-device topics:
+
+| Topic | Bridge direction |
+|---|---|
+| `smart-factory/{deviceId}/command/down` | Subscribe |
+| `smart-factory/{deviceId}/command/ack` | Publish |
+| `smart-factory/{deviceId}/telemetry` | Publish |
+| `smart-factory/{deviceId}/status` | Publish |
+
+The gateway configuration currently subscribes to `smart-factory/+/command/ack` and `smart-factory/+/status`. This ADR proposes the authorization policy for gateway ingestion of the bridge-published telemetry, status, and command-ack topics. It does not claim that a broker ACL, TLS listener, or client configuration is already implemented.
 
 ## Decision
 
-The following architectural decisions are established for MQTT broker security and MUST be documented before Issue #41 implementation proceeds:
+The following policy is proposed for MQTT broker security before Issue #41 implementation proceeds.
 
-**Broker Identity and TLS Trust Chain:**
-- Bridge and all service clients MUST verify the broker's TLS certificate against a pinned trust anchor. Self-signed certificates are acceptable if the CA cert is pinned at build time; publicly-trusted CAs are preferred where feasible.
-- Broker hostname verification MUST be enforced; IP-only connections are not permitted for production deployments.
-- No certificate chain validation bypass is permitted, even in non-production environments.
+### Broker identity and TLS trust chain
 
-**Authentication:**
-- All clients MUST authenticate with the broker using credentials stored in a secrets manager (not hardcoded). Supported mechanisms: TLS client certificates (preferred for services) or username/password over TLS (minimum for constrained devices).
-- Bridge credentials MUST be scoped to bridge-only topics; they MUST NOT have admin or cross-tenant access.
-- Long-lived static credentials MUST be rotatable without service downtime (credential versioning or dual-credential window).
+- Bridge and service clients MUST verify the broker TLS certificate against a configured trust anchor.
+- Broker hostname verification MUST be enforced for production deployments; IP-only connections are not permitted for production deployments.
+- Certificate-chain validation bypass is not permitted.
+- Whether the trust anchor is a pinned private CA or a publicly trusted CA, and how it rotates, requires implementation-specific review before an Accepted ADR or deployment claim.
 
-**Note:** The broker uses username/password authentication over TLS (port 8883), not SASL PLAIN. SASL PLAIN transmits credentials in cleartext over the wire; TLS encrypts the entire connection, providing transport security.
+### Authentication
 
-**Authorization (ACL):**
+- Clients MUST authenticate in the MQTT CONNECT packet with a username and password over a TLS-protected connection, unless a later accepted decision selects a different MQTT authentication mechanism.
+- Credentials MUST NOT be hard-coded or emitted in MQTT payloads, status, or logs.
+- Bridge credentials MUST be scoped to the bridge identity and its permitted topics; they MUST NOT grant administration or cross-device access.
+- Credential rotation must be designed before implementation; this Proposed policy does not establish an implemented rotation mechanism.
 
-The following ACL matrix defines the authorized topic patterns based on the source contracts:
+### Authorization (proposed ACL policy)
 
-- **esp32-ukit-bridge/docs/mqtt-contract.md** — defines bridge publish/subscribe behavior
-- **iot-gateway/src/iot_gateway/config.py** — defines gateway subscribe patterns (`DEFAULT_TOPICS`)
+The broker is intended to enforce topic-level ACLs. The following is the proposed enforcement table, grounded only in current bridge topic forms. `{deviceId}` represents the identity-bound bridge device and `+` represents a gateway subscription across device IDs.
 
-| Client | Subscribe | Publish | Rationale |
-|--------|-----------|---------|-----------|
-| bridge | `smart-factory/{deviceId}/command/down` | `smart-factory/{deviceId}/command/ack`<br>`smart-factory/{deviceId}/telemetry`<br>`smart-factory/{deviceId}/status` | Command ingress via per-device subscription; command ACK, telemetry, and status egress |
-| gateway | `smart-factory/+/command/ack`<br>`smart-factory/+/status` | — | Listens to all device ACKs and status for canonical event normalization (see `config.py` `DEFAULT_TOPICS`) |
+| Client identity | Allow publish | Allow subscribe | Rationale |
+|---|---|---|---|
+| Bridge for `{deviceId}` | `smart-factory/{deviceId}/command/ack`, `smart-factory/{deviceId}/telemetry`, `smart-factory/{deviceId}/status` | `smart-factory/{deviceId}/command/down` | Matches the bridge contract: commands enter the bridge; ACK, telemetry, and status leave it. |
+| Gateway | — | `smart-factory/+/telemetry`, `smart-factory/+/status`, `smart-factory/+/command/ack` | Gateway ingests bridge-origin telemetry, status, and completion/validation ACKs. |
 
-**Notes:**
-- The gateway does NOT currently subscribe to `smart-factory/+/telemetry` (future enhancement; see `models.py` EventType.TELEMETRY comment).
-- The gateway does NOT currently subscribe to heartbeat topics (marked as future in `models.py` EventType.HEARTBEAT).
-- ACLs for dashboard, edge-ai, and ota-manager are out of scope for this ADR; they require separate ADRs once those components are wired to MQTT.
+Heartbeat is not included because the current bridge MQTT contract does not define a heartbeat topic. No `/telemetry/up`, `/status/#`, `action/proposed`, or `ota/#` pattern is part of this current ACL enforcement table.
 
-### Positive ACL Examples (allowed)
+### ACL examples
 
-1. **Bridge receives command:**
-   - Topic: `smart-factory/ukit-00000000/command/down`
-   - Client: bridge (deviceId: ukit-00000000)
-   - Action: ALLOW — bridge subscribes to its own per-device command topic
+Positive examples under the proposed policy:
 
-2. **Bridge publishes ACK:**
-   - Topic: `smart-factory/ukit-00000000/command/ack`
-   - Client: bridge (deviceId: ukit-00000000)
-   - Action: ALLOW — bridge publishes ACK for its own commands
+- A bridge credential bound to `ukit-00000000` may subscribe to `smart-factory/ukit-00000000/command/down`.
+- That bridge credential may publish telemetry to `smart-factory/ukit-00000000/telemetry`, status to `smart-factory/ukit-00000000/status`, and ACKs to `smart-factory/ukit-00000000/command/ack`.
+- A gateway credential may subscribe to `smart-factory/+/telemetry`, `smart-factory/+/status`, and `smart-factory/+/command/ack`.
 
-3. **Gateway receives all ACKs:**
-   - Topic: `smart-factory/+/command/ack`
-   - Client: gateway
-   - Action: ALLOW — gateway subscribes to canonical ACK stream
+Negative examples that the proposed broker ACL must deny:
 
-4. **Gateway receives all status:**
-   - Topic: `smart-factory/+/status`
-   - Client: gateway
-   - Action: ALLOW — gateway subscribes to status updates
+- A bridge credential for `ukit-00000000` subscribing to `smart-factory/ukit-00000001/command/down` (cross-device command subscription).
+- A bridge credential subscribing to `smart-factory/ukit-00000000/telemetry` or `smart-factory/ukit-00000000/status` (bridge-origin topics are publish-only for the bridge).
+- A gateway credential publishing to `smart-factory/ukit-00000000/telemetry`, `smart-factory/ukit-00000000/status`, or `smart-factory/ukit-00000000/command/ack` (bridge-origin topics).
+- Either credential publishing or subscribing to an unknown pattern such as `smart-factory/ukit-00000000/unknown`.
 
-### Negative ACL Examples (denied)
-
-1. **Bridge attempts to subscribe to another device's command:**
-   - Topic: `smart-factory/ukit-00000001/command/down`
-   - Client: bridge (deviceId: ukit-00000000)
-   - Action: DENY — bridge can only subscribe to its own deviceId
-
-2. **Bridge attempts to subscribe to telemetry:**
-   - Topic: `smart-factory/ukit-00000000/telemetry`
-   - Client: bridge
-   - Action: DENY — bridge does not subscribe to telemetry; it only publishes it
-
-3. **Gateway attempts to publish to bridge command topic:**
-   - Topic: `smart-factory/ukit-00000000/command/down`
-   - Client: gateway
-   - Action: DENY — gateway only subscribes; commands originate from external systems
-
-4. **Unrecognized topic pattern:**
-   - Topic: `smart-factory/+/events/#`
-   - Client: any
-   - Action: DENY — no component is authorized to use this topic pattern
-
-### Policy vs. Implementation
-
-**This ADR establishes policy decisions**, not implementation state. The ACL matrix describes what *should* be enforced once Issue #41 is implemented. It does not claim that broker-enforced ACLs are currently active.
-
-- Current state: Clients may honor topic conventions, but there is no broker-side ACL enforcement.
-- Target state: Broker ACLs enforce the patterns in the matrix above.
-- This ADR does not cover dashboard, edge-ai, or ota-manager MQTT integration — those are separate future work.
-
----
-
-**Audit Gap Acknowledgement:**
-The following are explicitly NOT covered by this ADR and require separate ADRs before implementation:
-- Broker deployment topology (on-prem vs cloud) — covered by Trigger 6 (deployment topology) if it changes.
-- Integration with a secrets management service (HashiCorp Vault, AWS Secrets Manager) — requires a dedicated ADR specifying the secret injection mechanism.
-- Certificate pinning rotation policy — requires a dedicated ADR.
+This is a **Proposed policy**, not evidence of implemented broker enforcement. A future implementation must configure the selected broker and supply separate verification evidence for TLS and every allow/deny case.
 
 ## Consequences
 
 **Easier:**
-- Issue #41 can now reference a specific ADR governing broker identity, TLS, and ACL decisions.
-- Security review has a single authoritative record for the broker trust model.
-- Credential scoping reduces blast radius of a compromised credential.
+- Issue #41 has a specific decision record for broker identity, TLS, MQTT CONNECT credentials, and ACL scope.
+- The bridge and gateway topic directions have a single contract-grounded authorization boundary.
+- Identity-bound bridge credentials reduce the impact of a compromised bridge credential.
 
 **Harder:**
-- TLS client certificates require PKI infrastructure (CA, issuance, distribution, revocation).
-- Broker ACL enforcement requires broker-side ACL configuration; not all brokers (e.g., public cloud IoT services) expose fine-grained topic ACLs.
-- Constrained ESP32 bridge may have limited TLS stack; certificate-based auth on resource-constrained devices requires evaluation.
-- Secrets manager integration adds operational complexity.
+- Broker-side ACL configuration and negative authorization tests are required before this policy can be considered enforced.
+- TLS trust-anchor provisioning, hostname verification, and credential rotation require operational design and test evidence.
+- The constrained ESP32 bridge requires implementation validation; this ADR does not establish hardware or production TLS evidence.
 
 ## Alternatives considered
 
-**Option A — TLS with pre-shared key (PSK)**
-- Lower computational overhead than certificate-based TLS.
-- Rejected for production: PSK material must be embedded or provisioned securely; rotation requires device update.
-- Acceptable as a transitional measure for constrained devices pending full PKI rollout.
+**Option A — rely on network isolation (broker not exposed outside VLAN)**
+- Rejected: a factory network boundary is not a sufficient security control; TLS and authorization provide defence in depth.
 
-**Option B — rely on network isolation (broker not exposed outside VLAN)**
-- Rejected: physical factory network boundary is not a sufficient security control; TLS provides defense-in-depth and broker identity assurance even on a trusted network.
+**Option B — client-side topic conventions without broker ACLs**
+- Rejected: client convention cannot prevent a compromised client from publishing or subscribing outside its intended scope.
 
-**Option C — defer to broker deployment documentation (no ADR)**
-- Rejected: ADR Trigger Rule 3 requires an ADR before implementing a security mechanism change. Implementation of Issue #41 without this ADR would bypass the architecture gate.
+**Option C — defer broker security to deployment documentation (no ADR)**
+- Rejected: ADR Trigger Rule 3 requires an ADR before implementing a material security-mechanism change.
 
 ## Evidence
 
-- Issue #41: "Harden MQTT broker authentication, TLS and secret management"
-- ADR-0006: Layer 1 MQTT broker ACL (acknowledges Issue #41 but does not detail TLS trust chain or credential scoping)
-- ADR-0007: OTA over HTTPS (does not address MQTT broker security)
-- `esp32-ukit-bridge/docs/mqtt-contract.md` — bridge topic contract (source of truth for bridge publish/subscribe)
-- `iot-gateway/src/iot_gateway/config.py` — gateway DEFAULT_TOPICS (source of truth for gateway subscribe)
-- `iot-gateway/src/iot_gateway/models.py` — EventType enum showing telemetry/heartbeat as future
-- `esp32-ukit-bridge/docs/threat-safety-model.md` — threat model reference
-- `docs/architecture/repository-layout.md` — module boundary rules
+- `esp32-ukit-bridge/docs/mqtt-contract.md` — current bridge topic names and publish/subscribe directions.
+- `iot-gateway/src/iot_gateway/config.py` — gateway MQTT credential configuration and current ACK/status subscriptions.
+- Issue #41 — "Harden MQTT broker authentication, TLS and secret management".
+- ADR-0006 — local physical command safety references broker ACLs at a high level but does not define broker identity, TLS trust, or topic authorization.
+- ADR-0007 — signed HTTPS OTA does not define MQTT broker security.

@@ -99,7 +99,7 @@ P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger
 | #60 | BRIDGE | Add Mega CI and hardware-in-loop flash wiring and recovery guide | P1 | Trigger 7 | ADR-0004 | Proposed; prerequisite: #56 Mega SDK audit |
 | #73 | BRIDGE | Implement authenticated HTTPS OTA client, maintenance gating and rollback on ESP32 bridge | P1 | Trigger 3, 5 | ADR-0007, ADR-0008 | Proposed |
 | #74 | BRIDGE | Build OTA release pipeline, staged rollout and real ESP32-S3 recovery test matrix | P1 | Trigger 5, 6 | ADR-0007, ADR-0008 | Proposed; prerequisite: #73 client implementation |
-| #41 | INFRA | Harden MQTT broker authentication, TLS and secret management | P1 | Trigger 3 | **ADR-0010** | **Proposed; ADR-0010 (broker identity, TLS trust chain, ACL matrix) governs this issue** |
+| #41 | INFRA | Harden MQTT broker authentication, TLS and secret management | P1 | Trigger 3 | **ADR-0010** | **Proposed; ADR-0010 (broker identity, TLS trust chain, ACL matrix) governs this issue and remains reserved for broker security. PR #100 must use ADR-0011.** |
 | #9 | PHYSICAL | Define 9-module physical factory interface and end-to-end sequence | P1 | Trigger 3, 7 | ADR-0006 | Proposed; prerequisite for all physical module adapters |
 | #25 | PHYSICAL | Forklift and dump-truck telemetry/control abstraction | P1 | Trigger 3, 7 | ADR-0006 | Proposed; prerequisite: #9 interface definition |
 | #26 | PHYSICAL | Tower-crane and storage/parking logistics adapter | P1 | Trigger 3, 7 | ADR-0006 | Proposed; prerequisite: #9 interface definition |
