@@ -22,7 +22,7 @@ The current bridge MQTT contract defines only these per-device topics:
 | `smart-factory/{deviceId}/telemetry` | Publish |
 | `smart-factory/{deviceId}/status` | Publish |
 
-The gateway configuration currently subscribes to `smart-factory/+/command/ack` and `smart-factory/+/status`. This ADR proposes the authorization policy for gateway ingestion of the bridge-published telemetry, status, and command-ack topics. It does not claim that a broker ACL, TLS listener, or client configuration is already implemented.
+The gateway configuration subscribes to `smart-factory/+/command/ack` and `smart-factory/+/status`; PR #100 additionally proposes to add `smart-factory/+/telemetry` and `smart-factory/+/heartbeat`. Heartbeat topic is not in the current bridge contract and requires a separate accepted decision before inclusion. This ADR proposes the authorization policy for gateway ingestion of the bridge-published telemetry, status, and command-ack topics. It does not claim that a broker ACL, TLS listener, or client configuration is already implemented.
 
 ## Decision
 

@@ -83,7 +83,7 @@ ADRs are governed by Issue #79 (ADR governance). CI lint checks and architecture
 
 > **⚠️ ADR Status Gate — Read Before Acting on This Table:** All ADRs below are currently `Proposed`. Referencing an ADR in a PR does **NOT** automatically approve architecture-impacting work. An ADR must reach `Accepted` status with verifiable architect sign-off evidence (PR approval comment, issue comment, meeting minutes, or signed document) before any implementation PR touching that architectural surface may be merged. The "Prerequisite Gate" column documents the exact requirement per issue. See "ADR Prerequisite Gate Criteria" below.
 
-P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger rules defined above (lines 39–45 of this README). Only issues currently open in the live tracker are included. Closed and archived issues are listed in the Historical Closed Issues appendix. Every architecture-impacting issue must reference its governing ADR(s) before implementation merge.
+P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger rules defined above (lines 39–45 of this README). Only issues currently open in the live tracker are included (this table is a manual snapshot as of 2026-10-15 — verify against live tracker before relying on prerequisite gates). Closed and archived issues are listed in the Historical Closed Issues appendix. Every architecture-impacting issue must reference its governing ADR(s) before implementation merge.
 
 | # | Area | Title | Priority | ADR Trigger(s) | Governing ADR(s) | Status / Prerequisite Gate |
 |---|---|---|---|---|---|---|
