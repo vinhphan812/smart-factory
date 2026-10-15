@@ -37,4 +37,6 @@ class GatewayConfig:
 DEFAULT_TOPICS = [
     "smart-factory/+/command/ack",
     "smart-factory/+/status",
+    "smart-factory/+/telemetry",
+    "smart-factory/+/heartbeat",
 ]
