@@ -1,0 +1,24 @@
+# ACL file for Mosquitto broker (Smart Factory)
+# Enforces per ADR-0010 MQTT Broker Security policy.
+# Note: %u expands to the connected client's username.
+# Note: + is a single-level wildcard, # is multi-level.
+
+# Bridge ACL: publishes telemetry/status/command-ack, subscribes own command/down
+user bridge
+pattern write smart-factory/%u/telemetry
+pattern write smart-factory/%u/status
+pattern write smart-factory/%u/command/ack
+pattern read smart-factory/%u/command/down
+
+# Gateway ACL: subscribes to all bridges' telemetry/status/command-ack per contract
+# Does NOT publish to bridge topics (denied by absence of write rules)
+user gateway
+pattern read smart-factory/+/telemetry
+pattern read smart-factory/+/status
+pattern read smart-factory/+/command/ack
+
+# Operator ACL: read-only monitoring access
+user operator
+pattern read smart-factory/+/telemetry
+pattern read smart-factory/+/status
+pattern read smart-factory/+/command/ack

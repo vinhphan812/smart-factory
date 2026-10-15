@@ -1,0 +1,29 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    ports:
+      - "${MQTT_BIND_ADDRESS:-127.0.0.1}:1883:1883"
+      - "${MQTT_TLS_BIND_ADDRESS:-127.0.0.1}:8883:8883"
+    environment:
+      MQTT_BRIDGE_USERNAME: ${MQTT_BRIDGE_USERNAME:?set MQTT_BRIDGE_USERNAME}
+      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD:?set MQTT_BRIDGE_PASSWORD}
+      MQTT_GATEWAY_USERNAME: ${MQTT_GATEWAY_USERNAME:?set MQTT_GATEWAY_USERNAME}
+      MQTT_GATEWAY_PASSWORD: ${MQTT_GATEWAY_PASSWORD:?set MQTT_GATEWAY_PASSWORD}
+      MQTT_OPERATOR_USERNAME: ${MQTT_OPERATOR_USERNAME:-operator}
+      MQTT_OPERATOR_PASSWORD: ${MQTT_OPERATOR_PASSWORD:?set MQTT_OPERATOR_PASSWORD}
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mqtt/acl:/mosquitto/config/acl:ro
+      - ./mqtt/entrypoint.sh:/usr/local/bin/smart-factory-mqtt-entrypoint.sh:ro
+      - ./certs:/mosquitto/certs:ro
+      - mqtt-data:/mosquitto/data
+    entrypoint: ["/usr/local/bin/smart-factory-mqtt-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_ctrl dynsec getAnonymousGroup >/dev/null 2>&1 || mosquitto_pub -h 127.0.0.1 -p 1883 -u \"$MQTT_BRIDGE_USERNAME\" -P \"$MQTT_BRIDGE_PASSWORD\" -t healthcheck -n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mqtt-data:

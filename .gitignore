@@ -51,3 +51,7 @@ Thumbs.db
 .vs/
 .vscode/settings.json
 *.code-workspace
+
+# === Infrastructure ===
+infrastructure/.env
+infrastructure/certs/
