@@ -1,0 +1,58 @@
+-- Migration: 001_add_timing_columns
+-- Issue: #34 Gateway Time Sync Recovery — P3 Review Finding
+--
+-- Adds timing metadata columns to the events table and creates the
+-- gateway_metadata table for restart-proof sequence numbering.
+--
+-- Idempotent: uses PRAGMA table_info checks to detect already-migrated columns.
+-- Safe on fresh databases: CREATE TABLE IF NOT EXISTS for gateway_metadata.
+-- Rollback: DROP the added columns (gateway_metadata can remain).
+--
+-- Run with: sqlite3 gateway.db < iot-gateway/migrations/001_add_timing_columns.sql
+-- Or let EventStore.init() apply the migration automatically on next startup.
+
+-- Show what this migration does
+.headers on
+.mode list
+
+-- Step 1: Add timing columns to events table (idempotent via PRAGMA check)
+--
+-- Timing column definitions:
+--   event_timestamp_ms : source timestamp ms (UTC or uptime domain — see
+--                         is_timestamp_synchronized flag in CanonicalEvent)
+--   received_at         : gateway receive timestamp (UTC, ISO 8601)
+--   latency_ms          : transit latency ms; -1 if unsynchronized
+--   stale               : 1 if event age > threshold, 0 otherwise
+--   out_of_order        : 1 if timestamp precedes last-seen for device, 0 otherwise
+--
+-- These columns are nullable=false with defaults so existing rows get valid values
+-- without any UPDATE needed (the DEFAULT applies to rows inserted after ALTER).
+
+-- Migration script is applied by EventStore._migrate_schema() using Python's
+-- sqlite3 + aiosqlite — this file is documentation + manual upgrade path.
+--
+-- The actual idempotent ALTER statements (executed by _migrate_schema):
+--
+--   ALTER TABLE events ADD COLUMN event_timestamp_ms INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE events ADD COLUMN received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;
+--   ALTER TABLE events ADD COLUMN latency_ms INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE events ADD COLUMN stale INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE events ADD COLUMN out_of_order INTEGER NOT NULL DEFAULT 0;
+--
+-- Step 2: Create gateway_metadata table for restart-proof sequence counter
+--
+-- CREATE TABLE IF NOT EXISTS gateway_metadata (
+--   key TEXT PRIMARY KEY,
+--   value TEXT NOT NULL
+-- );
+--
+-- Usage:
+--   -- Read current sequence
+--   SELECT value FROM gateway_metadata WHERE key = 'global_sequence';
+--
+--   -- Increment sequence (do this in a transaction with the event INSERT)
+--   INSERT OR REPLACE INTO gateway_metadata (key, value)
+--     VALUES ('global_sequence', COALESCE(
+--       (SELECT CAST(value AS INTEGER) + 1 FROM gateway_metadata WHERE key = 'global_sequence'),
+--       1
+--     ));

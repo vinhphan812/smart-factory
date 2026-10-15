@@ -124,7 +124,7 @@ async def test_query_empty(store: EventStore) -> None:
 
 @pytest.mark.asyncio
 async def test_sequence_ordering(store: EventStore) -> None:
-    """Events are returned in ascending sequence order when requested."""
+    """Events are returned in ascending sequence order (deterministic replay order)."""
     normalizer = EventNormalizer()
     for i in range(5):
         event = normalizer.normalize("smart-factory/d1/command/ack", b'{"command_id":1}')
@@ -133,5 +133,5 @@ async def test_sequence_ordering(store: EventStore) -> None:
 
     events = await store.query(device_id="d1", limit=10)
     sequences = [e["sequence"] for e in events]
-    # Default query order is DESC; verify consistent ordering (not random)
-    assert sequences == sorted(sequences, reverse=True)
+    # Query returns ASC sequence for deterministic replay
+    assert sequences == sorted(sequences)

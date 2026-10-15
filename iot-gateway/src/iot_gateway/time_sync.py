@@ -42,7 +42,8 @@ class TimeBounds:
         return self.stale_threshold_ms
 
     def is_clock_skew(
-        self, event_timestamp_ms: int, received_timestamp_ms: int
+        self, event_timestamp_ms: int, received_timestamp_ms: int,
+        is_synchronized: bool = True
     ) -> bool:
         """Return True when the source timestamp is ahead of the receive time
         by more than max_clock_skew_ms, indicating a device clock error.
@@ -50,11 +51,16 @@ class TimeBounds:
         Args:
             event_timestamp_ms: The event's source timestamp in ms (UTC).
             received_timestamp_ms: The gateway receive timestamp in ms (UTC).
+            is_synchronized: Whether the source timestamp is in UTC (True) or
+                uptime/monotonic (False). When False, returns False because
+                clock skew cannot be computed without a common time base.
 
         Returns:
             True if |event - received| exceeds max_clock_skew_ms in the future
-            direction; False otherwise.
+            direction AND is_synchronized is True; False otherwise.
         """
+        if not is_synchronized:
+            return False
         if event_timestamp_ms <= 0 or received_timestamp_ms <= 0:
             return False
         skew = event_timestamp_ms - received_timestamp_ms
@@ -82,16 +88,45 @@ class TimeMetrics:
         self._last_event_ms: dict[str, int] = {}
         self._stale = 0
         self._out_of_order = 0
+        self._unsynchronized = 0
 
     def observe(self, event: Any) -> None:
         """Record metrics from an event.
 
         Args:
             event: An object with device_id, latency_ms, stale, out_of_order,
-                   and event_timestamp_ms attributes.
+                   event_timestamp_ms, and is_timestamp_synchronized attributes.
+                   Accepts both CanonicalEvent objects and event dicts.
         """
-        key = event.device_id or "unknown"
-        latency = float(event.latency_ms or 0)
+        # Support both object attributes (CanonicalEvent) and dict access.
+        # getattr(obj, name, None) returns None if the name is not found on
+        # the object or any class in its MRO. Use None (not a sentinel) as
+        # default so we can distinguish "not found" from "found but falsy".
+        _dev_id = getattr(event, "device_id", None)
+        if isinstance(event, dict):
+            _dev_id = event.get("device_id", None) if _dev_id is None else _dev_id
+        key = _dev_id or "unknown"
+
+        _lat = getattr(event, "latency_ms", None)
+        if isinstance(event, dict):
+            _lat = event.get("latency_ms", 0) if _lat is None else _lat
+        latency = float(_lat or 0)
+
+        _stale = getattr(event, "stale", None)
+        if isinstance(event, dict):
+            _stale = event.get("stale", False) if _stale is None else _stale
+        stale = bool(_stale)
+
+        _oo = getattr(event, "out_of_order", None)
+        if isinstance(event, dict):
+            _oo = event.get("out_of_order", False) if _oo is None else _oo
+        out_of_order = bool(_oo)
+
+        _ts = getattr(event, "event_timestamp_ms", None)
+        if isinstance(event, dict):
+            _ts = event.get("event_timestamp_ms", 0) if _ts is None else _ts
+        event_ts = _ts
+
         self._latencies[key].append(latency)
 
         # Track jitter (latency delta)
@@ -101,16 +136,21 @@ class TimeMetrics:
         self._last_latency[key] = latency
 
         # Count stale and out-of-order events
-        if event.stale:
+        if stale:
             self._stale += 1
-        if event.out_of_order:
+        if out_of_order:
             self._out_of_order += 1
 
         # Track latest event timestamp per device (for sequence validation)
-        if event.event_timestamp_ms:
+        if event_ts:
             self._last_event_ms[key] = max(
-                event.event_timestamp_ms, self._last_event_ms.get(key, 0)
+                event_ts, self._last_event_ms.get(key, 0)
             )
+
+        # Count unsynchronized events (uptime timestamps where latency/clock_skew invalid)
+        is_sync = getattr(event, "is_timestamp_synchronized", True)
+        if is_sync is False:
+            self._unsynchronized += 1
 
     def snapshot(self) -> dict[str, Any]:
         """Return current metrics as a dictionary.
@@ -136,6 +176,7 @@ class TimeMetrics:
             },
             "stale_event_count": self._stale,
             "out_of_order_event_count": self._out_of_order,
+            "unsynchronized_event_count": self._unsynchronized,
             "last_event_ms": dict(self._last_event_ms),
         }
 

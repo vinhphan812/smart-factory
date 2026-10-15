@@ -103,38 +103,67 @@ class EventNormalizer:
         elif not isinstance(mqtt_ts_ms, (int, float)):
             mqtt_ts_ms = 0
 
+        # Timestamp domain detection:
+        # ESP32 telemetry publishes "received_at_ms" — this is uptime/monotonic,
+        # NOT UTC.  Transit latency and clock-skew are NOT valid for this source.
+        # Presence of "received_at_ms" signals an unsynchronized uptime source.
+        # The ESP32 does NOT publish "timestamp_ms" for telemetry — that field
+        # comes from command_ack/status which may be UTC from an NTP-synced host.
+        source_field = None
+        if payload.get("received_at_ms") is not None:
+            source_field = "received_at_ms"
+        elif payload.get("timestamp_ms") is not None or payload.get("timestamp") is not None:
+            source_field = "timestamp_ms"
+
         # Compute receive time and transit latency
         now_utc = datetime.now(timezone.utc)
         received_at_str = now_utc.isoformat()
         received_at_ms = int(now_utc.timestamp() * 1000)
 
-        event_ts_ms = int(mqtt_ts_ms) if mqtt_ts_ms > 0 else received_at_ms
-        latency_ms = max(0, received_at_ms - event_ts_ms)
+        # is_synchronized = True (UTC domain) unless we see received_at_ms (uptime)
+        is_synchronized = source_field != "received_at_ms"
 
-        # Staleness check: is the event older than the configured threshold?
+        if is_synchronized:
+            # Source timestamp in UTC — compute real transit latency
+            event_ts_ms = int(mqtt_ts_ms) if mqtt_ts_ms > 0 else received_at_ms
+            latency_ms = max(0, received_at_ms - event_ts_ms)
+        else:
+            # Source is uptime/monotonic — latency/clock_skew are undefined
+            event_ts_ms = received_at_ms  # use receive time as ordering anchor
+            latency_ms = -1  # sentinel: not computable without clock sync
+
+        # Staleness check: use received_at_ms (always UTC) as the reference.
+        # For synced sources this equals transit latency; for uptime sources
+        # it is a conservative upper bound (event cannot be older than
+        # now - received_at_ms, which is the gateway's age of the event).
         stale_threshold = self._time_bounds.threshold_for(device_id, event_type.value if event_type else "")
-        is_stale = latency_ms > stale_threshold
+        is_stale = received_at_ms - event_ts_ms > stale_threshold
 
-        # Out-of-order check: does this event's timestamp precede the last seen?
+        # Out-of-order check: use the raw source timestamp when available.
+        # For unsynced sources (uptime), this may be unreliable — fall back to
+        # received_at_ms as a proxy only when mqtt_ts_ms is 0.
+        _src_for_oo = int(mqtt_ts_ms) if mqtt_ts_ms > 0 else received_at_ms
         last_ts = self._last_device_timestamp_ms.get(device_id, 0)
         is_out_of_order = False
-        if event_ts_ms > 0 and last_ts > 0 and event_ts_ms < last_ts:
+        if _src_for_oo > 0 and last_ts > 0 and _src_for_oo < last_ts:
             is_out_of_order = True
         # Update the last seen timestamp for this device
-        if event_ts_ms > 0:
-            self._last_device_timestamp_ms[device_id] = max(event_ts_ms, last_ts)
+        if _src_for_oo > 0:
+            self._last_device_timestamp_ms[device_id] = max(_src_for_oo, last_ts)
 
         return CanonicalEvent(
             device_id=device_id,
             event_type=event_type,
             payload=payload,
             mqtt_topic=topic,
-            mqtt_timestamp_ms=int(mqtt_ts_ms),
+            mqtt_timestamp_ms=int(mqtt_ts_ms) if mqtt_ts_ms > 0 else 0,
             event_timestamp_ms=event_ts_ms,
             received_at=received_at_str,
+            received_at_ms=received_at_ms,
             latency_ms=latency_ms,
             stale=is_stale,
             out_of_order=is_out_of_order,
+            is_timestamp_synchronized=is_synchronized,
             ingested_at=received_at_str,
             sequence=self._next_sequence(),
         )

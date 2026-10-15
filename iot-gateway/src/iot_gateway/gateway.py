@@ -37,8 +37,13 @@ class Gateway:
         self._time_bounds = TimeBounds()
         self._normalizer = EventNormalizer(self._time_bounds)
         self._metrics = TimeMetrics()
+        # Cumulative counter of events dropped due to queue overflow.
+        # Incremented by _on_mqtt_message on QueueFull; read by /health.
+        # Declared early so it is available when create_http_app runs below.
+        self._dropped_count: int = 0
+        self._dropped_count_ref: dict[str, int] = {"dropped": 0}
         self._ws = WebSocketServer(config.ws_host, config.ws_port, store=self._store, metrics=self._metrics)
-        self._app = create_http_app(self._store, metrics=self._metrics)
+        self._app = create_http_app(self._store, metrics=self._metrics, dropped_count_ref=self._dropped_count_ref)
         self._mqtt: MqttSubscriber | None = None
         self._runner: Any | None = None
         self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
@@ -68,6 +73,9 @@ class Gateway:
                 continue
             try:
                 await self._store.insert_dict(event_dict)
+                # Metrics reflect events that were SUCCESSFULLY PERSISTED.
+                # Observe only after confirm to avoid counting dropped events.
+                self._metrics.observe(event_dict)
                 await self._ws.broadcast(event_dict)
             except Exception as exc:
                 logger.exception("Write worker %d failed to persist event: %s", worker_id, exc)
@@ -85,6 +93,7 @@ class Gateway:
                 continue
             try:
                 await self._store.insert_dict(event_dict)
+                self._metrics.observe(event_dict)
                 await self._ws.broadcast(event_dict)
             except Exception as exc:
                 logger.exception("Write worker %d flush error: %s", worker_id, exc)
@@ -97,13 +106,14 @@ class Gateway:
         if event is None:
             return
 
-        # Record metrics for observability
-        self._metrics.observe(event)
-
         event_dict = event.to_dict()
         try:
             self._write_queue.put_nowait(event_dict)
         except asyncio.QueueFull:
+            # Count dropped events; metrics are updated post-persistence in the
+            # write worker so only successfully persisted events are counted.
+            self._dropped_count += 1
+            self._dropped_count_ref["dropped"] = self._dropped_count
             logger.warning(
                 "Write queue full — event dropped (type=%s device=%s)",
                 event.event_type.value,
