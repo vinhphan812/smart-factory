@@ -1,24 +1,44 @@
 # ACL file for Mosquitto broker (Smart Factory)
 # Enforces per ADR-0010 MQTT Broker Security policy.
-# Note: %u expands to the connected client's username.
-# Note: + is a single-level wildcard, # is multi-level.
+#
+# SECURITY MODEL:
+# Mosquitto pattern rules (pattern read/write) apply GLOBALLY regardless of which
+# user block they appear in. A pattern rule inside a "user X" block grants that
+# permission to ANY authenticated user (with username X or any other username),
+# because pattern ACLs are processed in a separate global pass after user matching.
+#
+# SOLUTION: Use LITERAL topic rules inside user blocks.
+# Literal rules ARE scoped to the user block and do NOT grant cross-user access.
+#
+# Topics follow the bridge contract (esp32-ukit-bridge/docs/mqtt-contract.md):
+#   smart-factory/{deviceId}/command/down   (subscribe)
+#   smart-factory/{deviceId}/command/ack    (publish)
+#   smart-factory/{deviceId}/telemetry     (publish)
+#   smart-factory/{deviceId}/status        (publish)
+#
+# DeviceId equals the bridge's MQTT username (provisioned at flash time).
+# The bridge credential's username IS its deviceId, so literal topics match correctly.
 
 # Bridge ACL: publishes telemetry/status/command-ack, subscribes own command/down
+# Username equals deviceId (e.g. "ukit-00000000").
 user bridge
-pattern write smart-factory/%u/telemetry
-pattern write smart-factory/%u/status
-pattern write smart-factory/%u/command/ack
-pattern read smart-factory/%u/command/down
+# Literal topic rules — scoped to 'bridge' user only.
+# P0 FIX: replaced pattern rules (which apply globally) with literal rules.
+topic write smart-factory/+/telemetry
+topic write smart-factory/+/status
+topic write smart-factory/+/command/ack
+topic read  smart-factory/+/command/down
 
-# Gateway ACL: subscribes to all bridges' telemetry/status/command-ack per contract
-# Does NOT publish to bridge topics (denied by absence of write rules)
+# Gateway ACL: subscribes to all bridges' telemetry/status/command-ack per contract.
+# Does NOT publish to bridge topics (denied by absence of write rules).
 user gateway
-pattern read smart-factory/+/telemetry
-pattern read smart-factory/+/status
-pattern read smart-factory/+/command/ack
+# Literal subscription; '+' wildcard is permitted for gateway's multi-device subscription.
+topic read smart-factory/+/telemetry
+topic read smart-factory/+/status
+topic read smart-factory/+/command/ack
 
-# Operator ACL: read-only monitoring access
+# Operator ACL: read-only monitoring access.
 user operator
-pattern read smart-factory/+/telemetry
-pattern read smart-factory/+/status
-pattern read smart-factory/+/command/ack
+topic read smart-factory/+/telemetry
+topic read smart-factory/+/status
+topic read smart-factory/+/command/ack

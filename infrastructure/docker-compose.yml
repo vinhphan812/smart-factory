@@ -1,7 +1,61 @@
 services:
+  # ---------------------------------------------------------------------------
+  # Default broker: plaintext only on port 1883 (no TLS listener).
+  # mosquitto.conf is generated at container start; see entrypoint.sh.
+  # ---------------------------------------------------------------------------
   mqtt:
     image: eclipse-mosquitto:2.0
     restart: unless-stopped
+    container_name: smart-factory-mqtt
+    ports:
+      - "${MQTT_BIND_ADDRESS:-127.0.0.1}:1883:1883"
+    environment:
+      # Bridge username is a literal provisioned value (e.g. "ukit-00000000").
+      # P0 FIX -- the ACL file uses LITERAL topic rules (not pattern rules) so that
+      # mosquitto global pattern rule semantics do not grant cross-user access.
+      # See infrastructure/mqtt/acl for the security model.
+      MQTT_BRIDGE_USERNAME: ${MQTT_BRIDGE_USERNAME:?set MQTT_BRIDGE_USERNAME}
+      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD:?set MQTT_BRIDGE_PASSWORD}
+      MQTT_GATEWAY_USERNAME: ${MQTT_GATEWAY_USERNAME:?set MQTT_GATEWAY_USERNAME}
+      MQTT_GATEWAY_PASSWORD: ${MQTT_GATEWAY_PASSWORD:?set MQTT_GATEWAY_PASSWORD}
+      MQTT_OPERATOR_USERNAME: ${MQTT_OPERATOR_USERNAME:-operator}
+      MQTT_OPERATOR_PASSWORD: ${MQTT_OPERATOR_PASSWORD:?set MQTT_OPERATOR_PASSWORD}
+      TLS_MODE: "${TLS_MODE:-}"
+    volumes:
+      - ./mqtt/acl:/mosquitto/config/acl:ro
+      - ./mqtt/entrypoint.sh:/usr/local/bin/smart-factory-mqtt-entrypoint.sh:ro
+      - ./certs:/mosquitto/certs:ro
+      # P0/P1 FIX -- dedicated writable volumes (./mqtt/ is mounted :ro):
+      #   mqtt-conf/      -> entrypoint writes generated mosquitto.conf here
+      #   mqtt-passwords/  -> entrypoint writes passwd file here
+      - mqtt-conf:/mosquitto/config-generated
+      - mqtt-passwords:/mosquitto/passwords
+      - mqtt-data:/mosquitto/data
+    entrypoint: ["/usr/local/bin/smart-factory-mqtt-entrypoint.sh"]
+    healthcheck:
+      # P3 FIX: replaced mosquitto_ctrl dynsec (requires dynamic-security plugin)
+      # and mosquitto_pub to an unauthorized healthcheck topic.
+      # mosquitto_sub connects with the bridge's own credentials and subscribes
+      # to an authorized topic (its own command/down). Returns 0 on success (-C 1).
+      # No unauthorized topic writes; no dynsec dependency.
+      test: ["CMD-SHELL", "mosquitto_sub -t smart-factory/$MQTT_BRIDGE_USERNAME/command/down -C 1 -W 5 -u \"$MQTT_BRIDGE_USERNAME\" -P \"$MQTT_BRIDGE_PASSWORD\" 2>&1"]
+      interval: 10s
+      timeout: 8s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # TLS-enabled broker: plaintext 1883 + TLS 8883.
+  # Activate with: docker compose --profile tls up -d mqtt-tls
+  #
+  # P2 FIX: TLS_MODE=yes causes entrypoint to:
+  #   1. Append listener 8883 + cert directives to generated mosquitto.conf
+  #   2. Exit with a clear error if any cert file is missing (no silent fallback)
+  # ---------------------------------------------------------------------------
+  mqtt-tls:
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    container_name: smart-factory-mqtt-tls
     ports:
       - "${MQTT_BIND_ADDRESS:-127.0.0.1}:1883:1883"
       - "${MQTT_TLS_BIND_ADDRESS:-127.0.0.1}:8883:8883"
@@ -12,18 +66,33 @@ services:
       MQTT_GATEWAY_PASSWORD: ${MQTT_GATEWAY_PASSWORD:?set MQTT_GATEWAY_PASSWORD}
       MQTT_OPERATOR_USERNAME: ${MQTT_OPERATOR_USERNAME:-operator}
       MQTT_OPERATOR_PASSWORD: ${MQTT_OPERATOR_PASSWORD:?set MQTT_OPERATOR_PASSWORD}
+      # P2 FIX: TLS_MODE=yes enables listener 8883 in generated mosquitto.conf.
+      # Without this env var the broker will NOT expose 8883 -- no silent fallback.
+      TLS_MODE: "yes"
     volumes:
-      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mqtt/acl:/mosquitto/config/acl:ro
       - ./mqtt/entrypoint.sh:/usr/local/bin/smart-factory-mqtt-entrypoint.sh:ro
       - ./certs:/mosquitto/certs:ro
+      - mqtt-conf:/mosquitto/config-generated
+      - mqtt-passwords:/mosquitto/passwords
       - mqtt-data:/mosquitto/data
     entrypoint: ["/usr/local/bin/smart-factory-mqtt-entrypoint.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_ctrl dynsec getAnonymousGroup >/dev/null 2>&1 || mosquitto_pub -h 127.0.0.1 -p 1883 -u \"$MQTT_BRIDGE_USERNAME\" -P \"$MQTT_BRIDGE_PASSWORD\" -t healthcheck -n"]
+      test: ["CMD-SHELL", "mosquitto_sub -t smart-factory/$MQTT_BRIDGE_USERNAME/command/down -C 1 -W 5 -u \"$MQTT_BRIDGE_USERNAME\" -P \"$MQTT_BRIDGE_PASSWORD\" 2>&1"]
       interval: 10s
-      timeout: 5s
+      timeout: 8s
       retries: 5
+      start_period: 5s
+    profiles:
+      - tls
+    depends_on:
+      # Ensure default mqtt is stopped first: docker compose down mqtt
+      # (both bind port 1883 by default; override MQTT_BIND_ADDRESS to run together).
 
 volumes:
+  # P0 FIX: dedicated volume for generated password file (separate from :ro ./mqtt/).
+  mqtt-passwords:
+  # P2 FIX: generated mosquitto.conf lives here (entrypoint writes, mosquitto reads).
+  mqtt-conf:
+  # Mosquitto persistence data.
   mqtt-data:

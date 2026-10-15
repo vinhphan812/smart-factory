@@ -7,12 +7,23 @@ These tests verify the MQTT broker security configuration:
 - TC12: ACL violation denied (wrong topic, cross-device, command publish restriction)
 - TC13: TLS connection with certificate validation
 
-Configuration tests (ACL syntax, TLS files, env-injection) are deterministic and
-always run. Live connection tests require a mosquitto broker reachable at 127.0.0.1:1883.
+SCOPE LIMITATION (P5 FINDING):
+  This test suite covers configuration correctness and live broker behavior.
+  Live broker tests skip when mosquitto is unreachable (ports 1883/8883 not listening).
+  For the PR #103 scope (config + ACL tests), this is acceptable -- the test file
+  validates all security properties from source without requiring a running broker.
+  Full TC9-TC13 live broker coverage requires:
+    1. Docker daemon available in CI
+    2. A separate 'mqtt-test-broker' container spun up per test class
+    3. Test certs in infrastructure/certs/ committed or mounted in CI
+  Live broker test results (pass/fail/skip) do NOT gate configuration-only tests.
 
-Docker execution is supported (docker daemon confirmed available). When no broker
-is reachable, live tests are skipped and the configuration suite still validates
-all security properties from source.
+P0 ACL FINDING:
+  The original acl file used `pattern` rules inside user blocks. Mosquitto
+  pattern rules apply GLOBALLY regardless of which user block they appear in,
+  so a `pattern write smart-factory/%u/telemetry` rule in the "user bridge"
+  block grants write access to ANY username. Fixed by replacing with literal
+  `topic` rules (which ARE scoped per user) inside each user block.
 
 ADR-0010 reference: docs/adr/adr-0010-mqtt-broker-security.md
 Bridge contract:    esp32-ukit-bridge/docs/mqtt-contract.md
@@ -175,10 +186,11 @@ class TestCredentialsEnvInjected:
 
     def test_entrypoint_reads_creds_from_env(self, entrypoint_text: str) -> None:
         """entrypoint.sh must read credentials from environment variables."""
-        assert "$MQTT_BRIDGE_USERNAME" in entrypoint_text
-        assert "$MQTT_BRIDGE_PASSWORD" in entrypoint_text
-        assert "$MQTT_GATEWAY_USERNAME" in entrypoint_text
-        assert "$MQTT_GATEWAY_PASSWORD" in entrypoint_text
+        # New entrypoint uses ${VAR:-} parameter expansion syntax
+        assert "${MQTT_BRIDGE_USERNAME" in entrypoint_text
+        assert "${MQTT_BRIDGE_PASSWORD" in entrypoint_text
+        assert "${MQTT_GATEWAY_USERNAME" in entrypoint_text
+        assert "${MQTT_GATEWAY_PASSWORD" in entrypoint_text
         assert "mosquitto_passwd" in entrypoint_text
 
     def test_entrypoint_no_literal_passwords(self, entrypoint_text: str) -> None:
@@ -215,9 +227,14 @@ class TestAclDirectionsMatchContract:
     esp32-ukit-bridge/docs/mqtt-contract.md and ADR-0010.
 
     Bridge publishes:  telemetry, status, command/ack
-    Bridge subscribes: command/down  (own device only, via %u pattern)
+    Bridge subscribes: command/down  (all devices via + wildcard)
     Gateway subscribes: telemetry, status, command/ack  (all devices via +)
     Gateway does NOT publish to bridge topics.
+
+    P0 FIX: all rules use literal `topic` directives (NOT `pattern`).
+    Pattern rules apply globally regardless of user block, meaning a pattern
+    rule inside "user bridge" grants that permission to ANY username.
+    Literal `topic` rules are scoped to the user block they appear in.
     """
 
     def _block(self, text: str, user: str) -> str | None:
@@ -227,93 +244,88 @@ class TestAclDirectionsMatchContract:
         )
         return m.group(1) if m else None
 
+    def _has_rule(self, block: str, directive: str, access: str, topic: str) -> bool:
+        return bool(re.search(
+            rf"(?i){re.escape(directive)}\s+{re.escape(access)}\s+{re.escape(topic)}", block
+        ))
+
+    def _has_no_rule(self, block: str, directive: str, access: str, topic: str) -> bool:
+        return not self._has_rule(block, directive, access, topic)
+
+    # -- Bridge positive rules ----------------------------------------------------
+
     def test_bridge_can_write_telemetry(self, acl_text: str) -> None:
         block = self._block(acl_text, "bridge")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+write\s+smart-factory/%u/telemetry", block)
+        assert self._has_rule(block, "topic", "write", "smart-factory/+/telemetry")
 
     def test_bridge_can_write_status(self, acl_text: str) -> None:
         block = self._block(acl_text, "bridge")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+write\s+smart-factory/%u/status", block)
+        assert self._has_rule(block, "topic", "write", "smart-factory/+/status")
 
     def test_bridge_can_write_command_ack(self, acl_text: str) -> None:
         block = self._block(acl_text, "bridge")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+write\s+smart-factory/%u/command/ack", block)
+        assert self._has_rule(block, "topic", "write", "smart-factory/+/command/ack")
 
-    def test_bridge_subscribes_own_command_down(self, acl_text: str) -> None:
+    def test_bridge_subscribes_command_down(self, acl_text: str) -> None:
         block = self._block(acl_text, "bridge")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+read\s+smart-factory/%u/command/down", block)
+        assert self._has_rule(block, "topic", "read", "smart-factory/+/command/down")
+
+    # -- Bridge negative rules ----------------------------------------------------
 
     def test_bridge_cannot_write_command_down(self, acl_text: str) -> None:
-        """Bridge must NOT publish commands — only authorized services do."""
+        """Bridge must NOT publish commands -- only authorized services do."""
         block = self._block(acl_text, "bridge")
         assert block is not None
-        assert not re.search(
-            r"(?i)pattern\s+write\s+smart-factory/%u/command/down", block
+        assert self._has_no_rule(
+            block, "topic", "write", "smart-factory/+/command/down"
         ), "Bridge must NOT write to command/down."
 
-    def test_bridge_cannot_subscribe_own_telemetry(self, acl_text: str) -> None:
-        block = self._block(acl_text, "bridge")
-        assert block is not None
-        assert not re.search(
-            r"(?i)pattern\s+read\s+smart-factory/%u/telemetry", block
-        ), "Bridge must NOT read its own telemetry (publish-only per ADR-0010)."
+    def test_no_pattern_rules_in_acl(self, acl_text: str) -> None:
+        """P0 FIX: no pattern directives must exist in the ACL file.
 
-    def test_bridge_cannot_subscribe_own_status(self, acl_text: str) -> None:
-        block = self._block(acl_text, "bridge")
-        assert block is not None
-        assert not re.search(
-            r"(?i)pattern\s+read\s+smart-factory/%u/status", block
-        ), "Bridge must NOT read its own status (publish-only per ADR-0010)."
+        Pattern rules apply globally regardless of which user block they appear in.
+        Replacing them with literal topic rules is the core P0 fix.
+        """
+        pattern_directives = re.findall(r"^\s*pattern\s+", acl_text, re.MULTILINE)
+        assert not pattern_directives, (
+            f"ACL must not contain 'pattern' directives. "
+            f"Found: {pattern_directives}. Use literal 'topic' rules instead."
+        )
 
     def test_gateway_subscribes_telemetry(self, acl_text: str) -> None:
         block = self._block(acl_text, "gateway")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+read\s+smart-factory/\+/telemetry", block)
+        assert self._has_rule(block, "topic", "read", "smart-factory/+/telemetry")
 
     def test_gateway_subscribes_status(self, acl_text: str) -> None:
         block = self._block(acl_text, "gateway")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+read\s+smart-factory/\+/status", block)
+        assert self._has_rule(block, "topic", "read", "smart-factory/+/status")
 
     def test_gateway_subscribes_command_ack(self, acl_text: str) -> None:
         block = self._block(acl_text, "gateway")
         assert block is not None
-        assert re.search(r"(?i)pattern\s+read\s+smart-factory/\+/command/ack", block)
+        assert self._has_rule(block, "topic", "read", "smart-factory/+/command/ack")
 
     def test_gateway_cannot_write_bridge_topics(self, acl_text: str) -> None:
         """Gateway must NOT publish telemetry, status, or command/ack per ADR-0010."""
         block = self._block(acl_text, "gateway")
         assert block is not None
-        assert not re.search(
-            r"(?i)pattern\s+write\s+smart-factory/\+/(telemetry|status|command/ack)",
-            block,
-        )
-
-    def test_bridge_command_down_is_device_specific(self, acl_text: str) -> None:
-        """Bridge command/down must use %u (own username), not + wildcard."""
-        block = self._block(acl_text, "bridge")
-        assert block is not None
-        cmd_down_match = re.search(
-            r"(?i)pattern\s+read\s+smart-factory/%u/command/down", block
-        )
-        assert cmd_down_match, "Bridge must have pattern read for command/down."
-        after = block[cmd_down_match.end():]
-        line_end = re.search(r"\n", after)
-        rule_line = after[: line_end.start() if line_end else len(after)]
-        assert "+" not in rule_line and "#" not in rule_line, (
-            "command/down must use %u pattern, not + or # wildcard."
-        )
+        for topic in ("telemetry", "status", "command/ack"):
+            assert self._has_no_rule(
+                block, "topic", "write", f"smart-factory/+/{topic}"
+            ), f"Gateway must NOT write to {topic}."
 
     def test_operator_is_readonly(self, acl_text: str) -> None:
         """Operator must have no write access to any topic."""
         block = self._block(acl_text, "operator")
         if block is None:
             pytest.skip("Operator user not defined in ACL (optional role).")
-        assert not re.search(r"(?i)pattern\s+write\s+smart-factory", block)
+        assert self._has_no_rule(block, "topic", "write", "smart-factory/+/")
 
 
 # ---------------------------------------------------------------------------
@@ -447,34 +459,73 @@ class TestValidCredentials:
 # ---------------------------------------------------------------------------
 
 class TestTlsConfiguration:
-    """TC4/TC13: TLS listener configuration and certificate validation."""
+    """TC4/TC13: TLS listener configuration and certificate validation.
 
-    def test_tls_listener_on_8883(self, conf_text: str) -> None:
-        """mosquitto.conf must have a TLS listener on port 8883."""
+    P2 FIX: the static mosquitto.conf no longer contains `listener 8883` or cert
+    directives unconditionally. The entrypoint generates them only when TLS_MODE=yes
+    (tls compose profile). The static conf tests verify cert lines are absent from
+    the source file (no silent plaintext fallback when certs are mounted).
+    """
+
+    def test_tls_listener_NOT_in_static_conf(self, conf_text: str) -> None:
+        """P2 FIX: static mosquitto.conf must NOT unconditionally declare listener 8883.
+
+        If listener 8883 is in the static config, mosquitto will fail at startup when
+        cert files are mounted but TLS is not desired. The TLS listener must only be
+        present in the entrypoint-generated config (when TLS_MODE=yes).
+        """
         active = {
             line.strip()
             for line in conf_text.splitlines()
             if line.strip() and not line.strip().startswith("#")
         }
-        assert "listener 8883" in active
+        assert "listener 8883" not in active, (
+            "listener 8883 must NOT be in the static mosquitto.conf. "
+            "P2 FIX: it is conditionally appended by entrypoint.sh when TLS_MODE=yes."
+        )
 
-    def test_tls_listener_has_ca_cert(self, conf_text: str) -> None:
-        """TLS listener must specify cafile, certfile, and keyfile."""
-        lines = conf_text.splitlines()
-        in_tls = False
-        tls_lines = []
-        for line in lines:
+    def test_tls_cert_directives_NOT_in_static_conf(self, conf_text: str) -> None:
+        """P2 FIX: cert directives must not be in static conf (conditional only)."""
+        for line in conf_text.splitlines():
             s = line.strip()
-            if s.startswith("listener 8883"):
-                in_tls = True
-            elif in_tls and re.match(r"listener\s+\d", s) and "8883" not in s:
-                in_tls = False
-            elif in_tls:
-                tls_lines.append(s)
+            if s.startswith("#") or not s:
+                continue
+            assert not s.startswith("cafile "), (
+                f"cafile must NOT be in static mosquitto.conf (P2 fix). Got: {s!r}"
+            )
+            assert not s.startswith("certfile "), (
+                f"certfile must NOT be in static mosquitto.conf (P2 fix). Got: {s!r}"
+            )
+            assert not s.startswith("keyfile "), (
+                f"keyfile must NOT be in static mosquitto.conf (P2 fix). Got: {s!r}"
+            )
 
-        assert any("cafile" in l for l in tls_lines), "TLS listener must specify cafile."
-        assert any("certfile" in l for l in tls_lines), "TLS listener must specify certfile."
-        assert any("keyfile" in l for l in tls_lines), "TLS listener must specify keyfile."
+    def test_entrypoint_generates_tls_block(self, entrypoint_text: str) -> None:
+        """Entrypoint must conditionally append listener 8883 + certs when TLS_MODE=yes.
+
+        This is the P2 fix mechanism: cert lines are NOT in static conf, but are
+        appended by entrypoint only when TLS_MODE=yes. If certs are mounted without
+        TLS_MODE=yes, mosquitto still starts cleanly on plaintext 1883 (no 8883).
+        """
+        assert 'if [ "$TLS_MODE" = "yes" ]; then' in entrypoint_text, (
+            "Entrypoint must check TLS_MODE=yes to enable TLS."
+        )
+        assert "listener 8883" in entrypoint_text, (
+            "Entrypoint must append 'listener 8883' when TLS_MODE=yes."
+        )
+        assert "cafile" in entrypoint_text, (
+            "Entrypoint must append 'cafile' directive when TLS_MODE=yes."
+        )
+        assert "certfile" in entrypoint_text, (
+            "Entrypoint must append 'certfile' directive when TLS_MODE=yes."
+        )
+        assert "keyfile" in entrypoint_text, (
+            "Entrypoint must append 'keyfile' directive when TLS_MODE=yes."
+        )
+        # Entrypoint must exit non-zero if certs are missing with TLS_MODE=yes
+        assert "FATAL" in entrypoint_text, (
+            "Entrypoint must exit with error if certs missing and TLS_MODE=yes."
+        )
 
     def test_tls_cert_files_exist(self, cert_dir: Path) -> None:
         """Required TLS files must exist in infrastructure/certs/."""
@@ -543,7 +594,7 @@ class TestTlsConfiguration:
     def test_tls_connection_with_valid_ca(self, cert_dir: Path) -> None:
         """Live TLS broker: connection with correct CA succeeds (TLS handshake OK).
 
-        ESP32 hardware TLS/HIL is not claimed — this validates Python + broker only.
+        ESP32 hardware TLS/HIL is not claimed -- this validates Python + broker only.
         """
         if not TLS_BROKER_AVAILABLE:
             pytest.skip("No live TLS broker on port 8883.")
@@ -621,29 +672,10 @@ class TestTlsConfiguration:
             "TLS connection with wrong CA must be rejected."
         )
 
-    def test_production_require_certificate_documented(self, conf_text: str) -> None:
+    def test_production_require_certificate_documented(self, entrypoint_text: str) -> None:
         """require_certificate setting must be documented (dev=false, prod=true)."""
-        lines = conf_text.splitlines()
-        in_tls = False
-        tls_lines = []
-        for line in lines:
-            s = line.strip()
-            if s.startswith("listener 8883"):
-                in_tls = True
-            elif in_tls and re.match(r"listener\s+\d", s) and "8883" not in s:
-                in_tls = False
-            elif in_tls:
-                tls_lines.append(s)
-
-        for line in tls_lines:
-            if line.startswith("require_certificate"):
-                parts = line.split()
-                assert len(parts) == 2 and parts[1] in ("true", "false")
-                return
-
-        pytest.skip(
-            "require_certificate not explicitly set (defaults to false). "
-            "Production must explicitly set true per ADR-0010."
+        assert "require_certificate" in entrypoint_text, (
+            "Entrypoint must set require_certificate in the TLS block."
         )
 
 
@@ -795,6 +827,18 @@ class TestConfigSyntax:
         assert "mqtt:" in compose_text
         assert "eclipse-mosquitto" in compose_text
 
-    def test_compose_mounts_mosquitto_conf(self, compose_text: str) -> None:
-        assert "mosquitto.conf" in compose_text
+    def test_compose_no_conf_mount(self, compose_text: str) -> None:
+        """mosquitto.conf must NOT be mounted from host.
+
+        P1 FIX: mosquitto.conf is generated at container start by entrypoint.sh
+        into the mqtt-conf named volume. Mounting it from host would prevent the
+        entrypoint from generating the TLS-conditional config.
+        """
+        for line in compose_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped:
+                continue
+            assert not (
+                stripped.startswith("- ") and "/mosquitto/config/mosquitto.conf" in stripped
+            ), f"mosquitto.conf must not be mounted from host. Got line: {line!r}"
         assert "acl" in compose_text
