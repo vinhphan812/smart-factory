@@ -9,6 +9,7 @@ from .event_normalizer import EventNormalizer
 from .event_store import EventStore
 from .mqtt_client import MqttSubscriber
 from .api import WebSocketServer, create_http_app
+from .time_sync import TimeBounds, TimeMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,11 @@ class Gateway:
     def __init__(self, config: GatewayConfig) -> None:
         self._config = config
         self._store = EventStore(config.database_url, config.max_events)
-        self._normalizer = EventNormalizer()
-        self._ws = WebSocketServer(config.ws_host, config.ws_port)
-        self._app = create_http_app(self._store)
+        self._time_bounds = TimeBounds()
+        self._normalizer = EventNormalizer(self._time_bounds)
+        self._metrics = TimeMetrics()
+        self._ws = WebSocketServer(config.ws_host, config.ws_port, store=self._store, metrics=self._metrics)
+        self._app = create_http_app(self._store, metrics=self._metrics)
         self._mqtt: MqttSubscriber | None = None
         self._runner: Any | None = None
         self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
@@ -93,6 +96,9 @@ class Gateway:
         event = self._normalizer.normalize(topic, payload)
         if event is None:
             return
+
+        # Record metrics for observability
+        self._metrics.observe(event)
 
         event_dict = event.to_dict()
         try:

@@ -1,0 +1,461 @@
+"""Tests for time synchronization, staleness, out-of-order detection, snapshots, and metrics."""
+
+import asyncio
+import json
+import pytest
+import time
+from datetime import datetime, timezone
+
+from iot_gateway.config import GatewayConfig
+from iot_gateway.gateway import Gateway
+from iot_gateway.time_sync import TimeBounds, TimeMetrics
+from iot_gateway.event_normalizer import EventNormalizer
+
+
+def test_time_bounds_threshold() -> None:
+    """TimeBounds returns configured stale threshold."""
+    tb = TimeBounds(stale_threshold_ms=1000)
+    assert tb.threshold_for("device-1", "telemetry") == 1000
+
+
+def test_is_clock_skew_detected() -> None:
+    """Future source timestamp beyond max_clock_skew_ms → is_clock_skew = True."""
+    tb = TimeBounds(max_clock_skew_ms=5 * 60_000)  # 5 min
+    received = int(datetime.now(timezone.utc).timestamp() * 1000)
+    # Device clock 10 minutes ahead
+    future = received + 10 * 60 * 1000
+    assert tb.is_clock_skew(future, received) is True
+
+
+def test_is_clock_skew_not_flagged_within_tolerance() -> None:
+    """Timestamp 1 minute ahead → within 5-minute tolerance → False."""
+    tb = TimeBounds(max_clock_skew_ms=5 * 60_000)
+    received = int(datetime.now(timezone.utc).timestamp() * 1000)
+    slightly_ahead = received + 60_000
+    assert tb.is_clock_skew(slightly_ahead, received) is False
+
+
+def test_is_clock_skew_zero_returns_false() -> None:
+    """Zero timestamps are not a valid clock skew check."""
+    tb = TimeBounds()
+    assert tb.is_clock_skew(0, 0) is False
+    assert tb.is_clock_skew(1_700_000_000_000, 0) is False
+    assert tb.is_clock_skew(0, 1_700_000_000_000) is False
+
+
+def test_is_clock_skew_past_timestamp_returns_false() -> None:
+    """Past-dated timestamps are expected; not flagged as clock skew."""
+    tb = TimeBounds(max_clock_skew_ms=5 * 60_000)
+    received = int(datetime.now(timezone.utc).timestamp() * 1000)
+    past = received - 60_000
+    assert tb.is_clock_skew(past, received) is False
+
+
+def test_time_bounds_default() -> None:
+    """TimeBounds uses sensible defaults."""
+    tb = TimeBounds()
+    assert tb.stale_threshold_ms == 30_000
+    assert tb.max_clock_skew_ms == 5 * 60_000
+
+
+def test_time_metrics_tracking() -> None:
+    """TimeMetrics tracks latency, jitter, stale, and out-of-order counts."""
+    metrics = TimeMetrics()
+    event = type("MockEvent", (), {
+        "device_id": "dev-1",
+        "latency_ms": 150,
+        "stale": False,
+        "out_of_order": False,
+        "event_timestamp_ms": 1000000
+    })()
+    metrics.observe(event)
+    event2 = type("MockEvent", (), {
+        "device_id": "dev-1",
+        "latency_ms": 250,
+        "stale": True,
+        "out_of_order": True,
+        "event_timestamp_ms": 999000
+    })()
+    metrics.observe(event2)
+
+    snapshot = metrics.snapshot()
+    assert snapshot["stale_event_count"] == 1
+    assert snapshot["out_of_order_event_count"] == 1
+    assert "dev-1" in snapshot["latency_ms"]
+    assert snapshot["latency_ms"]["dev-1"]["min"] == 150
+    assert snapshot["latency_ms"]["dev-1"]["max"] == 250
+
+
+def test_time_metrics_jitter() -> None:
+    """TimeMetrics computes jitter from latency deltas."""
+    metrics = TimeMetrics()
+    events = [
+        type("MockEvent", (), {"device_id": "dev-1", "latency_ms": 100, "stale": False, "out_of_order": False, "event_timestamp_ms": 0})(),
+        type("MockEvent", (), {"device_id": "dev-1", "latency_ms": 120, "stale": False, "out_of_order": False, "event_timestamp_ms": 0})(),
+        type("MockEvent", (), {"device_id": "dev-1", "latency_ms": 110, "stale": False, "out_of_order": False, "event_timestamp_ms": 0})(),
+    ]
+    for e in events:
+        metrics.observe(e)
+
+    snapshot = metrics.snapshot()
+    # Jitter should be computed between consecutive latencies
+    assert "dev-1" in snapshot["jitter_ms"]
+
+
+def test_snapshot_returns_sorted_by_sequence() -> None:
+    """GET /snapshot returns events sorted by ascending sequence (deterministic replay)."""
+    from unittest.mock import AsyncMock, MagicMock
+    from fastapi.testclient import TestClient
+    from iot_gateway.api import create_http_app
+
+    mock_store = MagicMock()
+    mock_store.query = AsyncMock(return_value=[
+        {"event_id": "c", "sequence": 3, "device_id": "d1"},
+        {"event_id": "a", "sequence": 1, "device_id": "d1"},
+        {"event_id": "b", "sequence": 2, "device_id": "d1"},
+    ])
+    mock_store.count = AsyncMock(return_value=3)
+
+    app = create_http_app(mock_store)
+    client = TestClient(app)
+    response = client.get("/snapshot")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["snapshot_count"] == 3
+    sequences = [e["sequence"] for e in data["events"]]
+    assert sequences == [1, 2, 3], "Snapshot must be sorted by ascending sequence"
+
+
+def test_snapshot_returns_empty_when_no_events() -> None:
+    """GET /snapshot returns empty list when store is empty."""
+    from unittest.mock import AsyncMock, MagicMock
+    from fastapi.testclient import TestClient
+    from iot_gateway.api import create_http_app
+
+    mock_store = MagicMock()
+    mock_store.query = AsyncMock(return_value=[])
+    mock_store.count = AsyncMock(return_value=0)
+
+    app = create_http_app(mock_store)
+    client = TestClient(app)
+    response = client.get("/snapshot")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["snapshot_count"] == 0
+    assert data["events"] == []
+
+
+def test_metrics_endpoint_returns_live_snapshot() -> None:
+    """GET /metrics returns the current TimeMetrics snapshot."""
+    from unittest.mock import AsyncMock, MagicMock
+    from fastapi.testclient import TestClient
+    from iot_gateway.api import create_http_app
+
+    m = TimeMetrics()
+    ev = MagicMock()
+    ev.device_id = "d1"
+    ev.latency_ms = 50
+    ev.stale = True
+    ev.out_of_order = False
+    ev.event_timestamp_ms = 0
+    m.observe(ev)
+
+    mock_store = MagicMock()
+    mock_store.count = AsyncMock(return_value=1)
+
+    app = create_http_app(mock_store, metrics=m)
+    client = TestClient(app)
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    assert "latency_ms" in data
+    assert "jitter_ms" in data
+    assert "stale_event_count" in data
+    assert "out_of_order_event_count" in data
+    assert "last_event_ms" in data
+    assert data["stale_event_count"] == 1
+
+
+def test_metrics_endpoint_none_metrics_returns_zeros() -> None:
+    """When metrics is None, /metrics returns empty/zeros (safe fallback)."""
+    from unittest.mock import AsyncMock, MagicMock
+    from fastapi.testclient import TestClient
+    from iot_gateway.api import create_http_app
+
+    mock_store = MagicMock()
+    mock_store.count = AsyncMock(return_value=0)
+
+    app = create_http_app(mock_store, metrics=None)
+    client = TestClient(app)
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["stale_event_count"] == 0
+    assert data["out_of_order_event_count"] == 0
+    assert data["latency_ms"] == {}
+    assert data["jitter_ms"] == {}
+
+
+def test_out_of_order_per_device_isolation() -> None:
+    """Out-of-order detection is per-device: dev-A oo does not affect dev-B."""
+    normalizer = EventNormalizer(TimeBounds())
+
+    # dev-1: old then new → second is oo
+    p1 = json.dumps({"timestamp": 100}).encode()
+    p2 = json.dumps({"timestamp": 50}).encode()
+    e1 = normalizer.normalize("smart-factory/dev-1/telemetry", p1)
+    e2 = normalizer.normalize("smart-factory/dev-1/telemetry", p2)
+    assert e1 is not None
+    assert e2 is not None
+    assert e2.out_of_order is True
+
+    # dev-2: independent sequence, not affected by dev-1
+    p3 = json.dumps({"timestamp": 10}).encode()
+    e3 = normalizer.normalize("smart-factory/dev-2/telemetry", p3)
+    assert e3 is not None
+    assert e3.out_of_order is False, "Device-B has its own timestamp sequence"
+
+
+def test_last_event_ms_in_snapshot() -> None:
+    """TimeMetrics.snapshot() includes last_event_ms per device."""
+    from unittest.mock import MagicMock
+    m = TimeMetrics()
+    ev = MagicMock()
+    ev.device_id = "d1"
+    ev.latency_ms = 10
+    ev.stale = False
+    ev.out_of_order = False
+    ev.event_timestamp_ms = 1_700_000_000_000
+    m.observe(ev)
+
+    snap = m.snapshot()
+    assert "last_event_ms" in snap
+    assert snap["last_event_ms"]["d1"] == 1_700_000_000_000
+
+
+def test_event_normalizer_stale_detection() -> None:
+    """EventNormalizer flags events exceeding stale threshold."""
+    normalizer = EventNormalizer(TimeBounds(stale_threshold_ms=5000))
+
+    # Current timestamp - should not be stale
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    topic = "smart-factory/sf-bridge-001/telemetry"
+    payload = json.dumps({"temperature": 25.0, "timestamp": now_ms}).encode()
+    event = normalizer.normalize(topic, payload)
+    assert event is not None
+    assert event.stale is False
+
+    # Old timestamp (> 5 seconds) - should be stale
+    old_ts = int((datetime.now(timezone.utc).timestamp() - 10) * 1000)
+    payload2 = json.dumps({"temperature": 24.0, "timestamp": old_ts}).encode()
+    event2 = normalizer.normalize(topic, payload2)
+    assert event2 is not None
+    assert event2.stale is True
+
+
+def test_event_normalizer_out_of_order() -> None:
+    """EventNormalizer flags events with timestamps earlier than last seen."""
+    normalizer = EventNormalizer(TimeBounds())
+
+    topic = "smart-factory/sf-bridge-001/telemetry"
+    # First event with timestamp T
+    ts1 = int(datetime.now(timezone.utc).timestamp() * 1000)
+    payload1 = json.dumps({"temperature": 25.0, "timestamp": ts1}).encode()
+    event1 = normalizer.normalize(topic, payload1)
+    assert event1 is not None
+    assert event1.out_of_order is False
+
+    # Second event with older timestamp - should be out of order
+    ts2 = ts1 - 5000  # 5 seconds earlier
+    payload2 = json.dumps({"temperature": 24.0, "timestamp": ts2}).encode()
+    event2 = normalizer.normalize(topic, payload2)
+    assert event2 is not None
+    assert event2.out_of_order is True
+
+
+def test_event_normalizer_latency_computation() -> None:
+    """EventNormalizer computes transit latency correctly."""
+    normalizer = EventNormalizer()
+
+    topic = "smart-factory/sf-bridge-001/telemetry"
+    # Event with timestamp matching receive time - zero latency
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    payload = json.dumps({"value": 1, "timestamp": now_ms}).encode()
+    event = normalizer.normalize(topic, payload)
+    assert event is not None
+    assert event.latency_ms >= 0
+    assert event.latency_ms < 1000  # Should be very small
+
+
+def test_event_normalizer_missing_timestamp() -> None:
+    """EventNormalizer handles missing timestamps gracefully."""
+    normalizer = EventNormalizer()
+
+    topic = "smart-factory/sf-bridge-001/telemetry"
+    payload = json.dumps({"value": 1}).encode()  # No timestamp
+    event = normalizer.normalize(topic, payload)
+    assert event is not None
+    # Should use received_at as event_timestamp_ms when source timestamp missing
+    assert event.event_timestamp_ms > 0
+    assert event.latency_ms == 0  # No latency when using received_at
+
+
+def test_canonical_event_to_dict_includes_timing() -> None:
+    """CanonicalEvent.to_dict() includes timing metadata."""
+    from iot_gateway.models import CanonicalEvent, EventType
+    from datetime import datetime, timezone
+
+    event = CanonicalEvent(
+        device_id="test-device",
+        event_type=EventType.TELEMETRY,
+        payload={"temp": 25.0},
+        mqtt_topic="test/topic",
+        mqtt_timestamp_ms=1000,
+        event_timestamp_ms=500,
+        received_at=datetime.now(timezone.utc).isoformat(),
+        latency_ms=100,
+        stale=True,
+        out_of_order=False,
+        sequence=1,
+    )
+
+    d = event.to_dict()
+    assert "timestamp" in d
+    assert "received_at" in d
+    assert "latency_ms" in d
+    assert "stale" in d
+    assert "out_of_order" in d
+    assert d["stale"] is True
+    assert d["out_of_order"] is False
+
+
+def test_canonical_event_from_dict_backward_compat() -> None:
+    """CanonicalEvent.from_dict() handles legacy event format."""
+    from iot_gateway.models import CanonicalEvent
+
+    # Legacy format without timing fields
+    legacy_event = {
+        "event_id": "test-id",
+        "device_id": "dev-1",
+        "event_type": "telemetry",
+        "payload": {"value": 1},
+        "mqtt_topic": "test",
+        "mqtt_timestamp_ms": 1000,
+        "ingested_at": "2024-01-01T00:00:00+00:00",
+        "sequence": 1,
+    }
+    event = CanonicalEvent.from_dict(legacy_event)
+    assert event.device_id == "dev-1"
+    # Should default to sensible values
+    assert event.stale is False
+    assert event.out_of_order is False
+
+
+class TestTimeSyncIntegration:
+    """Integration tests for time sync with the full gateway."""
+
+    @pytest.mark.asyncio
+    async def test_stale_and_out_of_order_detection(self, tmp_path) -> None:
+        """Gateway correctly detects stale and out-of-order events."""
+        db = f"sqlite+aiosqlite:///{tmp_path}/timesync_test.db"
+        config = GatewayConfig(
+            mqtt_broker="localhost",
+            mqtt_port=1883,
+            mqtt_username=None,
+            mqtt_password=None,
+            database_url=db,
+            max_events=100,
+            ws_host="127.0.0.1",
+            ws_port=0,
+            ws_http_port=0,
+        )
+        gateway = Gateway(config)
+        gateway._loop = asyncio.get_running_loop()
+        await gateway._store.init()
+
+        gateway._stop_events = [asyncio.Event() for _ in range(gateway.NUM_WRITERS)]
+        gateway._writers_done = [
+            asyncio.create_task(gateway._write_worker(i, stop))
+            for i, stop in enumerate(gateway._stop_events)
+        ]
+
+        topic = "smart-factory/sf-bridge-001/telemetry"
+        # Old timestamp to trigger staleness (> 30s) and out-of-order if followed by newer
+        old_ts = int((datetime.now(timezone.utc).timestamp() - 60) * 1000)
+        payload1 = json.dumps({"temperature": 25.0, "timestamp": old_ts}).encode()
+
+        await gateway._on_mqtt_message(topic, payload1)
+
+        # Wait for persistence
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if await gateway._store.count() == 1:
+                break
+            await asyncio.sleep(0.1)
+
+        events = await gateway._store.query(limit=10)
+        assert len(events) == 1
+        assert events[0]["stale"] is True
+
+        # Next event with older timestamp triggers out_of_order
+        very_old_ts = old_ts - 5000
+        payload2 = json.dumps({"temperature": 24.0, "timestamp": very_old_ts}).encode()
+        await gateway._on_mqtt_message(topic, payload2)
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if await gateway._store.count() == 2:
+                break
+            await asyncio.sleep(0.1)
+
+        events = await gateway._store.query(limit=10)
+        # Latest query sorts by seq desc
+        latest_event = events[0]
+        assert latest_event["out_of_order"] is True
+
+        for stop in gateway._stop_events:
+            stop.set()
+        await asyncio.gather(*gateway._writers_done, return_exceptions=True)
+        await gateway._store.close()
+
+    @pytest.mark.asyncio
+    async def test_metrics_endpoint(self, tmp_path) -> None:
+        """Gateway metrics endpoint exposes stale/out-of-order counts."""
+        db = f"sqlite+aiosqlite:///{tmp_path}/metrics_test.db"
+        config = GatewayConfig(
+            mqtt_broker="localhost",
+            mqtt_port=1883,
+            mqtt_username=None,
+            mqtt_password=None,
+            database_url=db,
+            max_events=100,
+            ws_host="127.0.0.1",
+            ws_port=0,
+            ws_http_port=0,
+        )
+        gateway = Gateway(config)
+
+        # Check metrics is initialized
+        assert gateway._metrics is not None
+
+        # Create a mock stale event
+        old_ts = int((datetime.now(timezone.utc).timestamp() - 60) * 1000)
+        from iot_gateway.models import CanonicalEvent, EventType
+        event = CanonicalEvent(
+            device_id="test-dev",
+            event_type=EventType.TELEMETRY,
+            payload={},
+            mqtt_topic="test",
+            mqtt_timestamp_ms=old_ts,
+            event_timestamp_ms=old_ts,
+            latency_ms=60000,
+            stale=True,
+            out_of_order=False,
+            sequence=1,
+        )
+        gateway._metrics.observe(event)
+
+        snapshot = gateway._metrics.snapshot()
+        assert snapshot["stale_event_count"] == 1
+        assert snapshot["out_of_order_event_count"] == 0

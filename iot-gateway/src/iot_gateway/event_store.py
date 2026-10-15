@@ -29,7 +29,10 @@ class Base(DeclarativeBase):
 
 
 class EventRecord(Base):
-    """SQLAlchemy model for stored canonical events."""
+    """SQLAlchemy model for stored canonical events.
+
+    Includes timing metadata for staleness tracking and snapshot resync.
+    """
 
     __tablename__ = "events"
 
@@ -39,6 +42,12 @@ class EventRecord(Base):
     payload = Column(JSON, nullable=False)
     mqtt_topic = Column(String(256), nullable=False)
     mqtt_timestamp_ms = Column(Integer, nullable=False, default=0)
+    # Timing metadata
+    event_timestamp_ms = Column(Integer, nullable=False, default=0)
+    received_at = Column(DateTime(timezone=True), nullable=False)
+    latency_ms = Column(Integer, nullable=False, default=0)
+    stale = Column(Integer, nullable=False, default=0)
+    out_of_order = Column(Integer, nullable=False, default=0)
     ingested_at = Column(DateTime(timezone=True), nullable=False)
     sequence = Column(Integer, nullable=False, index=True)
 
@@ -72,13 +81,25 @@ class EventStore:
 
     async def insert_dict(self, event_dict: dict[str, Any]) -> None:
         """Store an event from its dict representation (used by the write queue)."""
+        # Parse received_at: prefer explicit field, fallback to ingested_at
+        received_at_str = event_dict.get("received_at", event_dict["ingested_at"])
+        if isinstance(received_at_str, str):
+            received_at = datetime.fromisoformat(received_at_str)
+        else:
+            received_at = datetime.fromisoformat(event_dict["ingested_at"])
+
         record = EventRecord(
             event_id=event_dict["event_id"],
             device_id=event_dict["device_id"],
             event_type=event_dict["event_type"],
             payload=event_dict["payload"],
             mqtt_topic=event_dict["mqtt_topic"],
-            mqtt_timestamp_ms=event_dict["mqtt_timestamp_ms"],
+            mqtt_timestamp_ms=event_dict.get("mqtt_timestamp_ms", 0),
+            event_timestamp_ms=event_dict.get("event_timestamp_ms", event_dict.get("timestamp", 0)),
+            received_at=received_at,
+            latency_ms=event_dict.get("latency_ms", 0),
+            stale=int(bool(event_dict.get("stale", False))),
+            out_of_order=int(bool(event_dict.get("out_of_order", False))),
             ingested_at=datetime.fromisoformat(event_dict["ingested_at"]),
             sequence=event_dict["sequence"],
         )
@@ -128,6 +149,11 @@ class EventStore:
                     "payload": r.payload,
                     "mqtt_topic": r.mqtt_topic,
                     "mqtt_timestamp_ms": r.mqtt_timestamp_ms,
+                    "event_timestamp_ms": r.event_timestamp_ms,
+                    "received_at": r.received_at.isoformat() if r.received_at else r.ingested_at.isoformat(),
+                    "latency_ms": r.latency_ms,
+                    "stale": bool(r.stale),
+                    "out_of_order": bool(r.out_of_order),
                     "ingested_at": r.ingested_at.isoformat(),
                     "sequence": r.sequence,
                 }
@@ -151,6 +177,11 @@ class EventStore:
                 "payload": row.payload,
                 "mqtt_topic": row.mqtt_topic,
                 "mqtt_timestamp_ms": row.mqtt_timestamp_ms,
+                "event_timestamp_ms": row.event_timestamp_ms,
+                "received_at": row.received_at.isoformat() if row.received_at else row.ingested_at.isoformat(),
+                "latency_ms": row.latency_ms,
+                "stale": bool(row.stale),
+                "out_of_order": bool(row.out_of_order),
                 "ingested_at": row.ingested_at.isoformat(),
                 "sequence": row.sequence,
             }

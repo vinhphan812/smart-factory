@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from .event_store import EventStore
+from .time_sync import TimeMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,21 @@ class WebSocketServer:
 
     Uses the ``websockets`` library (RFC-6455) so Unity, browsers, and any
     standards-compliant WebSocket client can connect.
+
+    Args:
+        host: Bind address.
+        port: Bind port.
+        store: Optional EventStore for snapshot queries.
+        metrics: Optional TimeMetrics for observability.
     """
 
     MAX_QUEUE_PER_CLIENT = 64
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, store: EventStore | None = None, metrics: TimeMetrics | None = None) -> None:
         self._host = host
         self._port = port
+        self._store = store
+        self._metrics = metrics
         # Per-client queue set — each client task pulls from its own queue
         self._client_queues: set[asyncio.Queue[str]] = set()
         self._queues_lock: asyncio.Lock = asyncio.Lock()
@@ -124,8 +133,13 @@ class WebSocketServer:
             await self._server.wait_closed()
 
 
-def create_http_app(store: EventStore) -> FastAPI:
-    """Build FastAPI app with REST endpoints backed by the event store."""
+def create_http_app(store: EventStore, metrics: TimeMetrics | None = None) -> FastAPI:
+    """Build FastAPI app with REST endpoints backed by the event store.
+
+    Args:
+        store: EventStore instance for event persistence.
+        metrics: Optional TimeMetrics for latency/staleness observability.
+    """
 
     app = FastAPI(
         title="Smart Factory IoT Gateway API",
@@ -155,6 +169,35 @@ def create_http_app(store: EventStore) -> FastAPI:
         if event is None:
             raise HTTPException(status_code=404, detail="Event not found")
         return event
+
+    @app.get("/snapshot")
+    async def get_snapshot() -> dict[str, Any]:
+        """Full scene snapshot for client initialization/resync.
+
+        Returns all stored events sorted by sequence for deterministic replay.
+        Clients can use this to reconstruct state after disconnect.
+        """
+        events = await store.query(limit=1000)
+        sorted_events = sorted(events, key=lambda e: e.get("sequence", 0))
+        return {
+            "snapshot_count": len(sorted_events),
+            "events": sorted_events,
+        }
+
+    @app.get("/metrics")
+    async def get_metrics() -> dict[str, Any]:
+        """Expose latency histograms, jitter, stale event rate, and out-of-order rate.
+
+        Returns current metrics snapshot for observability.
+        """
+        if metrics is not None:
+            return metrics.snapshot()
+        return {
+            "latency_ms": {},
+            "jitter_ms": {},
+            "stale_event_count": 0,
+            "out_of_order_event_count": 0,
+        }
 
     @app.get("/")
     async def root() -> dict[str, str]:
