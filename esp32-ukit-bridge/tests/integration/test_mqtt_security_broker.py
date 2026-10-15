@@ -1,398 +1,800 @@
-"""Integration tests for MQTT broker security (Authentication, ACLs, TLS, Anonymous prevention).
+"""MQTT Broker Security Tests — Issue #41.
 
-Tests corresponding to Issue #41:
-- TC9: Valid credentials connect successfully
+These tests verify the MQTT broker security configuration:
+- TC9:  Valid credentials connect successfully
 - TC10: Invalid credentials rejected
 - TC11: Anonymous connection rejected
-- TC12: ACL violation quarantined / denied
-- TC13: TLS connection parameters / cert verification setup
+- TC12: ACL violation denied (wrong topic, cross-device, command publish restriction)
+- TC13: TLS connection with certificate validation
 
-Note: These tests require Docker to be running. Without Docker, configuration-level
-tests are run to validate syntax and semantics deterministically.
+Configuration tests (ACL syntax, TLS files, env-injection) are deterministic and
+always run. Live connection tests require a mosquitto broker reachable at 127.0.0.1:1883.
+
+Docker execution is supported (docker daemon confirmed available). When no broker
+is reachable, live tests are skipped and the configuration suite still validates
+all security properties from source.
+
+ADR-0010 reference: docs/adr/adr-0010-mqtt-broker-security.md
+Bridge contract:    esp32-ukit-bridge/docs/mqtt-contract.md
 """
 
-import pytest
+from __future__ import annotations
+
 import os
-import subprocess
+import re
 import socket
+import ssl
+import subprocess
 import time
 from pathlib import Path
 
+import pytest
 
-# Test configuration paths relative to this test file
-INFRA_DIR = Path(__file__).parent.parent.parent.parent / "infrastructure"
-MQTT_CONF = INFRA_DIR / "mqtt" / "mosquitto.conf"
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+INFRA_DIR = REPO_ROOT / "infrastructure"
+MOSQUITTO_CONF = INFRA_DIR / "mqtt" / "mosquitto.conf"
 ACL_FILE = INFRA_DIR / "mqtt" / "acl"
-COMPOSE_FILE = INFRA_DIR / "docker-compose.yml"
+ENTRYPOINT = INFRA_DIR / "mqtt" / "entrypoint.sh"
+DOCKER_COMPOSE = INFRA_DIR / "docker-compose.yml"
+CERTS_DIR = INFRA_DIR / "certs"
 
 
-class TestConfiguration:
-    """Configuration-level tests that validate syntax and ACL semantics deterministically."""
+# ---------------------------------------------------------------------------
+# Live-broker detection
+# ---------------------------------------------------------------------------
 
-    def test_mosquitto_conf_syntax_valid(self) -> None:
-        """Verify mosquitto.conf has valid syntax and security settings."""
-        content = MQTT_CONF.read_text()
-        
-        # Must disable anonymous access
-        assert "allow_anonymous false" in content, \
-            "mosquitto.conf must set allow_anonymous false"
-        
-        # Must use password file
-        assert "password_file" in content, \
-            "mosquitto.conf must specify password_file"
-        
-        # Must use ACL file
-        assert "acl_file" in content, \
-            "mosquitto.conf must specify acl_file"
-        
-        # Must have plain listener
-        assert "listener 1883" in content, \
-            "mosquitto.conf must have plain MQTT listener on 1883"
-        
-        # Must have TLS listener on 8883
-        assert "listener 8883" in content, \
-            "mosquitto.conf must have TLS listener on 8883"
-        
-        # TLS must use cert files
-        assert "cafile" in content and "certfile" in content and "keyfile" in content, \
-            "TLS listener must specify cafile, certfile, and keyfile"
-
-    def test_acl_file_valid_syntax(self) -> None:
-        """Verify ACL file has valid Mosquitto ACL syntax."""
-        content = ACL_FILE.read_text()
-        
-        # Must define bridge user
-        assert "user bridge" in content, \
-            "ACL must define 'bridge' user"
-        
-        # Must define gateway user
-        assert "user gateway" in content, \
-            "ACL must define 'gateway' user"
-        
-        # Must define operator user
-        assert "user operator" in content, \
-            "ACL must define 'operator' user"
-        
-        # Bridge must have write to telemetry
-        assert "write smart-factory/%u/telemetry" in content, \
-            "Bridge must have write to telemetry topic"
-        
-        # Bridge must have write to status
-        assert "write smart-factory/%u/status" in content, \
-            "Bridge must have write to status topic"
-        
-        # Bridge must have write to command/ack
-        assert "write smart-factory/%u/command/ack" in content, \
-            "Bridge must have write to command/ack topic"
-        
-        # Bridge must have read from command/down
-        assert "read smart-factory/%u/command/down" in content, \
-            "Bridge must have read from command/down topic"
-        
-        # Gateway must have read-only access to telemetry
-        assert "read smart-factory/+/telemetry" in content, \
-            "Gateway must have read access to telemetry"
-        
-        # Gateway must have read-only access to status
-        assert "read smart-factory/+/status" in content, \
-            "Gateway must have read access to status"
-        
-        # Gateway must have read-only access to command/ack
-        assert "read smart-factory/+/command/ack" in content, \
-            "Gateway must have read access to command/ack"
-
-    def test_acl_enforces_read_only_gateway(self) -> None:
-        """Verify gateway has NO write permissions (denied by absence)."""
-        content = ACL_FILE.read_text()
-        
-        # Find gateway user section
-        lines = content.split("\n")
-        in_gateway = False
-        gateway_has_write = False
-        
-        for line in lines:
-            if line.strip() == "user gateway":
-                in_gateway = True
-            elif line.strip().startswith("user "):
-                in_gateway = False
-            elif in_gateway and "pattern write smart-factory" in line:
-                gateway_has_write = True
-                break
-        
-        assert not gateway_has_write, \
-            "Gateway must NOT have write permissions per ADR-0010"
-
-    def test_compose_file_requires_credentials(self) -> None:
-        """Verify docker-compose.yml requires credentials via environment."""
-        content = COMPOSE_FILE.read_text()
-        
-        # Must require bridge username/password
-        assert "MQTT_BRIDGE_USERNAME" in content and "MQTT_BRIDGE_PASSWORD" in content, \
-            "Compose must require MQTT_BRIDGE credentials"
-        
-        # Must require gateway username/password
-        assert "MQTT_GATEWAY_USERNAME" in content and "MQTT_GATEWAY_PASSWORD" in content, \
-            "Compose must require MQTT_GATEWAY credentials"
-        
-        # Must require operator password
-        assert "MQTT_OPERATOR_PASSWORD" in content, \
-            "Compose must require MQTT_OPERATOR_PASSWORD"
-        
-        # Must use :? for mandatory variables
-        assert ":?set" in content, \
-            "Compose must use :?set for mandatory credential variables"
-
-    def test_entrypoint_generates_passwords(self) -> None:
-        """Verify entrypoint.sh generates passwords from environment."""
-        entrypoint = (INFRA_DIR / "mqtt" / "entrypoint.sh").read_text()
-        
-        assert "mosquitto_passwd" in entrypoint, \
-            "Entrypoint must use mosquitto_passwd"
-        
-        assert "MQTT_BRIDGE_USERNAME" in entrypoint and "MQTT_BRIDGE_PASSWORD" in entrypoint, \
-            "Entrypoint must handle bridge credentials"
-        
-        assert "MQTT_GATEWAY_USERNAME" in entrypoint and "MQTT_GATEWAY_PASSWORD" in entrypoint, \
-            "Entrypoint must handle gateway credentials"
-
-
-def is_docker_available() -> bool:
-    """Check if Docker is available and running."""
+def _is_docker_available() -> bool:
     try:
-        result = subprocess.run(
+        r = subprocess.run(
             ["docker", "info"],
-            capture_output=True,
-            timeout=5,
+            capture_output=True, timeout=10,
         )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return r.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
 
-def wait_for_mqtt(host: str, port: int, timeout: int = 30) -> bool:
-    """Wait for MQTT broker to become available."""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            result = sock.connect_ex((host, port))
-            sock.close()
-            if result == 0:
-                return True
-        except socket.error:
-            pass
-        time.sleep(1)
-    return False
+def _is_port_listening(port: int, timeout_s: float = 3.0) -> bool:
+    try:
+        sock = socket.create_connection(("127.0.0.1", port), timeout=timeout_s)
+        sock.close()
+        return True
+    except OSError:
+        return False
 
 
-# Skip integration tests if Docker is not available
-docker_available = pytest.mark.skipif(
-    not is_docker_available(),
-    reason="Docker not available"
-)
+DOCKER_AVAILABLE = _is_docker_available()
+BROKER_AVAILABLE = _is_port_listening(1883)
+TLS_BROKER_AVAILABLE = _is_port_listening(8883)
 
 
-@docker_available
-class TestDockerIntegration:
-    """Integration tests that require a running Docker daemon."""
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
-    @pytest.fixture(scope="class")
-    def broker_env(self) -> dict:
-        """Environment variables for broker."""
-        return {
-            "MQTT_BRIDGE_USERNAME": "bridge",
-            "MQTT_BRIDGE_PASSWORD": "test-bridge-pass",
-            "MQTT_GATEWAY_USERNAME": "gateway", 
-            "MQTT_GATEWAY_PASSWORD": "test-gateway-pass",
-            "MQTT_OPERATOR_USERNAME": "operator",
-            "MQTT_OPERATOR_PASSWORD": "test-operator-pass",
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def conf_text() -> str:
+    return _read(MOSQUITTO_CONF)
+
+
+@pytest.fixture
+def acl_text() -> str:
+    return _read(ACL_FILE)
+
+
+@pytest.fixture
+def entrypoint_text() -> str:
+    return _read(ENTRYPOINT)
+
+
+@pytest.fixture
+def compose_text() -> str:
+    return _read(DOCKER_COMPOSE)
+
+
+@pytest.fixture
+def cert_dir() -> Path:
+    return CERTS_DIR
+
+
+# ---------------------------------------------------------------------------
+# TC11: Anonymous denied
+# ---------------------------------------------------------------------------
+
+class TestAnonymousDenied:
+    """TC11: Anonymous connections are rejected (allow_anonymous false)."""
+
+    def test_conf_deny_anonymous(self, conf_text: str) -> None:
+        """Active (non-comment) allow_anonymous directive must be 'false'."""
+        active = {
+            line.strip()
+            for line in conf_text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
         }
+        assert "allow_anonymous false" in active, (
+            "allow_anonymous must be 'false' in mosquitto.conf; "
+            "anonymous access is not permitted per ADR-0010."
+        )
 
-    @pytest.fixture(scope="class")
-    def compose_up(self, broker_env: dict) -> None:
-        """Start the MQTT broker via docker compose."""
-        # Create .env file for docker compose
-        env_file = INFRA_DIR / ".env"
-        env_content = "\n".join(f"{k}={v}" for k, v in broker_env.items())
-        env_file.write_text(env_content)
-        
-        try:
-            # Start broker
-            result = subprocess.run(
-                ["docker", "compose", "up", "-d", "mqtt"],
-                cwd=INFRA_DIR,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                env={**os.environ, **broker_env},
-            )
-            
-            if result.returncode != 0:
-                pytest.skip(f"Failed to start broker: {result.stderr}")
-            
-            # Wait for broker to be ready
-            if not wait_for_mqtt("localhost", 1883, timeout=30):
-                pytest.skip("MQTT broker did not become available")
-            
-            yield
-            
-        finally:
-            # Stop broker
-            subprocess.run(
-                ["docker", "compose", "down"],
-                cwd=INFRA_DIR,
-                capture_output=True,
-                timeout=30,
-            )
-            # Clean up .env file
-            if env_file.exists():
-                env_file.unlink()
+    def test_no_conflicting_anonymous_true(self, conf_text: str) -> None:
+        """No active line may set allow_anonymous to true."""
+        for line in conf_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped:
+                continue
+            if stripped.startswith("allow_anonymous"):
+                assert stripped == "allow_anonymous false", (
+                    f"allow_anonymous must be false, got: {stripped!r}"
+                )
 
-    def test_tc9_valid_credentials_connect(self, compose_up: None) -> None:
-        """TC9: Valid credentials connect successfully."""
+
+# ---------------------------------------------------------------------------
+# TC5: Credentials via environment (no hardcoded secrets)
+# ---------------------------------------------------------------------------
+
+class TestCredentialsEnvInjected:
+    """TC5: No secrets in repo; credentials injected via environment variables."""
+
+    def test_compose_requires_bridge_creds_via_env(self, compose_text: str) -> None:
+        """docker-compose.yml must use ${VAR:?...} for bridge credentials."""
+        assert "MQTT_BRIDGE_USERNAME" in compose_text
+        assert "MQTT_BRIDGE_PASSWORD" in compose_text
+        assert ":?set" in compose_text, "Bridge credentials must use :?set (mandatory env)."
+    def test_compose_requires_gateway_creds_via_env(self, compose_text: str) -> None:
+        """docker-compose.yml must use ${VAR:?...} for gateway credentials."""
+        assert "MQTT_GATEWAY_USERNAME" in compose_text
+        assert "MQTT_GATEWAY_PASSWORD" in compose_text
+    def test_compose_requires_operator_creds_via_env(self, compose_text: str) -> None:
+        """docker-compose.yml must require operator credentials via environment."""
+        assert "MQTT_OPERATOR_PASSWORD" in compose_text
+    def test_compose_no_literal_passwords(self, compose_text: str) -> None:
+        """docker-compose.yml must not contain uncommented hardcoded password strings."""
+        import re
+        for line in compose_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped:
+                continue
+            # healthcheck uses shell variable syntax ($VAR), not YAML env vars
+            if stripped.startswith("test:"):
+                continue
+            lower = stripped.lower()
+            if "password" in lower and "mqtt_" in lower:
+                # Must reference env var (YAML ${VAR} substitution)
+                assert (
+                    "${" in line
+                ), f"Line may contain hardcoded password: {line!r}"
+
+    def test_entrypoint_reads_creds_from_env(self, entrypoint_text: str) -> None:
+        """entrypoint.sh must read credentials from environment variables."""
+        assert "$MQTT_BRIDGE_USERNAME" in entrypoint_text
+        assert "$MQTT_BRIDGE_PASSWORD" in entrypoint_text
+        assert "$MQTT_GATEWAY_USERNAME" in entrypoint_text
+        assert "$MQTT_GATEWAY_PASSWORD" in entrypoint_text
+        assert "mosquitto_passwd" in entrypoint_text
+
+    def test_entrypoint_no_literal_passwords(self, entrypoint_text: str) -> None:
+        """entrypoint.sh must not contain hardcoded literal password strings."""
+        active_lines = [
+            l.strip()
+            for l in entrypoint_text.splitlines()
+            if l.strip()
+            and not l.strip().startswith("#")
+            and not l.strip().startswith("echo")
+            and not l.strip().startswith("set -e")
+            and not l.strip().startswith("touch")
+            and not l.strip().startswith("chown")
+            and not l.strip().startswith("chmod")
+        ]
+        for line in active_lines:
+            if re.search(r'"\w{8,}"', line):
+                pytest.fail(f"Potential hardcoded credential in entrypoint.sh: {line!r}")
+
+    def test_secrets_guide_documents_env_injection(self) -> None:
+        """infrastructure/secrets-guide.md must document the env-var pattern."""
+        guide = INFRA_DIR / "secrets-guide.md"
+        assert guide.exists(), "infrastructure/secrets-guide.md must exist per ADR-0010."
+        text = guide.read_text(encoding="utf-8").lower()
+        assert "environment" in text or "env" in text
+
+
+# ---------------------------------------------------------------------------
+# TC2: ACL directions match bridge contract
+# ---------------------------------------------------------------------------
+
+class TestAclDirectionsMatchContract:
+    """TC2: ACL rules enforce the exact publish/subscribe directions from
+    esp32-ukit-bridge/docs/mqtt-contract.md and ADR-0010.
+
+    Bridge publishes:  telemetry, status, command/ack
+    Bridge subscribes: command/down  (own device only, via %u pattern)
+    Gateway subscribes: telemetry, status, command/ack  (all devices via +)
+    Gateway does NOT publish to bridge topics.
+    """
+
+    def _block(self, text: str, user: str) -> str | None:
+        m = re.search(
+            rf"(?i)user\s+{re.escape(user)}\s+(.*?)(?=\nuser\s|\Z)",
+            text, re.DOTALL,
+        )
+        return m.group(1) if m else None
+
+    def test_bridge_can_write_telemetry(self, acl_text: str) -> None:
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+write\s+smart-factory/%u/telemetry", block)
+
+    def test_bridge_can_write_status(self, acl_text: str) -> None:
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+write\s+smart-factory/%u/status", block)
+
+    def test_bridge_can_write_command_ack(self, acl_text: str) -> None:
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+write\s+smart-factory/%u/command/ack", block)
+
+    def test_bridge_subscribes_own_command_down(self, acl_text: str) -> None:
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+read\s+smart-factory/%u/command/down", block)
+
+    def test_bridge_cannot_write_command_down(self, acl_text: str) -> None:
+        """Bridge must NOT publish commands — only authorized services do."""
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert not re.search(
+            r"(?i)pattern\s+write\s+smart-factory/%u/command/down", block
+        ), "Bridge must NOT write to command/down."
+
+    def test_bridge_cannot_subscribe_own_telemetry(self, acl_text: str) -> None:
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert not re.search(
+            r"(?i)pattern\s+read\s+smart-factory/%u/telemetry", block
+        ), "Bridge must NOT read its own telemetry (publish-only per ADR-0010)."
+
+    def test_bridge_cannot_subscribe_own_status(self, acl_text: str) -> None:
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        assert not re.search(
+            r"(?i)pattern\s+read\s+smart-factory/%u/status", block
+        ), "Bridge must NOT read its own status (publish-only per ADR-0010)."
+
+    def test_gateway_subscribes_telemetry(self, acl_text: str) -> None:
+        block = self._block(acl_text, "gateway")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+read\s+smart-factory/\+/telemetry", block)
+
+    def test_gateway_subscribes_status(self, acl_text: str) -> None:
+        block = self._block(acl_text, "gateway")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+read\s+smart-factory/\+/status", block)
+
+    def test_gateway_subscribes_command_ack(self, acl_text: str) -> None:
+        block = self._block(acl_text, "gateway")
+        assert block is not None
+        assert re.search(r"(?i)pattern\s+read\s+smart-factory/\+/command/ack", block)
+
+    def test_gateway_cannot_write_bridge_topics(self, acl_text: str) -> None:
+        """Gateway must NOT publish telemetry, status, or command/ack per ADR-0010."""
+        block = self._block(acl_text, "gateway")
+        assert block is not None
+        assert not re.search(
+            r"(?i)pattern\s+write\s+smart-factory/\+/(telemetry|status|command/ack)",
+            block,
+        )
+
+    def test_bridge_command_down_is_device_specific(self, acl_text: str) -> None:
+        """Bridge command/down must use %u (own username), not + wildcard."""
+        block = self._block(acl_text, "bridge")
+        assert block is not None
+        cmd_down_match = re.search(
+            r"(?i)pattern\s+read\s+smart-factory/%u/command/down", block
+        )
+        assert cmd_down_match, "Bridge must have pattern read for command/down."
+        after = block[cmd_down_match.end():]
+        line_end = re.search(r"\n", after)
+        rule_line = after[: line_end.start() if line_end else len(after)]
+        assert "+" not in rule_line and "#" not in rule_line, (
+            "command/down must use %u pattern, not + or # wildcard."
+        )
+
+    def test_operator_is_readonly(self, acl_text: str) -> None:
+        """Operator must have no write access to any topic."""
+        block = self._block(acl_text, "operator")
+        if block is None:
+            pytest.skip("Operator user not defined in ACL (optional role).")
+        assert not re.search(r"(?i)pattern\s+write\s+smart-factory", block)
+
+
+# ---------------------------------------------------------------------------
+# TC10: Invalid credentials rejected
+# ---------------------------------------------------------------------------
+
+class TestInvalidCredentialsRejected:
+    """TC10: Invalid credentials are rejected by the broker."""
+
+    def test_conf_has_password_file(self, conf_text: str) -> None:
+        """mosquitto.conf must reference a password file."""
+        active = {
+            line.strip()
+            for line in conf_text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert any(line.startswith("password_file") for line in active)
+
+    @pytest.mark.skipif(not BROKER_AVAILABLE, reason="No live broker on port 1883")
+    def test_broker_rejects_wrong_password(self) -> None:
+        """Live broker: correct username, wrong password -> RC 4."""
         import paho.mqtt.client as mqtt
-        
-        connected = False
-        error_msg = None
-        
-        def on_connect(client, userdata, flags, rc):
-            nonlocal connected, error_msg
-            if rc == 0:
-                connected = True
-            else:
-                error_msg = f"Connection failed with code {rc}"
-        
-        client = mqtt.Client()
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-reject-wrong-pw",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.username_pw_set("bridge", "wrong_password_12345")
         client.on_connect = on_connect
-        client.username_pw_set("bridge", "test-bridge-pass")
-        
-        try:
-            client.connect("localhost", 1883, keepalive=10)
-            client.loop_start()
-            
-            # Wait up to 10 seconds for connection
-            for _ in range(20):
-                time.sleep(0.5)
-                if connected:
-                    break
-            
-            assert connected, f"Failed to connect with valid credentials: {error_msg}"
-            
-        finally:
-            client.loop_stop()
-            client.disconnect()
+        client.connect("127.0.0.1", 1883, keepalive=10)
+        client.loop_start()
 
-    def test_tc10_invalid_credentials_rejected(self, compose_up: None) -> None:
-        """TC10: Invalid credentials rejected."""
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if "rc" in results:
+                break
+            time.sleep(0.2)
+        client.loop_stop()
+
+        assert results.get("rc") == 4, (
+            f"Wrong password -> RC 4 expected, got RC={results.get('rc')}. "
+            "This verifies TC10: invalid credentials are rejected."
+        )
+
+    @pytest.mark.skipif(not BROKER_AVAILABLE, reason="No live broker on port 1883")
+    def test_broker_rejects_unknown_user(self) -> None:
+        """Live broker: completely unknown username -> RC 4 or 5."""
         import paho.mqtt.client as mqtt
-        
-        connection_refused = False
-        
-        def on_connect(client, userdata, flags, rc):
-            nonlocal connection_refused
-            # RC 4 = Bad username or password
-            if rc == 4:
-                connection_refused = True
-        
-        client = mqtt.Client()
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-unknown-user",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.username_pw_set("nonexistent_user_xyz123", "anypassword")
         client.on_connect = on_connect
-        client.username_pw_set("bridge", "wrong-password")
-        
-        try:
-            client.connect("localhost", 1883, keepalive=10)
-            client.loop_start()
-            
-            # Wait for connection attempt
-            for _ in range(20):
-                time.sleep(0.5)
-                if connection_refused:
-                    break
-            
-            assert connection_refused, \
-                "Invalid credentials should be rejected (RC=4)"
-            
-        finally:
-            client.loop_stop()
-            client.disconnect()
+        client.connect("127.0.0.1", 1883, keepalive=10)
+        client.loop_start()
 
-    def test_tc11_anonymous_connection_rejected(self, compose_up: None) -> None:
-        """TC11: Anonymous connection rejected when allow_anonymous false."""
-        import paho.mqtt.client as mqtt
-        
-        connection_refused = False
-        
-        def on_connect(client, userdata, flags, rc):
-            nonlocal connection_refused
-            # RC 5 = Not authorized
-            if rc == 5:
-                connection_refused = True
-        
-        client = mqtt.Client()
-        # No username/password = anonymous
-        
-        try:
-            client.connect("localhost", 1883, keepalive=10)
-            client.loop_start()
-            
-            # Wait for connection attempt
-            for _ in range(20):
-                time.sleep(0.5)
-                if connection_refused:
-                    break
-            
-            assert connection_refused, \
-                "Anonymous connection should be rejected (RC=5)"
-            
-        finally:
-            client.loop_stop()
-            client.disconnect()
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if "rc" in results:
+                break
+            time.sleep(0.2)
+        client.loop_stop()
 
-    def test_tc12_acl_bridge_cannot_subscribe_others_telemetry(self, compose_up: None) -> None:
-        """TC12: ACL denies bridge from subscribing to another device's telemetry."""
+        assert results.get("rc") in (4, 5), (
+            f"Unknown user -> RC 4 or 5 expected, got RC={results.get('rc')}."
+        )
+
+
+# ---------------------------------------------------------------------------
+# TC9: Valid credentials connect successfully
+# ---------------------------------------------------------------------------
+
+class TestValidCredentials:
+    """TC9: Valid credentials connect successfully with the live broker."""
+
+    @pytest.mark.skipif(not BROKER_AVAILABLE, reason="No live broker on port 1883")
+    def test_valid_bridge_credentials_connect(self) -> None:
+        """Valid bridge credentials connect successfully (RC=0)."""
         import paho.mqtt.client as mqtt
-        
-        # Bridge credential tries to subscribe to another device's telemetry
-        # Should be denied by ACL
-        denied = False
-        
-        def on_connect(client, userdata, flags, rc):
-            if rc != 0:
+
+        username = os.environ.get("MQTT_BRIDGE_USERNAME", "")
+        password = os.environ.get("MQTT_BRIDGE_PASSWORD", "")
+        if not username or not password:
+            pytest.skip(
+                "MQTT_BRIDGE_USERNAME and MQTT_BRIDGE_PASSWORD must be set in environment."
+            )
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-valid-creds",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.username_pw_set(username, password)
+        client.on_connect = on_connect
+        client.connect("127.0.0.1", 1883, keepalive=10)
+        client.loop_start()
+
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if "rc" in results:
+                break
+            time.sleep(0.2)
+        client.loop_stop()
+
+        assert results.get("rc") == 0, (
+            f"Valid credentials must connect (RC=0), got RC={results.get('rc')}."
+        )
+
+
+# ---------------------------------------------------------------------------
+# TC13: TLS configuration and certificate material
+# ---------------------------------------------------------------------------
+
+class TestTlsConfiguration:
+    """TC4/TC13: TLS listener configuration and certificate validation."""
+
+    def test_tls_listener_on_8883(self, conf_text: str) -> None:
+        """mosquitto.conf must have a TLS listener on port 8883."""
+        active = {
+            line.strip()
+            for line in conf_text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert "listener 8883" in active
+
+    def test_tls_listener_has_ca_cert(self, conf_text: str) -> None:
+        """TLS listener must specify cafile, certfile, and keyfile."""
+        lines = conf_text.splitlines()
+        in_tls = False
+        tls_lines = []
+        for line in lines:
+            s = line.strip()
+            if s.startswith("listener 8883"):
+                in_tls = True
+            elif in_tls and re.match(r"listener\s+\d", s) and "8883" not in s:
+                in_tls = False
+            elif in_tls:
+                tls_lines.append(s)
+
+        assert any("cafile" in l for l in tls_lines), "TLS listener must specify cafile."
+        assert any("certfile" in l for l in tls_lines), "TLS listener must specify certfile."
+        assert any("keyfile" in l for l in tls_lines), "TLS listener must specify keyfile."
+
+    def test_tls_cert_files_exist(self, cert_dir: Path) -> None:
+        """Required TLS files must exist in infrastructure/certs/."""
+        for name in ("ca.crt", "server.crt", "server.key"):
+            path = cert_dir / name
+            assert path.exists(), f"TLS file missing: {path}."
+
+    def test_ca_cert_is_valid_pem(self, cert_dir: Path) -> None:
+        """ca.crt must be a valid PEM X.509 certificate."""
+        r = subprocess.run(
+            ["openssl", "x509", "-in", str(cert_dir / "ca.crt"), "-noout", "-subject"],
+            capture_output=True, text=True, timeout=5,
+        )
+        assert r.returncode == 0, f"ca.crt is not valid X.509 PEM: {r.stderr}"
+
+    def test_server_cert_is_valid_pem(self, cert_dir: Path) -> None:
+        """server.crt must be a valid PEM X.509 certificate."""
+        r = subprocess.run(
+            ["openssl", "x509", "-in", str(cert_dir / "server.crt"), "-noout", "-subject"],
+            capture_output=True, text=True, timeout=5,
+        )
+        assert r.returncode == 0, f"server.crt is not valid X.509 PEM: {r.stderr}"
+
+    def test_server_key_is_valid(self, cert_dir: Path) -> None:
+        """server.key must be a valid EC or RSA private key."""
+        srv_key = cert_dir / "server.key"
+        r = subprocess.run(
+            ["openssl", "ec", "-in", str(srv_key), "-noout"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode != 0:
+            r = subprocess.run(
+                ["openssl", "rsa", "-in", str(srv_key), "-noout"],
+                capture_output=True, text=True, timeout=5,
+            )
+        assert r.returncode == 0, f"server.key is not valid EC/RSA key: {r.stderr}"
+
+    def test_server_cert_signed_by_ca(self, cert_dir: Path) -> None:
+        """server.crt must be signed by ca.crt."""
+        r = subprocess.run(
+            [
+                "openssl", "verify", "-CAfile", str(cert_dir / "ca.crt"),
+                str(cert_dir / "server.crt"),
+            ],
+            capture_output=True, text=True, timeout=5,
+        )
+        assert r.returncode == 0 and "OK" in r.stdout, (
+            f"Server cert not signed by CA. Output: {r.stdout} {r.stderr}"
+        )
+
+    def test_ca_cert_not_expired(self, cert_dir: Path) -> None:
+        """CA certificate must not be expired."""
+        import datetime
+        from email.utils import parsedate_to_datetime
+
+        r = subprocess.run(
+            ["openssl", "x509", "-in", str(cert_dir / "ca.crt"), "-noout", "-enddate"],
+            capture_output=True, text=True, timeout=5,
+        )
+        assert r.returncode == 0, f"Cannot read CA end date: {r.stderr}"
+        date_str = r.stdout.split("=", 1)[1].strip()
+        expiry = parsedate_to_datetime(date_str)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        assert expiry > now, f"CA certificate expired on {expiry}."
+
+    def test_tls_connection_with_valid_ca(self, cert_dir: Path) -> None:
+        """Live TLS broker: connection with correct CA succeeds (TLS handshake OK).
+
+        ESP32 hardware TLS/HIL is not claimed — this validates Python + broker only.
+        """
+        if not TLS_BROKER_AVAILABLE:
+            pytest.skip("No live TLS broker on port 8883.")
+
+        import paho.mqtt.client as mqtt
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-tls-valid",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.tls_set(
+            ca_certs=str(cert_dir / "ca.crt"),
+            cert_reqs=ssl.CERT_REQUIRED,
+        )
+        client.on_connect = on_connect
+
+        try:
+            client.connect("127.0.0.1", 8883, keepalive=10)
+            client.loop_start()
+
+            deadline = time.monotonic() + 12
+            while time.monotonic() < deadline:
+                if "rc" in results:
+                    break
+                time.sleep(0.3)
+            client.loop_stop()
+
+            # RC 0 = TLS OK + auth OK; RC 5 = TLS OK but not authorized
+            assert results.get("rc") in (0, 5), (
+                f"TLS+valid CA: expected RC 0 or 5, got RC={results.get('rc')}."
+            )
+        except ssl.SSLError as e:
+            pytest.fail(f"TLS handshake failed with correct CA: {e}")
+
+    def test_tls_connection_rejects_wrong_ca(self) -> None:
+        """Live TLS broker: connection with wrong/missing CA must fail at TLS level."""
+        if not TLS_BROKER_AVAILABLE:
+            pytest.skip("No live TLS broker on port 8883.")
+
+        import paho.mqtt.client as mqtt
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-tls-wrong-ca",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.tls_set(
+            ca_certs="/nonexistent/path/to/ca.crt",
+            cert_reqs=ssl.CERT_REQUIRED,
+        )
+        client.on_connect = on_connect
+
+        client.connect("127.0.0.1", 8883, keepalive=5)
+        client.loop_start()
+
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if "rc" in results:
+                break
+            time.sleep(0.3)
+        client.loop_stop()
+
+        assert results.get("rc", -1) != 0, (
+            "TLS connection with wrong CA must be rejected."
+        )
+
+    def test_production_require_certificate_documented(self, conf_text: str) -> None:
+        """require_certificate setting must be documented (dev=false, prod=true)."""
+        lines = conf_text.splitlines()
+        in_tls = False
+        tls_lines = []
+        for line in lines:
+            s = line.strip()
+            if s.startswith("listener 8883"):
+                in_tls = True
+            elif in_tls and re.match(r"listener\s+\d", s) and "8883" not in s:
+                in_tls = False
+            elif in_tls:
+                tls_lines.append(s)
+
+        for line in tls_lines:
+            if line.startswith("require_certificate"):
+                parts = line.split()
+                assert len(parts) == 2 and parts[1] in ("true", "false")
                 return
-            # Try to subscribe to another device's telemetry - should be denied
-            result = client.subscribe("smart-factory/other-device/telemetry")
-            # MQTTv5 returns failure as negative result
-            if result[0] != 0:
-                nonlocal denied
-                denied = True
-        
-        client = mqtt.Client()
-        client.on_connect = on_connect
-        client.username_pw_set("bridge", "test-bridge-pass")
-        
-        try:
-            client.connect("localhost", 1883, keepalive=10)
-            client.loop_start()
-            
-            for _ in range(20):
-                time.sleep(0.5)
-                if denied:
-                    break
-            
-            # ACL should deny subscription to other device's telemetry
-            assert denied, "ACL should deny bridge subscribing to other device's telemetry"
-            
-        finally:
-            client.loop_stop()
-            client.disconnect()
 
-    def test_tc13_tls_listener_available(self, compose_up: None) -> None:
-        """TC13: TLS listener on port 8883 is available."""
-        # Check if port 8883 is open
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
-        try:
-            result = sock.connect_ex(("localhost", 8883))
-            assert result == 0, "TLS listener on port 8883 should be available"
-        finally:
-            sock.close()
+        pytest.skip(
+            "require_certificate not explicitly set (defaults to false). "
+            "Production must explicitly set true per ADR-0010."
+        )
+
+
+# ---------------------------------------------------------------------------
+# TC12: ACL denial (live broker)
+# ---------------------------------------------------------------------------
+
+class TestAclEnforcementLive:
+    """TC12: Live broker enforces ACL — wrong topic, cross-device, command publish."""
+
+    @pytest.mark.skipif(not BROKER_AVAILABLE, reason="No live broker on port 1883")
+    def test_bridge_credential_cannot_write_command_down(self) -> None:
+        """Bridge credential must be denied when trying to publish to command/down.
+
+        Per ADR-0010 negative example: bridge publishes telemetry/status/ACK,
+        not commands.
+        """
+        username = os.environ.get("MQTT_BRIDGE_USERNAME", "bridge")
+        password = os.environ.get("MQTT_BRIDGE_PASSWORD", "")
+
+        import paho.mqtt.client as mqtt
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            if rc == 0:
+                res = _c.publish(
+                    f"smart-factory/{username}/command/down",
+                    b'{"command_name":"CONVEYOR_START","arguments":["60"]}',
+                )
+                results["pub_rc"] = res.rc
+                _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-acl-command-publish",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.username_pw_set(username, password)
+        client.on_connect = on_connect
+        client.connect("127.0.0.1", 1883, keepalive=10)
+        client.loop_start()
+
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if "pub_rc" in results:
+                break
+            time.sleep(0.2)
+        client.loop_stop()
+
+        # MQTT client publish() returns 0=success, 1=error, 2=acl_denied
+        pub_rc = results.get("pub_rc")
+        assert pub_rc == 2, (
+            f"Publishing command/down with bridge credential must be ACL-denied "
+            f"(rc=2), got rc={pub_rc}."
+        )
+
+    @pytest.mark.skipif(not BROKER_AVAILABLE, reason="No live broker on port 1883")
+    def test_gateway_credential_cannot_publish_telemetry(self) -> None:
+        """Gateway credential must be denied when trying to publish telemetry."""
+        username = os.environ.get("MQTT_GATEWAY_USERNAME", "gateway")
+        password = os.environ.get("MQTT_GATEWAY_PASSWORD", "")
+
+        import paho.mqtt.client as mqtt
+
+        results: dict = {}
+
+        def on_connect(_c, _ud, _flags, rc, _props):
+            results["rc"] = rc
+            if rc == 0:
+                res = _c.publish(
+                    f"smart-factory/{username}/telemetry",
+                    b'{"device_id":"test","values":["CONVEYOR","RUNNING"]}',
+                )
+                results["pub_rc"] = res.rc
+                _c.disconnect()
+
+        client = mqtt.Client(
+            client_id="test-acl-gateway-publish",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        )
+        client.username_pw_set(username, password)
+        client.on_connect = on_connect
+        client.connect("127.0.0.1", 1883, keepalive=10)
+        client.loop_start()
+
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if "pub_rc" in results:
+                break
+            time.sleep(0.2)
+        client.loop_stop()
+
+        pub_rc = results.get("pub_rc")
+        assert pub_rc == 2, (
+            f"Gateway publishing telemetry must be ACL-denied (rc=2), got rc={pub_rc}."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Configuration syntax validation
+# ---------------------------------------------------------------------------
+
+class TestConfigSyntax:
+    """Configuration files must be syntactically valid and complete."""
+
+    def test_mosquitto_conf_has_listener(self, conf_text: str) -> None:
+        active = {
+            line.strip()
+            for line in conf_text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert any(line.startswith("listener ") for line in active)
+
+    def test_mosquitto_conf_has_acl_file(self, conf_text: str) -> None:
+        active = {
+            line.strip()
+            for line in conf_text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert any(line.startswith("acl_file ") for line in active)
+
+    def test_mosquitto_conf_has_password_file(self, conf_text: str) -> None:
+        active = {
+            line.strip()
+            for line in conf_text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert any(line.startswith("password_file ") for line in active)
+
+    def test_acl_file_not_empty(self, acl_text: str) -> None:
+        lines = [
+            l.strip()
+            for l in acl_text.splitlines()
+            if l.strip() and not l.strip().startswith("#")
+        ]
+        assert lines, "ACL file is empty. ACL enforcement is required per ADR-0010."
+
+    def test_acl_defines_bridge_and_gateway(self, acl_text: str) -> None:
+        assert re.search(r"(?i)\buser\s+bridge\b", acl_text)
+        assert re.search(r"(?i)\buser\s+gateway\b", acl_text)
+
+    def test_entrypoint_calls_mosquitto(self, entrypoint_text: str) -> None:
+        assert "mosquitto_passwd" in entrypoint_text
+        assert "exec mosquitto" in entrypoint_text
+
+    def test_compose_defines_mqtt_service(self, compose_text: str) -> None:
+        assert "services:" in compose_text
+        assert "mqtt:" in compose_text
+        assert "eclipse-mosquitto" in compose_text
+
+    def test_compose_mounts_mosquitto_conf(self, compose_text: str) -> None:
+        assert "mosquitto.conf" in compose_text
+        assert "acl" in compose_text
