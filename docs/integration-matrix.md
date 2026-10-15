@@ -4,31 +4,32 @@ This document establishes the authoritative hardware and software capability mat
 
 ---
 
-## 1. Evidence Levels & Verification Standard
+## 1. Evidence Levels & Verification Standard (Canonical Taxonomy)
 
-Every module, capability, and integration path in the Smart Factory project is categorized strictly by its verification evidence level:
+Every module, capability, and integration path in the Smart Factory project is categorized strictly by its verification evidence level in accordance with `docs/testing-and-acceptance.md`:
 
-| Level | Evidence Category | Description | Verification Method |
+| Level | Evidence Category | Description | Verification Method / Evidence Link |
 |---|---|---|---|
-| **L1** | **Specified / Planned** | Documented architecture, interface contract, or requirements issue. No executable code. | Design review, ADR lint, schema check. |
-| **L2** | **Simulated / Mocked** | Standalone code, mock adapters, or Python simulators (`amlp-sim`) running locally or in CI without physical hardware. | Automated unit/integration tests (`pytest`, PlatformIO native tests). |
-| **L3** | **Bench Tested (Partial)** | Firmware running on physical microcontrollers (ESP32-S3, Arduino Mega) with mocked sensors/actuators or partial stubs. | Benchtop test runs, serial log inspection, local broker inspection. |
-| **L4** | **Hardware-in-the-Loop (HIL)** | Fully integrated physical hardware (microcontrollers + level shifters + physical actuators/sensors). **Currently BLOCKED by Issue #98** (pending procurement, electrical validation, and official SDK integration). | Physical inspection, oscilloscope validation, HIL test suite execution. |
-| **L5** | **Integrated Production** | End-to-end operational factory floor connected to gateway, Unity Digital Twin, and MiniAlpha edge AI under safety interlocks. | Full-system acceptance test report. |
+| **L0** | **Static / Schema** | Documented architecture, interface contract, schema, or requirements issue. No executable code. | Design review, ADR lint (`scripts/check_adrs.py`), schema check. |
+| **L1** | **Host Unit** | Python/C99/C++ host unit tests, local algorithms, and parsers. | Unit test suite execution (`pytest`, PlatformIO native tests). |
+| **L2** | **Simulated / Mocked** | Standalone code, mock adapters, or Python simulators (`amlp-sim`, mock broker) running locally or in CI without physical hardware. | Automated integration tests (`python3 -m pytest iot-gateway/tests/`, CI workflows). |
+| **L3** | **Bench Tested (Partial)** | Firmware running on physical microcontrollers (ESP32-S3, Arduino Mega) with mocked sensors/actuators or partial stubs. **NOT VERIFIED** / **BLOCKED** where bench logs are absent. | Benchtop test runs, serial log inspection, local broker inspection (requires cited bench test logs). |
+| **L4** | **Hardware-in-the-Loop (HIL)** | Fully integrated physical hardware (microcontrollers + level shifters + physical actuators/sensors). **NOT VERIFIED / BLOCKED by Issue #98** (pending procurement, electrical validation, and official SDK integration). | Physical inspection, oscilloscope validation, HIL test suite execution. |
+| **L5** | **Integrated Production** | End-to-end operational factory floor connected to gateway, Unity Digital Twin, and MiniAlpha edge AI under safety interlocks. **NOT VERIFIED / BLOCKED by Issue #98**. | Full-system acceptance test report. |
 
 ---
 
 ## 2. Comprehensive Component Capability Matrix
 
-| Component | Target System | Evidence Level | MQTT | AMLP v1 | UART | WS / API | Event Store | Safety Interlocks | Simulation Fallback | Status / Notes |
+| Component | Target System | Evidence Level | MQTT | AMLP v1 | UART | WS / API | Event Store | Safety Interlocks | Simulation Fallback | Status / Notes & Evidence Link |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **ESP32 Bridge** | Firmware (`esp32/`) | **L3** (Bench partial) | Implemented | Implemented | Implemented | N/A | Stub | Stub (Firmware) | TCP AMLP loopback (`amlp-sim`) | Wi-Fi & MQTT client implemented; UART telemetry -> MQTT operational. GPIO sensor/actuator reads are stubs pending uKit SDK. |
-| **Arduino MEGA 2560 (Reference)** | Firmware (`ukit/`) | **L2** (Simulated) / **L3** (C99 ref) | N/A | Implemented | Implemented | N/A | N/A | N/A (Firmware) | Python TCP Simulator (`amlp-sim`) | Portable C99 reference endpoint; AMLP parsing, CRC, ACK, and telemetry generation tested via unit tests. Real hardware firmware blocked on official uKit SDK & pinout. |
-| **Nine Physical Modules** | Factory Floor (`factory-control/`) | **L1** (Planned) | Planned | Planned | Planned | Planned | Planned | Planned | Python software module mocks | Modular factory cells (conveyors, sorters, robotic arms). Hardware procurement and interface mapping pending. |
-| **Unity Digital Twin** | Digital Twin (`digital-twin/`) | **L1** (Planned) | Planned | N/A | N/A | Planned (REST/WS) | Planned (Snapshots) | Read-only view | Offline animation / mock telemetry playback | Unity selected as engineering engine (ADR-0003). Scene prefabs, state reducers, and reconnect logic planned. Offline animations do not constitute live synchronization. |
-| **MiniAlpha Edge AI** | Edge Robot (`edge-ai-robot/`) | **L1** (Planned) | Planned | N/A | N/A | Planned (MQTT/API) | Planned | Bounded Action Guard | Mock LLM / synthetic vision responses | On-site assistant and anomaly detection. Hardware procurement and official SDK pending. Bounded action guard prevents unauthorized physical override. |
-| **MQTT Ingestion Gateway** | SCADA / Cloud (`iot-gateway/`) | **L2** (Simulated) / **L3** (Bench) | Implemented | N/A | N/A | Implemented | Implemented (SQLite) | N/A | Local Mosquitto broker + `mqtt-cli` | MQTT subscriber, event store, WebSocket and HTTP REST API operational in CI. TLS auth planned. |
-| **Safety Gate / Interlocks** | Safety & OTA (`shared/` / Firmware) | **L2** (Simulated) | Implemented (Abort signals) | N/A | N/A | N/A | Implemented (Audit log) | Implemented (Firmware check) | Software simulation of watchdog and emergency stop | Monitors UART/MQTT health; aborts OTA staging and halts actuation if telemetry degrades. |
+| **ESP32 Bridge** | Firmware (`esp32/`) | **L2** (Simulated / Host Unit) / **L3** (Bench: **NOT VERIFIED / BLOCKED**) | Implemented | Implemented | Implemented | N/A | Stub | Stub (Firmware) | TCP AMLP loopback (`amlp-sim`) | Wi-Fi & MQTT client implemented; UART telemetry -> MQTT operational in simulation. GPIO sensor/actuator reads are stubs pending uKit SDK (BLOCKED by #98). |
+| **Arduino MEGA 2560 (Reference)** | Firmware (`ukit/`) | **L1** (Host Unit) / **L2** (Simulated) / **L3** (Bench: **NOT VERIFIED / BLOCKED**) | N/A | Implemented | Implemented | N/A | N/A | N/A (Firmware) | Python TCP Simulator (`amlp-sim`) | Portable C99 reference endpoint; AMLP parsing, CRC, ACK, and telemetry generation tested via unit tests (L1/L2). Real hardware firmware blocked on official uKit SDK & pinout (#98). |
+| **Nine Physical Modules** | Factory Floor (`factory-control/`) | **L1** (Specified / Planned) | Planned | Planned | Planned | Planned | Planned | Planned | Python software module mocks | Modular factory cells (conveyors, sorters, robotic arms). Hardware procurement and interface mapping pending (**BLOCKED by #98**). |
+| **Unity Digital Twin** | Digital Twin (`digital-twin/`) | **L1** (Specified / Planned) | Planned | N/A | N/A | Planned (REST/WS) | Planned (Snapshots) | Read-only view | Offline animation / mock telemetry playback | Unity selected as engineering engine per ADR-0003. Scene prefabs, state reducers, and reconnect logic planned. Live real-time synchronization is **NOT VERIFIED / BLOCKED**. |
+| **MiniAlpha Edge AI** | Edge Robot (`edge-ai-robot/`) | **L1** (Specified / Planned) | Planned | N/A | N/A | Planned (MQTT/API) | Planned | Bounded Action Guard | Mock LLM / synthetic vision responses | On-site assistant and anomaly detection. Hardware procurement and official SDK pending (**BLOCKED by #98**). Bounded action guard prevents unauthorized physical override. |
+| **MQTT Ingestion Gateway** | SCADA / Cloud (`iot-gateway/`) | **L2** (Simulated / CI Tested) | Implemented | N/A | N/A | Implemented | Implemented (SQLite) | N/A | Local Mosquitto broker + `mqtt-cli` | MQTT subscriber, event store, WebSocket and HTTP REST API operational in CI (`python3 -m pytest iot-gateway/tests/`). TLS auth planned. |
+| **Safety Gate / Interlocks** | Safety & OTA (`shared/` / Firmware) | **L2** (Simulated) | Implemented (Abort signals) | N/A | N/A | N/A | Implemented (Audit log) | Implemented (Firmware check: **L1/L2**) | Software simulation of watchdog and emergency stop | Monitors UART/MQTT health; aborts OTA staging and halts actuation if telemetry degrades in software simulation. Physical actuation interlock is **NOT VERIFIED / BLOCKED**. |
 
 ---
 
@@ -45,25 +46,33 @@ All physical Hardware-in-the-Loop (HIL) requirements across the monorepo are **e
 
 ---
 
-## 4. Simulation Fallback Procedures
+## 4. Partial Development Smoke & Test Validation Procedures
 
-To enable continuous development, testing, and CI verification without physical hardware (L2 evidence level), the project provides robust simulation fallbacks:
+To enable continuous development, testing, and CI verification without physical hardware (L2 evidence level), the project provides explicit executable tests and verification commands:
 
-### A. Python AMLP TCP Simulator (`amlp-sim`)
-Replaces physical Arduino MEGA and UART cabling with a TCP socket endpoint.
-- **What works**: AMLP packet encoding/decoding, CRC validation, command ACK generation, duplicate request rejection, and periodic telemetry emission.
-
-### B. Full-Stack Local Simulation Workflow
+### A. IoT Gateway & Storage Integration Tests (L2)
+Verifies MQTT message normalization, SQLite event store persistence, and REST/WS API endpoints against unit and integration fixtures:
 ```bash
-# Terminal 1: Start local MQTT broker (e.g. Mosquitto)
-mosquitto -p 1883
-
-# Terminal 2: Start Python AMLP simulator
-python -m amlp simulate --host 127.0.0.1 --port 8765
-
-# Terminal 3: Run gateway or test suite against local broker
-pytest tests/
+python3 -m pytest iot-gateway/tests/ -v
 ```
+*(Source: `iot-gateway/tests/` — 46 passing tests in CI)*
+
+### B. Python AMLP Codec & TCP Simulator (L2)
+Exercises protocol framing, CRC validation, command ACK generation, duplicate request rejection, and TCP socket communication locally:
+```bash
+python -m pip install -e ".[test]"
+pytest esp32-ukit-bridge/tests/python
+python -m amlp simulate --host 127.0.0.1 --port 8765
+```
+*(Source: `esp32-ukit-bridge/tools/amlp/` and `esp32-ukit-bridge/tests/python/`)*
+
+### C. C99 Reference Firmware Native Build & Test (L1/L2)
+Verifies portable C99 protocol parsing and checksum logic on the host platform:
+```bash
+pio test -d esp32-ukit-bridge/ukit -e native
+pio run -d esp32-ukit-bridge/ukit -e native
+```
+*(Source: `esp32-ukit-bridge/ukit/`)*
 
 ---
 
