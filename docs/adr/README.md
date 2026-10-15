@@ -81,9 +81,11 @@ ADRs are governed by Issue #79 (ADR governance). CI lint checks and architecture
 
 ## Issue-to-ADR Prerequisite Mapping & Audit (Issue #82)
 
-P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger rules defined above. Only issues currently open in the live tracker (52 open issues as of 2026-10-15) are included. Closed and archived issues are excluded. Every architecture-impacting issue must reference its governing ADR(s) before implementation merge.
+> **⚠️ ADR Status Gate — Read Before Acting on This Table:** All ADRs below are currently `Proposed`. Referencing an ADR in a PR does **NOT** automatically approve architecture-impacting work. An ADR must reach `Accepted` status with verifiable architect sign-off evidence (PR approval comment, issue comment, meeting minutes, or signed document) before any implementation PR touching that architectural surface may be merged. The "Prerequisite Gate" column documents the exact requirement per issue. See "ADR Prerequisite Gate Criteria" below.
 
-| # | Area | Title | Priority | ADR Trigger(s) | Governing ADR(s) | Status / Prerequisite Note |
+P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger rules defined above (lines 39–45 of this README). Only issues currently open in the live tracker are included. Closed and archived issues are listed in the Historical Closed Issues appendix. Every architecture-impacting issue must reference its governing ADR(s) before implementation merge.
+
+| # | Area | Title | Priority | ADR Trigger(s) | Governing ADR(s) | Status / Prerequisite Gate |
 |---|---|---|---|---|---|---|
 | #98 | BRIDGE | Hardware-in-the-loop (HIL) verification and licensing clearance for uKit Mega | P0 | Trigger 3, 5, 7 | ADR-0004, ADR-0007, ADR-0008 | Missing ADR: HIL hardware-evidence protocol and licensing clearance decision record required before HIL sign-off |
 | #11 | TWIN | Scaffold Unity Digital Twin project, runtime architecture and source-control policy | P1 | Trigger 4 | ADR-0003 | Proposed (Unity selected; institutional approval pending — BLOCKED) |
@@ -131,6 +133,43 @@ P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger
 | #20 | QA | Add hardware-in-the-loop test matrix and safety sign-off protocol | P2 | Trigger 3, 5 | ADR-0007 | Proposed; HIL test matrix must include OTA safety sign-off per ADR-0007 |
 | #52 | TRACKING | Master backlog and 12-month execution map | P1 | — | — | Non-architectural project management; No ADR required |
 
+### Historical Closed Issues Appendix
+
+These issues are closed; their resolution status is recorded for audit trail. They informed ADR backfill but do not gate current implementation.
+
+| Issue | Title | Resolution | Governing ADR(s) | Notes |
+|-------|-------|-----------|-----------------|-------|
+| #65 | Monorepo Foundation | CLOSED — P0 | ADR-0001 | Root foundation; ADR-0001 Proposed |
+| #1 | Fix root GitHub Actions | CLOSED — P0 | — | Infrastructure fix; no ADR trigger |
+| #2 | Add root overview & onboarding | CLOSED — P0 | — | Documentation; no ADR trigger |
+| #3 | Define canonical contracts | CLOSED — P0 | ADR-0002, ADR-0009 | Contract definitions; ADRs Proposed |
+| #4 | Verify uKit hardware interface | CLOSED — P0 | — | Resolved; no ADR trigger hit |
+| #5 | Harden bridge command auth | CLOSED — P0 | ADR-0006 | Covered by physical safety ADR |
+| #56 | Audit uKit Explore SDK | CLOSED — P0 | ADR-0004 | Covered by SDK boundary ADR |
+| #57 | Create Arduino Mega firmware target | CLOSED — P0 | — | Implementation of ADR-0004 |
+| #62 | Align docs with Unity decision | CLOSED — P0 | ADR-0003 | Docs alignment; ADR Proposed |
+| #66 | ESP32 UART TEL → MQTT telemetry | CLOSED — P0 | ADR-0005 | Covered by gateway events ADR |
+| #72 | Secure ESP32-S3 OTA architecture | CLOSED — P0 | ADR-0007 | ADR Proposed; implementation pending #73/#74 |
+| #79 | Establish ADR governance | CLOSED — P0 | — | Governance itself; no ADR trigger |
+| #80 | Implement ADR lint & CI gate | CLOSED — P0 | — | Meta; no ADR trigger |
+| #81 | Backfill Smart Factory ADRs | CLOSED — P1 | — | This audit is its deliverable |
+| #28 | Bridge MQTT JSON ↔ AMLP parity | CLOSED — P1 | ADR-0002 | Covered by bridge contract ADR |
+| #29 | Bridge telemetry health & recovery | CLOSED — P1 | ADR-0002 | Covered by bridge contract ADR |
+| #7 | MQTT ingestion gateway | CLOSED — P0 | ADR-0005 | Covered by gateway events ADR |
+
+### ADR Prerequisite Gate Criteria
+
+| ADR Status | Meaning | Implementation Gate |
+|------------|---------|--------------------|
+| **Proposed** | Drafted; pending architect review | **MAY NOT** merge implementation PRs that alter this architectural surface. ADR must first reach `Accepted`. |
+| **Accepted** | Architect has reviewed and recorded verifiable approval evidence | Implementation PRs referencing this ADR may proceed to merge, subject to other prerequisite gates. |
+| **Superseded** | Replaced by a later ADR | Implementation must follow the replacement ADR; original is deprecated. |
+| **Deprecated** | No longer applicable | Do not implement against this architectural surface. |
+
+**Rule:** Referencing an ADR in a PR does NOT automatically approve architectural work. The ADR must be `Accepted` with documented evidence. "Proposed" status is a gate, not a clearance. The CI architecture-impact gate (`scripts/check_adrs.py`) does not enforce the Proposed/Accepted distinction — that is an architect judgment call enforced at PR review.
+
+**Required evidence for Accepted status** (per "Status Lifecycle" section above): PR approval comment, issue comment, meeting minutes, or signed document. "Implemented" does not equal "Accepted".
+
 ### Missing-ADR Findings & Recommendations
 
 1. **HIL Hardware-Evidence Protocol (#98):** Hardware-in-the-loop verification for uKit Mega integration requires a dedicated ADR defining the HIL evidence protocol, licensing clearance decision record, and hardware-evidence acceptance criteria before P0 HIL sign-off. No current ADR covers this.
@@ -138,4 +177,4 @@ P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger
 3. **Bounded Capability Adapter (#13, #36, #37):** The edge-AI MiniAlpha capability adapter, robot alert skills, and fail-closed safety gate interact across multiple layers. While ADR-0006 Layer 4 covers the AI action guard, a dedicated ADR may be required to document the full capability boundary and bounded execution contract.
 4. **Command Authorization Lifecycle (#30):** The command authorization, lease, and acknowledgement lifecycle is closely coupled with ADR-0006 Layer 2 bridge validation. Verify no conflict between the two ADRs before implementation.
 5. **Status Enforcement:** All ADRs remain at `Proposed` status. No Proposed ADR is retroactively marked `Accepted` without verifiable review evidence and explicit architect sign-off. `Implemented` does not equal `Accepted`.
-6. **Hardware-Evidence and Institutional Amendment Limitations:** Unity digital twin (#11, #33, #34, #67, #68) and hardware module interfaces remain subject to hardware-evidence requirements and unverified institutional amendment rules (`BLOCKED: formal approval pending` where applicable). Issues #1, #2, #3, #5, #7, #22, #28, #29, #30, #11, #12, #65 and other closed/archived issues are excluded from this table as they are no longer open.
+6. **Hardware-Evidence and Institutional Amendment Limitations:** Unity digital twin (#11, #33, #34, #67, #68) and hardware module interfaces remain subject to hardware-evidence requirements and unverified institutional amendment rules (`BLOCKED: formal approval pending` where applicable). Issues #1, #2, #3, #5, #7, #28, #29, #65 and other closed/archived issues are excluded from the open-issues table as they are no longer open. Issues #22 and #30 remain OPEN and are included in the open-issues table.
