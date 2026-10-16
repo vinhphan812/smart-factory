@@ -1,212 +1,139 @@
-# ADR-0012: Unity Digital Twin Prefab Contracts
+# ADR-0012: Unity Digital Twin Prefab Contracts — Coordinate & State Decisions
 
 **Status:** Proposed
 **Date:** 2026-10-16
 **Deciders:** Issue #33
-**Related issues:** #33 #34 #35
+**Related issues:** #33, #11, #62, #66
+
+---
 
 ## Context
 
-The Smart Factory project includes a planned Unity Digital Twin (S2) that must visualize and synchronize with the physical nine-module factory (S1). The iot-gateway provides a WebSocket stream and REST API exposing normalized canonical events. This ADR documents the contracts that Unity prefabs must implement to consume these events — the data schemas, state machine, and coordinate mapping — without creating actual Unity assets.
+The Smart Factory Digital Twin requires well-defined contracts for each physical module so that Unity prefabs can be authored and tested independently of firmware and gateway code. Three architectural decisions must be made:
 
-The repository contains:
-- ESP32-uKit bridge with MQTT telemetry (`esp32-ukit-bridge/docs/mqtt-contract.md`)
-- Python iot-gateway with event normalization (`iot-gateway/src/iot_gateway/`)
-- JSON schemas for telemetry and device events (`contracts/v1/schemas/`)
-- Nine factory modules defined in PROJECT_CONTEXT.md
+1. **Telemetry binding** — How the twin binds MQTT telemetry fields to Unity prefab properties. The bridge emits raw `values[]`/`pairs{}` arrays; the canonical `state` object format is planned but not yet implemented (ADR-0009, Issue #66).
+2. **Coordinate / transform conventions** — How 3D prefab transforms map to the physical factory layout. ADR-0003 flagged institutional approval as unverified; no coordinate system is currently defined in code.
+3. **Command interface** — Whether Unity prefabs may issue commands and what workflow enforces actuator limits before MQTT publish.
+
+The nine-module physical system consists of one shared conveyor and up to eight per-station actuator devices, each an independent ESP32-uKit bridge with its own device ID.
+
+---
 
 ## Decision
 
-We define the following renderer-independent contracts for Unity consumption:
+We make four binding decisions for the Digital Twin prefab contract:
 
-### 1. Nine Factory Modules
+### 1 — Telemetry Binding: Array-Index Convention (Until Canonical Format Promoted)
 
-Each module is identified by its ESP32 bridge `device_id`. The current implementation treats each ESP32 as a single device; module-specific telemetry is embedded in the `values` array or `pairs` object.
+The twin prefab contract maps telemetry fields by **zero-based array index** and **key name** for `pairs`. This is the only binding possible today given the bridge's current output format.
 
-| Module | Bridge Owner | Telemetry Topic | Command Interface | AMLP Envelope Shape |
-|--------|--------------|-----------------|-------------------|---------------------|
-| Forklift | ESP32-UKIT-01 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,FORKLIFT,<state>,<speed>,SENSOR*=*` |
-| Dump Truck | ESP32-UKIT-02 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,DUMPTRUCK,<state>,<speed>,SENSOR*=*` |
-| Bracket | ESP32-UKIT-03 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,BRACKET,<state>,<speed>,SENSOR*=*` |
-| Packaging Machine | ESP32-UKIT-04 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,PACKAGING,<state>,<speed>,SENSOR*=*` |
-| Conveyor Belt | ESP32-UKIT-05 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,CONVEYOR,<state>,<speed>,SENSOR*=*` |
-| Sorting Machine | ESP32-UKIT-06 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,SORTING,<state>,<speed>,SENSOR*=*` |
-| Tower Crane | ESP32-UKIT-07 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,CRANE,<state>,<speed>,SENSOR*=*` |
-| Parking Lot | ESP32-UKIT-08 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,PARKING,<state>,<speed>,SENSOR*=*` |
-| Combine/Integration | ESP32-UKIT-09 | `smart-factory/ukit-*/telemetry` | CONVEYOR_START/STOP | `TEL,COMBINE,<state>,<speed>,SENSOR*=*` |
-
-**Limitation:** The current bridge firmware does not expose per-module device IDs. All nine modules report under a single `device_id` (e.g., `ukit-00000000`). The module type must be inferred from the first value in the `values` array (e.g., `CONVEYOR`, `FORKLIFT`).
-
-### 2. Unity-Compatible Canonical Event Contract
-
-Unity consumers must parse the gateway's canonical event envelope:
-
-```json
-{
-  "event_id": "uuid-v4",
-  "device_id": "ukit-00000000",
-  "event_type": "telemetry",
-  "timestamp": "2026-10-16T10:00:00Z",
-  "received_at": "2026-10-16T10:00:00.123Z",
-  "payload": {
-    "device_id": "ukit-00000000",
-    "received_at_ms": 123456,
-    "values": ["CONVEYOR", "RUNNING", "60"],
-    "pairs": { "SENSOR1": "1" }
-  },
-  "sequence": 42,
-  "trace_id": "uuid-v4-optional"
-}
+```
+values[0] → module_type   (e.g. "CONVEYOR", "ACTUATOR")
+values[1] → state_raw    (e.g. "RUNNING", "IDLE", "CH2")
+values[2] → speed / value (e.g. "60", "1")
+pairs["SENSOR1"] → bool entry_sensor
+pairs["SENSOR2"] → bool exit_sensor
 ```
 
-**Unity-specific fields to extract:**
+- Prefabs **must validate index bounds** before accessing `values[N]` — the bridge silently drops fields beyond 6 plain values.
+- Prefabs **must parse all values as strings** before using them as numbers or enums.
+- The `received_at_ms` field is used for ordering; no in-order delivery guarantee.
+- Telemetry is marked **stale** when no new frame arrives within **60 000 ms** (`kTelemetryTimeoutMs`).
+- When ADR-0009 is resolved (canonical `state` object), this binding is replaced; the index convention is retained for the **L0 static contract** phase.
 
-| Field | Source | Unity Mapping | Notes |
-|-------|--------|---------------|-------|
-| `device_id` | `payload.device_id` | `MonoBehaviour.name` | Prefab identifier |
-| `module_type` | `payload.values[0]` | Enum: `ModuleType` | CONVEYOR, FORKLIFT, etc. |
-| `state` | `payload.values[1]` | Enum: `ModuleState` | RUNNING, STOPPED, etc. |
-| `speed` | `payload.values[2]` | `transform.position` / animation speed | Integer 0-255 |
-| `sensors` | `payload.pairs` | ScriptableObject or dictionary | Key-value sensor readings |
-| `timestamp` | Root level | `DateTime` field | UTC ISO8601 |
-| `sequence` | Root level | `int` field | Ordering/deduplication |
-| `received_at_ms` | `payload.received_at_ms` | `long` field | Monotonic timestamp |
+### 2 — Coordinate Conventions: Deferred Until Institutional Approval
 
-### 3. Coordinate and State Mapping
+No world coordinate system, axis orientation, or scale is defined in code or approved by the institutional owner.
 
-**Current state (as of 2026-10-16):**
+**Decision: defer all transform decisions until ADR-0003 institutional approval is verified.** Prefabs should:
 
-| Unity Property | Source Field | Gap |
-|----------------|--------------|-----|
-| `transform.position` | None | **No explicit X/Y/Z coordinates in telemetry** |
-| `transform.rotation` | None | **No rotation data** |
-| `animation.speed` | `payload.values[2]` (speed) | Available as integer |
-| Custom state enum | `payload.values[1]` (state) | Available but no formal enum |
-| Sensor dictionary | `payload.pairs` | Available as key-value |
+- Store transform values as parameters (not hard-coded constants).
+- Apply a **default world origin at (0, 0, 0)** for the shared conveyor's entry sensor.
+- Document all transform parameters in the prefab's header comment block.
+- **Do not** assume a fixed conveyor axis direction without a physical layout spec reviewed by the institutional owner.
 
-**Identified gaps:**
-1. **No position fields**: The current telemetry schema does not include X/Y/Z coordinates. Unity must either:
-   - Use static scene placement (prefab coordinates are fixed)
-   - Infer position from a separate position telemetry stream (not yet defined)
-   - Add coordinate fields to a future telemetry schema extension
+This decision is recorded to prevent hard-coded assumptions from entering prefab assets before review.
 
-2. **No module type enum**: Module type is inferred from string values in `payload.values[0]`. A future schema should add an explicit `module_type` enum.
+### 3 — Command Interface: Twin as Read-Only Until Safety Gate
 
-3. **No explicit staleness flag**: The bridge documentation mentions 60-second timeout for staleness detection, but this is not exposed in the event envelope. Unity must implement staleness detection by tracking `received_at_ms` timestamps.
+Unity prefabs act as **observers only** — they consume telemetry and status events. Commands are not issued by the twin.
 
-### 4. Scene Object Contract
+**Rationale:** Issuing commands from the digital twin bypasses physical actuator limits, operator override, E-stop, and fresh context checks as documented in AGENTS.md. Any future command path from twin to physical must pass through a safety gate (ADR-0011 Dashboard Safety) and the gateway's command topic, with actuator-limit enforcement upstream.
 
-Unity prefabs must implement the following contract to consume gateway events:
+| Capability | Allowed today |
+|---|---|
+| Read telemetry via WebSocket | Yes |
+| Display status / state | Yes |
+| Trigger local prefab animation (no physical effect) | Yes |
+| Issue `CONVEYOR_START` / `CONVEYOR_STOP` via MQTT | No — safety gate not defined |
+| Issue `SET_OUTPUT` via MQTT | No — safety gate not defined |
+| Send command via gateway REST API | No — endpoint not exposed |
 
-```csharp
-// Required: ModuleType enum (extend as needed)
-public enum ModuleType {
-    Unknown = 0,
-    Forklift = 1,
-    DumpTruck = 2,
-    Bracket = 3,
-    Packaging = 4,
-    Conveyor = 5,
-    Sorting = 6,
-    TowerCrane = 7,
-    Parking = 8,
-    Combine = 9
-}
+### 4 — Module Contracts as Specification, Not Implementation
 
-// Required: ModuleState enum
-public enum ModuleState {
-    Unknown = 0,
-    Running = 1,
-    Stopped = 2,
-    Error = 3,
-    Offline = 4
-}
+Each module's contract (`docs/twin/prefab-module-contracts.md`) documents the **schema contract** the twin prefab must satisfy. The contracts are:
 
-// Required: MonoBehaviour interface
-public interface IFactoryModuleReceiver {
-    string DeviceId { get; }
-    ModuleType ModuleType { get; }
-    ModuleState State { get; set; }
-    int Speed { get; set; }
-    Dictionary<string, string> Sensors { get; set; }
-    DateTime LastUpdate { get; set; }
-    bool IsStale { get; }
-}
+- **L0 static** — textual schema, no runtime verification.
+- **Language-agnostic** — applicable to any twin engine consuming the gateway's WebSocket or REST API.
+- **Versioned** — breaking changes require a new ADR and version bump.
+- **No Unity C# assets** — no `.prefab`, `.mat`, `.controller`, or script files.
 
-// Required: Prefab must implement IFactoryModuleReceiver
-public class ConveyorModule : MonoBehaviour, IFactoryModuleReceiver {
-    public string DeviceId { get; private set; }
-    public ModuleType ModuleType => ModuleType.Conveyor;
-    public ModuleState State { get; set; }
-    public int Speed { get; set; }
-    public Dictionary<string, string> Sensors { get; set; }
-    public DateTime LastUpdate { get; set; }
-
-    // Stale detection: mark stale if no update for 60 seconds
-    public bool IsStale => (DateTime.UtcNow - LastUpdate).TotalSeconds > 60;
-
-    public void OnCanonicalEvent(CanonicalEvent evt) { /* parse payload */ }
-}
-```
-
-**WebSocket consumption pattern:**
-```csharp
-// Unity WebSocket client connects to: ws://<gateway-host>:8765/
-// Receives JSON CanonicalEvent objects
-// Must handle: reconnection, message ordering, staleness
-```
-
-**REST API snapshot:**
-```csharp
-// GET http://<gateway-host>:8000/events?device_id=ukit-*&limit=100
-// Returns: { "events": [...], "count": N }
-```
-
-### 5. ADR Reference
-
-This ADR follows the format defined in `adr-TEMPLATE.md` and builds upon:
-- ADR-0002: Bridge MQTT-AMLP Contract
-- ADR-0005: Gateway Canonical Event Envelope
+---
 
 ## Consequences
 
-**Easier:**
-- Unity developers have a clear contract to implement
-- WebSocket and REST API are already functional
-- Telemetry schema provides backward compatibility
+**Positive:**
+- Prefab authors have a stable, versioned contract to work against before hardware is available.
+- Gateway event envelope (`CanonicalEvent`) is fully documented; no ambiguity about `event_type` values.
+- Safety boundary between twin observation and physical control is explicit, preventing accidental bypass.
+- Schema mismatch is acknowledged and tracked (ADR-0009 / Issue #66), not papered over.
 
-**Harder:**
-- No explicit coordinates — Unity must use static positioning or await schema extension
-- No explicit module type — requires string parsing from telemetry values
-- Staleness must be client-side calculated (60s timeout not in schema)
+**Negative / Risks:**
+- Array-index binding is fragile — adding a new field shifts indices and silently breaks consumers. This is the primary motivation to promote the canonical `state` format (Issue #66).
+- Coordinate deferral means prefabs cannot be fully positioned until ADR-0003 is resolved; partial progress only.
+- Telemetry topic not in `DEFAULT_TOPICS` in current gateway config — routing must be verified before twin can consume telemetry.
+- `mqtt_timestamp_ms` is always 0; `received_at_ms` is relative to bridge boot, not wall-clock — cross-device ordering is unreliable without NTP or offset estimation.
+- WebSocket slow-client disconnection (queue full → drop) means telemetry gaps can appear without explicit signalling.
 
-**Limitations to communicate:**
-1. Unity prefabs cannot be dynamically positioned without schema changes
-2. Module type is implicit, not explicit in the event envelope
-3. Physical positions must be hardcoded in Unity scene or inferred from separate sensors
+**Neutral:**
+- Twin read-only constraint means no simulation-of-control is possible until a safety gate ADR is written and approved.
 
-## Alternatives considered
+---
 
-**Option A: Wait for explicit coordinate fields**
-- Defer Unity implementation until telemetry schema adds explicit X/Y/Z fields
-- Rejected: blocks current Unity development; static positioning is acceptable for initial demo
+## Alternatives Considered
 
-**Option B: Add coordinates to schema now**
-- Extend `telemetry.schema.json` with `position_x`, `position_y`, `position_z`
-- Rejected: hardware does not currently provide position data; schema would be aspirational without sensor evidence
+We considered four alternatives before reaching these decisions.
 
-**Option C: Document current gaps (chosen)**
-- Implement Unity contract with current schema
-- Document gaps explicitly
-- Plan future schema extensions as separate issues
+### Alt A: Bind telemetry by key lookup in `values[]` instead of index
+
+Parse the array as key-value pairs. Rejected because the bridge output is a flat ordered list with no key tags — key lookup requires prepending a known type prefix which requires firmware changes outside the scope of this ADR.
+
+### Alt B: Expose command API from twin now, relying on physical interlock
+
+Issue commands from Unity and trust that MEGA firmware enforces actuator limits. Rejected — AGENTS.md explicitly prohibits AI/twin bypassing of actuator limits; a safety gate ADR is required before any command path is exposed.
+
+### Alt C: Lock coordinate system to +X conveyor, Z depth now
+
+Assume the conveyor runs +X and station spacing is 600 mm. Rejected — institutional approval unverified per ADR-0003; locking a coordinate convention prematurely risks requiring rework when the physical layout is reviewed.
+
+### Alt D: Adopt a JSON Schema for prefab contracts
+
+Define `prefab-module-contracts.schema.json` with `$id`, `$schema`, `type`, `properties`, and required fields. Deferred — the flat `values[]`/`pairs{}` format cannot be validated by a simple JSON Schema without custom keywords; ADR-0009 resolution (canonical `state` object) is the right time to introduce schema validation.
+
+---
 
 ## Evidence
 
-- `esp32-ukit-bridge/docs/mqtt-contract.md` — current MQTT topics, AMLP envelope, telemetry format
-- `iot-gateway/src/iot_gateway/models.py` — `CanonicalEvent` dataclass definition
-- `iot-gateway/src/iot_gateway/event_normalizer.py` — event normalization logic
-- `contracts/v1/schemas/telemetry.schema.json` — telemetry JSON schema (no coordinates)
-- `contracts/v1/schemas/device-event.schema.json` — canonical event envelope schema
-- `docs/PROJECT_CONTEXT.md` — nine factory module definitions
-- Issue #33: Unity prefab contracts for nine factory modules
-- Issue #34: Unity time synchronization and stale/offline recovery
+- `esp32-ukit-bridge/docs/mqtt-contract.md` — Bridge MQTT/AMLP contract (source of truth)
+- `iot-gateway/src/iot_gateway/models.py` — `CanonicalEvent`, `EventType` enum
+- `iot-gateway/src/iot_gateway/event_normalizer.py` — `TOPIC_PATTERNS`, `STATUS_CODE_MAP`
+- `iot-gateway/src/iot_gateway/api.py` — `WebSocketServer.broadcast()`, `create_http_app()`
+- `iot-gateway/src/iot_gateway/config.py` — `DEFAULT_TOPICS` (telemetry not subscribed)
+- `docs/adr/adr-0003-digital-twin-engine.md` — Engine decision (Unity), institutional approval unverified
+- `docs/adr/adr-0009-telemetry-schema-compatibility.md` — Known bridge/canonical mismatch
+- `docs/adr/adr-0011-dashboard-safety.md` — Safety gate for command issuing
+- `docs/PROJECT_CONTEXT.md` — AGENTS.md constraints on AI/Twin bypass
+- `docs/twin/prefab-module-contracts.md` — Per-module telemetry/command schema contracts
+- Issue #33 — Unity prefab contracts
+- Issue #66 — Bridge telemetry pipeline (canonical format uplift)
+- Issue #11, #62 — Engine decision history
