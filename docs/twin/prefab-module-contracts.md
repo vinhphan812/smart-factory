@@ -1,7 +1,8 @@
 # Nine-Module Prefab Contracts — Digital Twin Telemetry & Command Schema
 
 > **Scope:** Schema documentation only. No Unity C# assets, no prefab implementations.
-> Twin engine: see [ADR-0003 Digital Twin Engine](./adr-0012-unity-digital-twin-prefab-contracts.md).
+> Twin engine: see [ADR-0003 Digital Twin Engine](../adr/adr-0003-digital-twin-engine.md).
+> Prefab contracts ADR: [ADR-0012 Unity Digital Twin Prefab Contracts](../adr/adr-0012-unity-digital-twin-prefab-contracts.md).
 > AMLP/Bridge wire contract: `esp32-ukit-bridge/docs/mqtt-contract.md`.
 > Gateway canonical event: `iot-gateway/src/iot_gateway/models.py` → `CanonicalEvent`.
 > Known schema mismatch (bridge → canonical): [ADR-0009 Telemetry Schema Compatibility](../adr/adr-0009-telemetry-schema-compatibility.md).

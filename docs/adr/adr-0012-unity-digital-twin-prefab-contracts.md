@@ -58,7 +58,7 @@ This decision is recorded to prevent hard-coded assumptions from entering prefab
 
 Unity prefabs act as **observers only** — they consume telemetry and status events. Commands are not issued by the twin.
 
-**Rationale:** Issuing commands from the digital twin bypasses physical actuator limits, operator override, E-stop, and fresh context checks as documented in AGENTS.md. Any future command path from twin to physical must pass through a safety gate (ADR-0011 Dashboard Safety) and the gateway's command topic, with actuator-limit enforcement upstream.
+**Rationale:** Issuing commands from the digital twin bypasses physical actuator limits, operator override, E-stop, and fresh context checks as documented in AGENTS.md. Any future command path from twin to physical must pass through the gateway's command topic with actuator-limit enforcement (ADR-0006 Local Physical Safety, Layer 2/3), and a safety gate ADR covering the twin command path.
 
 | Capability | Allowed today |
 |---|---|
@@ -91,11 +91,11 @@ Each module's contract (`docs/twin/prefab-module-contracts.md`) documents the **
 **Negative / Risks:**
 - Array-index binding is fragile — adding a new field shifts indices and silently breaks consumers. This is the primary motivation to promote the canonical `state` format (Issue #66).
 - Coordinate deferral means prefabs cannot be fully positioned until ADR-0003 is resolved; partial progress only.
-- Telemetry topic not in `DEFAULT_TOPICS` in current gateway config — routing must be verified before twin can consume telemetry.
 - `mqtt_timestamp_ms` is always 0; `received_at_ms` is relative to bridge boot, not wall-clock — cross-device ordering is unreliable without NTP or offset estimation.
 - WebSocket slow-client disconnection (queue full → drop) means telemetry gaps can appear without explicit signalling.
 
 **Neutral:**
+- Contracts are L0 static design documents (textual schema, no runtime verification, no Unity C# assets). They define the interface contract for future prefab authoring but do not constitute a working Unity implementation.
 - Twin read-only constraint means no simulation-of-control is possible until a safety gate ADR is written and approved.
 
 ---
@@ -128,10 +128,10 @@ Define `prefab-module-contracts.schema.json` with `$id`, `$schema`, `type`, `pro
 - `iot-gateway/src/iot_gateway/models.py` — `CanonicalEvent`, `EventType` enum
 - `iot-gateway/src/iot_gateway/event_normalizer.py` — `TOPIC_PATTERNS`, `STATUS_CODE_MAP`
 - `iot-gateway/src/iot_gateway/api.py` — `WebSocketServer.broadcast()`, `create_http_app()`
-- `iot-gateway/src/iot_gateway/config.py` — `DEFAULT_TOPICS` (telemetry not subscribed)
+- `iot-gateway/src/iot_gateway/config.py` — `DEFAULT_TOPICS` (telemetry and heartbeat subscribed)
 - `docs/adr/adr-0003-digital-twin-engine.md` — Engine decision (Unity), institutional approval unverified
+- `docs/adr/adr-0006-local-physical-safety.md` — Physical actuator limits and command safety layers
 - `docs/adr/adr-0009-telemetry-schema-compatibility.md` — Known bridge/canonical mismatch
-- `docs/adr/adr-0011-dashboard-safety.md` — Safety gate for command issuing
 - `docs/PROJECT_CONTEXT.md` — AGENTS.md constraints on AI/Twin bypass
 - `docs/twin/prefab-module-contracts.md` — Per-module telemetry/command schema contracts
 - Issue #33 — Unity prefab contracts
