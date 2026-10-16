@@ -65,12 +65,13 @@ def test_deny_when_confidence_below_threshold():
     config = SafetyRuleConfig(min_confidence_threshold=0.8)
     gate = SafetyGate(config)
 
+    current_time_ms = int(time.time() * 1000)
     decision = gate.evaluate(
         command_id="cmd-006",
         device_id="conveyor-01",
         command_name="CONVEYOR_START",
         confidence=0.6,
-        data_timestamp_ms=None,
+        data_timestamp_ms=current_time_ms,
     )
 
     assert decision.verdict == Verdict.DENY, f"Expected DENY, got {decision.verdict}"
@@ -116,12 +117,13 @@ def test_hold_on_operator_override_active():
     gate = SafetyGate()
     gate.activate_operator_override()
 
+    current_time_ms = int(time.time() * 1000)
     decision = gate.evaluate(
         command_id="cmd-011",
         device_id="conveyor-01",
         command_name="CONVEYOR_START",
         confidence=0.95,
-        data_timestamp_ms=None,
+        data_timestamp_ms=current_time_ms,
     )
 
     assert decision.verdict == Verdict.HOLD, f"Expected HOLD, got {decision.verdict}"
@@ -135,12 +137,13 @@ def test_permit_after_override_authorization():
     gate.activate_operator_override()
     gate.authorize_after_override()
 
+    current_time_ms = int(time.time() * 1000)
     decision = gate.evaluate(
         command_id="cmd-012",
         device_id="conveyor-01",
         command_name="CONVEYOR_START",
         confidence=0.95,
-        data_timestamp_ms=None,
+        data_timestamp_ms=current_time_ms,
     )
 
     assert decision.verdict == Verdict.PERMIT, f"Expected PERMIT, got {decision.verdict}"
@@ -150,12 +153,13 @@ def test_audit_log_stores_decisions():
     """Every decision is logged to the audit log."""
     gate = SafetyGate()
 
+    current_time_ms = int(time.time() * 1000)
     gate.evaluate(
         command_id="cmd-014",
         device_id="conveyor-01",
         command_name="CONVEYOR_START",
         confidence=0.95,
-        data_timestamp_ms=None,
+        data_timestamp_ms=current_time_ms,
     )
 
     log = gate.audit_log
@@ -167,12 +171,13 @@ def test_audit_log_contains_only_envelope_metadata():
     """Audit log stores only non-sensitive envelope metadata."""
     gate = SafetyGate()
 
+    current_time_ms = int(time.time() * 1000)
     gate.evaluate(
         command_id="cmd-015",
         device_id="conveyor-01",
         command_name="CONVEYOR_START",
         confidence=0.95,
-        data_timestamp_ms=None,
+        data_timestamp_ms=current_time_ms,
     )
 
     log = gate.audit_log[0]

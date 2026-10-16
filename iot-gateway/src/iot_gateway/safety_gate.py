@@ -35,6 +35,7 @@ class ReasonCode(str, Enum):
     INTERLOCK_VIOLATION = "INTERLOCK_VIOLATION"  # Safety interlock violated
     NO_PERMIT_CRITERIA_MET = "NO_PERMIT_CRITERIA_MET"  # No criteria met
     UNKNOWN_DEVICE = "UNKNOWN_DEVICE"       # Device not recognized
+    NO_TELEMETRY = "NO_TELEMETRY"           # Telemetry absent — fail-closed
 
     # HOLD reasons
     OPERATOR_OVERRIDE = "OPERATOR_OVERRIDE"  # Operator manually paused
@@ -85,18 +86,29 @@ class SafetyDecision:
 
 @dataclass
 class SafetyRuleConfig:
-    """Configurable safety rules for the gate."""
+    """Configurable safety rules for the gate.
+
+    Hardware interlocks are authoritative: the software gate evaluates but
+    cannot remotely clear a hardware E-stop or hardware interlock. A device
+    listed in hardware_interlocks is always treated as blocked regardless of
+    software state.
+    """
     # Data freshness: max age in seconds for AI inference data
     max_data_age_seconds: float = 5.0
 
     # Minimum AI confidence threshold (0.0 to 1.0)
     min_confidence_threshold: float = 0.8
 
-    # Emergency stop flag
+    # Emergency stop flag (software-controlled)
     emergency_stop_active: bool = False
 
-    # Interlock states: device_id -> blocked (True = blocked)
+    # Interlock states: device_id -> blocked (True = blocked) (software)
     interlocks: dict[str, bool] = field(default_factory=dict)
+
+    # Hardware interlocks: device_id -> True. These are authoritative and
+    # cannot be cleared by software. Any device present in this dict is
+    # always considered blocked regardless of software interlock state.
+    hardware_interlocks: dict[str, bool] = field(default_factory=dict)
 
 
 class SafetyGate:
@@ -230,23 +242,36 @@ class SafetyGate:
             self._log_decision(decision)
             return decision
 
-        # Check data staleness
-        if data_timestamp_ms is not None:
-            current_time_ms = int(time.time() * 1000)
-            age_seconds = (current_time_ms - data_timestamp_ms) / 1000.0
-            if age_seconds > self._config.max_data_age_seconds:
-                verdict = Verdict.DENY
-                reason_code = ReasonCode.STALE_DATA
-                decision = self._create_decision(
-                    command_id=command_id,
-                    device_id=device_id,
-                    command_name=command_name,
-                    verdict=verdict,
-                    reason_code=reason_code,
-                    confidence=confidence,
-                )
-                self._log_decision(decision)
-                return decision
+        # Check data staleness — fail-closed: DENY if telemetry is absent
+        if data_timestamp_ms is None:
+            verdict = Verdict.DENY
+            reason_code = ReasonCode.NO_TELEMETRY
+            decision = self._create_decision(
+                command_id=command_id,
+                device_id=device_id,
+                command_name=command_name,
+                verdict=verdict,
+                reason_code=reason_code,
+                confidence=confidence,
+            )
+            self._log_decision(decision)
+            return decision
+
+        current_time_ms = int(time.time() * 1000)
+        age_seconds = (current_time_ms - data_timestamp_ms) / 1000.0
+        if age_seconds > self._config.max_data_age_seconds:
+            verdict = Verdict.DENY
+            reason_code = ReasonCode.STALE_DATA
+            decision = self._create_decision(
+                command_id=command_id,
+                device_id=device_id,
+                command_name=command_name,
+                verdict=verdict,
+                reason_code=reason_code,
+                confidence=confidence,
+            )
+            self._log_decision(decision)
+            return decision
 
         # Check confidence threshold
         if confidence < self._config.min_confidence_threshold:
@@ -263,7 +288,22 @@ class SafetyGate:
             self._log_decision(decision)
             return decision
 
-        # Check interlock
+        # Check interlock (software + hardware — hardware is authoritative)
+        # Hardware interlocks cannot be cleared by software.
+        if self._config.hardware_interlocks.get(device_id, False):
+            verdict = Verdict.DENY
+            reason_code = ReasonCode.INTERLOCK_VIOLATION
+            decision = self._create_decision(
+                command_id=command_id,
+                device_id=device_id,
+                command_name=command_name,
+                verdict=verdict,
+                reason_code=reason_code,
+                confidence=confidence,
+            )
+            self._log_decision(decision)
+            return decision
+
         if self._config.interlocks.get(device_id, False):
             verdict = Verdict.DENY
             reason_code = ReasonCode.INTERLOCK_VIOLATION
@@ -354,12 +394,17 @@ class SafetyGate:
             self._audit_log = self._audit_log[-max_log_size:]
 
     def get_status(self) -> dict[str, Any]:
-        """Get current safety gate status (non-sensitive)."""
+        """Get current safety gate status (non-sensitive).
+
+        Note: hardware_interlocks are reported as read-only authoritative state.
+        Software cannot clear hardware interlocks; they must be cleared physically.
+        """
         return {
             "emergency_stop_active": self._config.emergency_stop_active,
             "operator_override_active": self._operator_override_active,
             "authorization_required": self._override_authorization_required,
             "interlocks": list(self._config.interlocks.keys()),
+            "hardware_interlocks": list(self._config.hardware_interlocks.keys()),
             "config": {
                 "max_data_age_seconds": self._config.max_data_age_seconds,
                 "min_confidence_threshold": self._config.min_confidence_threshold,

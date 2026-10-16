@@ -48,8 +48,24 @@ class TestSafetyGatePermit:
         assert decision.command_id == "cmd-001"
         assert decision.device_id == "conveyor-01"
 
-    def test_permit_with_no_timestamp(self) -> None:
-        """PERMIT when no timestamp provided (defaults to fresh)."""
+    def test_permit_edge_case_confidence_equal_to_threshold(self) -> None:
+        """PERMIT when confidence equals threshold (boundary case)."""
+        config = SafetyRuleConfig(min_confidence_threshold=0.8)
+        gate = SafetyGate(config)
+
+        current_time_ms = int(time.time() * 1000)
+        decision = gate.evaluate(
+            command_id="cmd-003",
+            device_id="conveyor-01",
+            command_name="CONVEYOR_START",
+            confidence=0.8,  # Exactly at threshold
+            data_timestamp_ms=current_time_ms,
+        )
+
+        assert decision.verdict == Verdict.PERMIT
+
+    def test_deny_when_no_telemetry(self) -> None:
+        """DENY when data_timestamp_ms is None (fail-closed, not PERMIT)."""
         gate = SafetyGate()
 
         decision = gate.evaluate(
@@ -57,26 +73,11 @@ class TestSafetyGatePermit:
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.9,
-            data_timestamp_ms=None,  # No timestamp = fresh
-        )
-
-        assert decision.verdict == Verdict.PERMIT
-        assert decision.reason_code == ReasonCode.ALL_CRITERIA_MET
-
-    def test_permit_edge_case_confidence_equal_to_threshold(self) -> None:
-        """PERMIT when confidence equals threshold (boundary case)."""
-        config = SafetyRuleConfig(min_confidence_threshold=0.8)
-        gate = SafetyGate(config)
-
-        decision = gate.evaluate(
-            command_id="cmd-003",
-            device_id="conveyor-01",
-            command_name="CONVEYOR_START",
-            confidence=0.8,  # Exactly at threshold
             data_timestamp_ms=None,
         )
 
-        assert decision.verdict == Verdict.PERMIT
+        assert decision.verdict == Verdict.DENY
+        assert decision.reason_code == ReasonCode.NO_TELEMETRY
 
 
 class TestSafetyGateDenyStaleData:
@@ -129,12 +130,13 @@ class TestSafetyGateDenyLowConfidence:
         config = SafetyRuleConfig(min_confidence_threshold=0.8)
         gate = SafetyGate(config)
 
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-006",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.6,  # Below threshold
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         assert decision.verdict == Verdict.DENY
@@ -144,12 +146,13 @@ class TestSafetyGateDenyLowConfidence:
         """DENY when confidence is zero."""
         gate = SafetyGate()
 
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-007",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.0,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         assert decision.verdict == Verdict.DENY
@@ -185,12 +188,13 @@ class TestSafetyGateInterlock:
         config = SafetyRuleConfig(interlocks={"conveyor-01": True})
         gate = SafetyGate(config)
 
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-009",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         assert decision.verdict == Verdict.DENY
@@ -201,12 +205,13 @@ class TestSafetyGateInterlock:
         config = SafetyRuleConfig(interlocks={"conveyor-01": False})
         gate = SafetyGate(config)
 
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-010",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         assert decision.verdict == Verdict.PERMIT
@@ -221,12 +226,13 @@ class TestSafetyGateOperatorOverride:
         gate.activate_operator_override()
 
         # Override is now active, authorization is required
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-011",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         assert decision.verdict == Verdict.HOLD
@@ -241,12 +247,13 @@ class TestSafetyGateOperatorOverride:
         # Authorize after override
         gate.authorize_after_override()
 
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-012",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         # Now should permit after re-authorization
@@ -262,12 +269,13 @@ class TestSafetyGateOperatorOverride:
         gate.deactivate_operator_override()
 
         # Should work normally (no override active)
+        current_time_ms = int(time.time() * 1000)
         decision = gate.evaluate(
             command_id="cmd-013",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         assert decision.verdict == Verdict.PERMIT
@@ -280,12 +288,13 @@ class TestSafetyGateAuditLog:
         """Every decision is logged to the audit log."""
         gate = SafetyGate()
 
+        current_time_ms = int(time.time() * 1000)
         gate.evaluate(
             command_id="cmd-014",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         log = gate.audit_log
@@ -300,12 +309,13 @@ class TestSafetyGateAuditLog:
         """
         gate = SafetyGate()
 
+        current_time_ms = int(time.time() * 1000)
         gate.evaluate(
             command_id="cmd-015",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         log = gate.audit_log[0]
@@ -327,12 +337,13 @@ class TestSafetyGateAuditLog:
 
         # The evaluate method only takes command_name, not arguments
         # This test verifies the design: arguments are not passed to evaluate
+        current_time_ms = int(time.time() * 1000)
         gate.evaluate(
             command_id="cmd-016",
             device_id="conveyor-01",
             command_name="CONVEYOR_START",
             confidence=0.95,
-            data_timestamp_ms=None,
+            data_timestamp_ms=current_time_ms,
         )
 
         log = gate.audit_log[0]
@@ -354,6 +365,7 @@ class TestSafetyGateStatus:
             min_confidence_threshold=0.8,
             emergency_stop_active=False,
             interlocks={"conveyor-01": True},
+            hardware_interlocks={"robot-arm-01": True},
         )
         gate = SafetyGate(config)
         gate.activate_operator_override()
@@ -362,7 +374,9 @@ class TestSafetyGateStatus:
 
         assert "emergency_stop_active" in status
         assert "operator_override_active" in status
-        assert "config" in status
+        assert "interlocks" in status
+        assert "hardware_interlocks" in status
+        assert status["hardware_interlocks"] == ["robot-arm-01"]
         assert status["config"]["max_data_age_seconds"] == 5.0
         assert status["config"]["min_confidence_threshold"] == 0.8
 
@@ -405,3 +419,61 @@ class TestSafetyDecisionModel:
         assert ReasonCode.INTERLOCK_VIOLATION.value == "INTERLOCK_VIOLATION"
         assert ReasonCode.OPERATOR_OVERRIDE.value == "OPERATOR_OVERRIDE"
         assert ReasonCode.ALL_CRITERIA_MET.value == "ALL_CRITERIA_MET"
+        assert ReasonCode.NO_TELEMETRY.value == "NO_TELEMETRY"
+
+
+class TestSafetyGateHardwareInterlock:
+    """Tests for hardware interlock authoritative behavior.
+
+    Hardware interlocks are physically hardwired and cannot be cleared by
+    software. The software gate evaluates but cannot override them.
+    """
+
+    def test_deny_on_hardware_interlock(self) -> None:
+        """DENY when device has active hardware interlock (authoritative)."""
+        config = SafetyRuleConfig(hardware_interlocks={"conveyor-01": True})
+        gate = SafetyGate(config)
+
+        current_time_ms = int(time.time() * 1000)
+        decision = gate.evaluate(
+            command_id="cmd-hw-001",
+            device_id="conveyor-01",
+            command_name="CONVEYOR_START",
+            confidence=0.99,
+            data_timestamp_ms=current_time_ms,
+        )
+
+        assert decision.verdict == Verdict.DENY
+        assert decision.reason_code == ReasonCode.INTERLOCK_VIOLATION
+
+    def test_hardware_interlock_not_cleared_by_software(self) -> None:
+        """Hardware interlock DENYs even when software interlock is False."""
+        # Hardware interlock active, software says not blocked
+        config = SafetyRuleConfig(
+            hardware_interlocks={"conveyor-01": True},
+            interlocks={"conveyor-01": False},
+        )
+        gate = SafetyGate(config)
+
+        current_time_ms = int(time.time() * 1000)
+        decision = gate.evaluate(
+            command_id="cmd-hw-002",
+            device_id="conveyor-01",
+            command_name="CONVEYOR_START",
+            confidence=0.99,
+            data_timestamp_ms=current_time_ms,
+        )
+
+        # Hardware is authoritative — software cannot override it
+        assert decision.verdict == Verdict.DENY
+        assert decision.reason_code == ReasonCode.INTERLOCK_VIOLATION
+
+    def test_status_reports_hardware_interlocks(self) -> None:
+        """Status endpoint reports hardware_interlocks as read-only state."""
+        config = SafetyRuleConfig(hardware_interlocks={"conveyor-01": True})
+        gate = SafetyGate(config)
+
+        status = gate.get_status()
+
+        assert "hardware_interlocks" in status
+        assert "conveyor-01" in status["hardware_interlocks"]

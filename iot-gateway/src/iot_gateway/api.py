@@ -3,10 +3,12 @@
 import asyncio
 import json
 import logging
+import os
+import secrets
 from typing import Any
 
 import websockets
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
 from pydantic import BaseModel
 
 from .event_store import EventStore
@@ -14,6 +16,36 @@ from .time_sync import TimeMetrics
 from .safety_gate import SafetyGate
 
 logger = logging.getLogger(__name__)
+
+#: X-Operator-Token value from environment. Empty string if not configured.
+OPERATOR_TOKEN = os.environ.get("SAFETY_OPERATOR_TOKEN", "")
+
+
+def _require_operator_token(x_operator_token: str = Header(None)) -> str:
+    """Validate X-Operator-Token against SAFETY_OPERATOR_TOKEN.
+
+    Raises HTTP 401 if the header is missing, empty, or does not match
+    SAFETY_OPERATOR_TOKEN (checked with secrets.compare_digest to mitigate
+    timing attacks).
+
+    Returns the validated token string.
+    """
+    if not OPERATOR_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail="Operator authentication is not configured on this server.",
+        )
+    if not x_operator_token:
+        raise HTTPException(
+            status_code=401,
+            detail="X-Operator-Token header is required.",
+        )
+    if not secrets.compare_digest(x_operator_token, OPERATOR_TOKEN):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid operator token.",
+        )
+    return x_operator_token
 
 
 class EventQuery(BaseModel):
@@ -310,14 +342,30 @@ def create_http_app(
         return {"audit_log": entries, "count": len(entries)}
 
     @app.post("/safety-gate/emergency-stop")
-    async def set_emergency_stop(active: bool) -> dict[str, str]:
-        """Activate or deactivate emergency stop."""
+    async def set_emergency_stop(
+        active: bool,
+        _: str = _require_operator_token,
+    ) -> dict[str, str]:
+        """Activate or deactivate emergency stop.
+
+        Requires X-Operator-Token header matching SAFETY_OPERATOR_TOKEN env var.
+        Software cannot remotely clear a hardware E-stop.
+        """
         gate.set_emergency_stop(active)
         return {"emergency_stop_active": str(active).lower()}
 
     @app.post("/safety-gate/interlock/{device_id}")
-    async def set_interlock(device_id: str, blocked: bool) -> dict[str, str]:
-        """Set interlock state for a device."""
+    async def set_interlock(
+        device_id: str,
+        blocked: bool,
+        _: str = _require_operator_token,
+    ) -> dict[str, str]:
+        """Set interlock state for a device.
+
+        Requires X-Operator-Token header matching SAFETY_OPERATOR_TOKEN env var.
+        Hardware interlocks cannot be cleared by software — they must be cleared
+        physically at the device.
+        """
         if blocked:
             gate.set_interlock(device_id, True)
         else:
@@ -325,8 +373,12 @@ def create_http_app(
         return {"device_id": device_id, "interlock_active": str(blocked).lower()}
 
     @app.post("/safety-gate/operator-override")
-    async def operator_override() -> dict[str, str]:
+    async def operator_override(
+        _: str = _require_operator_token,
+    ) -> dict[str, str]:
         """Activate operator override mode (can only HOLD, not PERMIT).
+
+        Requires X-Operator-Token header matching SAFETY_OPERATOR_TOKEN env var.
 
         Operator override temporarily pauses commands, requiring
         re-authorization before any command can proceed.
@@ -335,8 +387,12 @@ def create_http_app(
         return {"status": "operator_override_active", "authorization_required": "true"}
 
     @app.post("/safety-gate/authorize")
-    async def authorize() -> dict[str, str]:
+    async def authorize(
+        _: str = _require_operator_token,
+    ) -> dict[str, str]:
         """Authorize commands after operator override.
+
+        Requires X-Operator-Token header matching SAFETY_OPERATOR_TOKEN env var.
 
         Must be called after operator override to allow PERMIT decisions.
         This implements mandatory re-authorization requirement.
