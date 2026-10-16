@@ -417,33 +417,41 @@ class WebhookNotification:
         return [h.strip() for h in raw.split(",") if h.strip()]
 
     def _validate_url(self, url: str) -> bool:
-        """Return True if the URL passes SSRF checks, False otherwise."""
+        """Return True if the URL passes SSRF checks, False otherwise.
+
+        Security invariants
+        -------------------
+        - FAIL-CLOSED: when SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS is unset/empty,
+          no host is permitted, all webhooks are rejected.
+        - Hostname normalised via parsed.hostname (strips userinfo and port).
+        - Comparison is case-insensitive.
+        - Raw URLs are never logged in error branches.
+        """
         try:
             parsed = urlparse(url)
         except Exception:
-            logger.warning("WebhookNotification: failed to parse URL %s", url)
+            logger.warning("WebhookNotification: failed to parse webhook URL")
             return False
 
         scheme = parsed.scheme.lower()
         if scheme not in ("http", "https"):
             logger.warning(
-                "WebhookNotification: rejected non-HTTP(S) scheme %r in URL %s",
+                "WebhookNotification: rejected non-HTTP(S) scheme %r",
                 scheme,
-                url,
             )
             return False
 
-        host = parsed.netloc.lower()
-        if not host:
-            logger.warning("WebhookNotification: URL has no host: %s", url)
+        hostname = parsed.hostname
+        if not hostname:
+            logger.warning("WebhookNotification: URL has no host")
             return False
 
         allowed = self._get_allowed_hosts()
-        if allowed and host not in allowed:
+        # FAIL-CLOSED: empty allowlist means "not configured" → reject everything.
+        if not allowed or hostname.lower() not in {h.lower() for h in allowed}:
             logger.warning(
-                "WebhookNotification: host %r not in allowlist %s",
-                host,
-                allowed,
+                "WebhookNotification: host %r not on SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS",
+                hostname,
             )
             return False
 
@@ -484,8 +492,7 @@ class WebhookNotification:
 
         if not self._validate_url(self._url):
             logger.warning(
-                "WebhookNotification: rejected unsafe URL %s, alert %s not sent",
-                self._mask_url(self._url),
+                "WebhookNotification: rejected unsafe URL, alert %s not sent",
                 alert.alert_id,
             )
             return False
@@ -501,20 +508,19 @@ class WebhookNotification:
                     self._url,
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=self._timeout),
+                    allow_redirects=False,  # disable — default True allows SSRF via redirect
                 ) as response:
                     if response.status < 400:
                         logger.info(
-                            "WebhookNotification: sent alert %s to %s",
+                            "WebhookNotification: sent alert %s",
                             alert.alert_id,
-                            self._mask_url(self._url),
                         )
                         return True
                     else:
                         logger.warning(
-                            "WebhookNotification: webhook returned %s for alert %s (URL: %s)",
+                            "WebhookNotification: webhook returned %s for alert %s",
                             response.status,
                             alert.alert_id,
-                            self._mask_url(self._url),
                         )
                         return False
         except Exception as exc:

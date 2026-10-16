@@ -486,8 +486,11 @@ class TestWebhookNotificationSSRF:
         assert result is True
 
     def test_validate_url_http_allowed(self) -> None:
-        """http:// URLs should be allowed (not just https)."""
-        handler = WebhookNotification(url="http://internal.local/webhook")
+        """http:// URLs should be allowed (not just https) when host is on allowlist."""
+        handler = WebhookNotification(
+            url="http://internal.local/webhook",
+            allowed_hosts=["internal.local"],
+        )
         assert handler._validate_url(handler._url) is True
 
     def test_validate_url_no_host_rejected(self) -> None:
