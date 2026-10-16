@@ -114,6 +114,13 @@ Every decision is logged with non-sensitive envelope metadata only:
 **Option C: Cloud-based safety service**
 - Rejected: Latency and availability concerns for safety-critical path
 
+## Evidence
+
+- Implementation: `iot-gateway/src/iot_gateway/safety_gate.py`
+- Tests: `iot-gateway/tests/test_safety_gate.py` (48 unit tests)
+- API integration: `iot-gateway/src/iot_gateway/api.py`
+- ADR proposed: this record
+
 ## Implementation
 
 - Module: `iot-gateway/src/iot_gateway/safety_gate.py`
