@@ -4,6 +4,8 @@
 
 This document describes the alert notification system for the Smart Factory IoT Gateway. The system provides typed alert events with configurable handlers for routing notifications based on severity.
 
+**Scope:** This PR implements a generic `AlertService` (webhook + logging handlers) for the IoT Gateway. It is **NOT** MiniAlpha-specific skills. No robot-specific delivery mechanisms are implemented; physical robot notifications require separate hardware-in-the-loop verification.
+
 **Note:** Physical notifications (buzzer, LED) are **NOT** in scope for this implementation. Hardware HIL is blocked per issue #98.
 
 ## Alert Taxonomy
@@ -34,7 +36,7 @@ This document describes the alert notification system for the Smart Factory IoT 
 |--------|-------|-------------|
 | Pending | `pending` | Alert triggered, not yet acknowledged |
 | Acknowledged | `acknowledged` | Alert has been acknowledged by an operator |
-| Resolved | `acknowledged` | Alert condition has been resolved |
+| Resolved | `resolved` | Alert condition has been resolved |
 
 ## AlertEvent Schema
 
@@ -114,7 +116,7 @@ POSTs alerts to a configurable webhook URL.
 ```python
 handler = WebhookNotification(
     url="https://example.com/webhook",
-    timeout=10.0,
+    timeout=5.0,         # default 5 s; no retry
     enabled=True,
 )
 ```
@@ -122,6 +124,13 @@ handler = WebhookNotification(
 Configuration via environment variables:
 
 - `ALERT_WEBHOOK_URL`: Webhook URL for notifications
+- `SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS`: Comma-separated allowlist of permitted
+  webhook hosts (e.g. `hooks.example.com,notify.internal`). If set, only
+  these hosts are permitted; requests to any other host are rejected.
+
+**SSRF protections:** `WebhookNotification` rejects non-HTTP(S) URL schemes,
+validates the host against `SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS` (when set), and
+applies the configured `timeout_s` (default 5 s). No automatic retry.
 
 ## Alert Routing
 
@@ -218,6 +227,8 @@ The following are explicitly **NOT** in scope for this implementation:
 - **SMS/Push notifications**: Not implemented in initial release
 - **Alert aggregation**: Single alerts, no batching
 - **Alert history persistence**: In-memory only (can be extended to SQLite)
+- **Acknowledgement durability**: Operator acknowledgements via `AlertService.acknowledge()` are in-memory and **not persisted across gateway restarts**. Critical audit trails must be stored externally (e.g. SQLite event store).
+- **Safety gate correlation**: `AlertEvent` may be correlated with `SafetyDecision` via a `decision_id` field in `metadata` where applicable (see safety gate PR #110). This is an optional cross-system correlation mechanism, not a hard dependency.
 
 ## Testing
 

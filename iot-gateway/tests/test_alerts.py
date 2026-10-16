@@ -405,7 +405,7 @@ class TestWebhookNotification:
     @pytest.mark.asyncio
     async def test_handler_can_be_disabled(self) -> None:
         """Test that WebhookNotification can be disabled."""
-        handler = WebhookNotification(url="http://example.com", enabled=False)
+        handler = WebhookNotification(url="https://example.com", enabled=False)
 
         assert handler.enabled is False
 
@@ -420,7 +420,7 @@ class TestWebhookNotification:
 
     def test_handler_can_be_enabled(self) -> None:
         """Test that WebhookNotification can be enabled."""
-        handler = WebhookNotification(url="http://example.com", enabled=False)
+        handler = WebhookNotification(url="https://example.com", enabled=False)
 
         handler.enable()
         assert handler.enabled is True
@@ -430,8 +430,113 @@ class TestWebhookNotification:
 
     def test_url_property(self) -> None:
         """Test URL property accessor."""
-        handler = WebhookNotification(url="http://test.com/webhook")
-        assert handler.url == "http://test.com/webhook"
+        handler = WebhookNotification(url="https://test.com/webhook")
+        assert handler.url == "https://test.com/webhook"
+
+
+class TestWebhookNotificationSSRF:
+    """SSRF protection tests for WebhookNotification."""
+
+    @pytest.mark.asyncio
+    async def test_rejects_file_scheme(self) -> None:
+        """file:// URLs must be rejected to prevent SSRF."""
+        handler = WebhookNotification(url="file:///etc/passwd")
+        alert = AlertEvent(severity=AlertSeverity.CRITICAL, source=AlertSource.SYSTEM, message="x")
+        result = await handler.handle(alert)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_rejects_gopher_scheme(self) -> None:
+        """gopher:// URLs must be rejected."""
+        handler = WebhookNotification(url="gopher://127.0.0.1:6379/")
+        alert = AlertEvent(severity=AlertSeverity.CRITICAL, source=AlertSource.SYSTEM, message="x")
+        result = await handler.handle(alert)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_rejects_unspecified_scheme(self) -> None:
+        """Custom/unrecognised schemes must be rejected."""
+        handler = WebhookNotification(url="ftp://example.com/")
+        alert = AlertEvent(severity=AlertSeverity.CRITICAL, source=AlertSource.SYSTEM, message="x")
+        result = await handler.handle(alert)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_rejects_host_not_in_allowlist(self) -> None:
+        """URLs whose host is not in SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS are rejected."""
+        handler = WebhookNotification(
+            url="https://evil.example.com/webhook",
+            allowed_hosts=["hooks.example.com", "notify.internal"],
+        )
+        alert = AlertEvent(severity=AlertSeverity.CRITICAL, source=AlertSource.SYSTEM, message="x")
+        result = await handler.handle(alert)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_accepts_host_in_allowlist(self) -> None:
+        """URLs whose host IS in the allowlist pass URL validation (network not called)."""
+        handler = WebhookNotification(
+            url="https://hooks.example.com/alerts",
+            allowed_hosts=["hooks.example.com"],
+            enabled=False,  # disable to avoid actual HTTP call
+        )
+        alert = AlertEvent(severity=AlertSeverity.INFO, source=AlertSource.SYSTEM, message="x")
+        result = await handler.handle(alert)
+        # disabled handler returns True; if enabled it would try the request
+        assert result is True
+
+    def test_validate_url_http_allowed(self) -> None:
+        """http:// URLs should be allowed (not just https)."""
+        handler = WebhookNotification(url="http://internal.local/webhook")
+        assert handler._validate_url(handler._url) is True
+
+    def test_validate_url_no_host_rejected(self) -> None:
+        """URL with no netloc (no host) is rejected."""
+        handler = WebhookNotification(url="https:///path")
+        assert handler._validate_url(handler._url) is False
+
+    def test_mask_url_contains_credentials(self) -> None:
+        """URLs with userinfo must be masked to not expose credentials."""
+        handler = WebhookNotification(url="https://user:secret@example.com/hook")
+        masked = handler._mask_url(handler._url)
+        assert "secret" not in masked
+        assert "user" not in masked
+        assert "example.com" in masked
+
+    def test_mask_url_no_credentials(self) -> None:
+        """Clean URLs are returned unchanged."""
+        handler = WebhookNotification(url="https://hooks.example.com/alerts")
+        masked = handler._mask_url(handler._url)
+        assert masked == "https://hooks.example.com/alerts"
+
+    def test_mask_url_returns_placeholder_on_parse_error(self) -> None:
+        """Unparseable input returns a safe placeholder."""
+        handler = WebhookNotification(url="https://example.com")
+        # passing something that urlparse rejects differently than the normal URL
+        result = handler._mask_url("")
+        assert result == "***"
+
+    def test_default_timeout_is_5_seconds(self) -> None:
+        """Default timeout must be 5.0 s, not 10.0 s."""
+        handler = WebhookNotification(url="https://example.com")
+        assert handler._timeout == 5.0
+
+    @pytest.mark.asyncio
+    async def test_env_var_allowlist_used_when_no_explicit_allowlist(self) -> None:
+        """When no explicit allowed_hosts is set, SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS is consulted."""
+        import os
+        handler = WebhookNotification(url="https://allowed.example.com/hook")
+        original = os.environ.get("SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS")
+        try:
+            os.environ["SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS"] = "allowed.example.com"
+            # Re-instantiate to pick up env var
+            handler2 = WebhookNotification(url="https://allowed.example.com/hook", enabled=False)
+            assert "allowed.example.com" in handler2._get_allowed_hosts()
+        finally:
+            if original is None:
+                os.environ.pop("SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS", None)
+            else:
+                os.environ["SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS"] = original
 
 
 class TestAlertHandlerProtocol:

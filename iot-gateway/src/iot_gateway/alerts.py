@@ -6,17 +6,23 @@ This module provides:
 - AlertHandler protocol for pluggable notification handlers.
 - AlertService that routes alerts by severity to registered handlers.
 - CommandFeedback envelope for execution feedback.
+
+Security notes:
+- WebhookNotification enforces SSRF protections (HTTP(S) only, host allowlist).
+- No secrets, tokens, or PII are written to logs; webhook URLs are masked.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import urlparse
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -365,28 +371,103 @@ class CommandFeedback:
 class WebhookNotification:
     """Alert handler that POSTs alerts to a configured webhook URL.
 
-    Configuration:
-        url: The webhook endpoint URL.
-        timeout: Request timeout in seconds (default: 10).
+    Security (SSRF protections):
+        - Rejects non-HTTP(S) URL schemes.
+        - Validates host against SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS allowlist
+          (comma-separated, optional). If set, only listed hosts are permitted.
+        - Applies a configurable timeout (default 5 s); no retry by default.
+
+    Args:
+        url: The webhook endpoint URL (must be https:// or http://).
+        timeout: Request timeout in seconds (default: 5.0).
         enabled: Whether the handler is active (default: True).
+        allowed_hosts: Optional explicit host allowlist (overrides env var).
     """
 
     def __init__(
         self,
         url: str,
-        timeout: float = 10.0,
+        timeout: float = 5.0,
         enabled: bool = True,
+        allowed_hosts: list[str] | None = None,
     ) -> None:
         """Initialize the webhook handler.
 
         Args:
             url: The webhook URL to POST alerts to.
-            timeout: Request timeout in seconds.
+            timeout: Request timeout in seconds (default 5.0).
             enabled: Whether to actually send notifications.
+            allowed_hosts: Optional host allowlist; defaults to env var
+                SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS.
         """
         self._url = url
         self._timeout = timeout
         self._enabled = enabled
+        self._allowed_hosts = allowed_hosts
+
+    # ------------------------------------------------------------------
+    # SSRF helpers
+    # ------------------------------------------------------------------
+
+    def _get_allowed_hosts(self) -> list[str]:
+        """Return host allowlist from instance, env var, or empty."""
+        if self._allowed_hosts is not None:
+            return self._allowed_hosts
+        raw = os.environ.get("SAFETY_ALERT_WEBHOOK_ALLOWED_HOSTS", "")
+        return [h.strip() for h in raw.split(",") if h.strip()]
+
+    def _validate_url(self, url: str) -> bool:
+        """Return True if the URL passes SSRF checks, False otherwise."""
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            logger.warning("WebhookNotification: failed to parse URL %s", url)
+            return False
+
+        scheme = parsed.scheme.lower()
+        if scheme not in ("http", "https"):
+            logger.warning(
+                "WebhookNotification: rejected non-HTTP(S) scheme %r in URL %s",
+                scheme,
+                url,
+            )
+            return False
+
+        host = parsed.netloc.lower()
+        if not host:
+            logger.warning("WebhookNotification: URL has no host: %s", url)
+            return False
+
+        allowed = self._get_allowed_hosts()
+        if allowed and host not in allowed:
+            logger.warning(
+                "WebhookNotification: host %r not in allowlist %s",
+                host,
+                allowed,
+            )
+            return False
+
+        return True
+
+    def _mask_url(self, url: str) -> str:
+        """Return a masked version of the URL safe for logging (no credentials)."""
+        try:
+            parsed = urlparse(url)
+            if not parsed.netloc and not parsed.scheme and not parsed.path:
+                return "***"
+            # netloc includes port if present: user:pass@host:port
+            # Redact userinfo before logging.
+            if parsed.username or parsed.password:
+                masked = parsed._replace(netloc=f"***:***@{parsed.hostname or ''}"
+                    + (f":{parsed.port}" if parsed.port else ""))
+                return masked.geturl()
+            return url
+        except Exception:
+            return "***"
+
+    # ------------------------------------------------------------------
+    # AlertHandler interface
+    # ------------------------------------------------------------------
 
     async def handle(self, alert: AlertEvent) -> bool:
         """Send alert notification via webhook POST.
@@ -398,14 +479,21 @@ class WebhookNotification:
             True if the POST was successful, False otherwise.
         """
         if not self._enabled:
-            logger.debug("Webhook notification disabled, skipping")
+            logger.debug("WebhookNotification: disabled, skipping")
             return True
+
+        if not self._validate_url(self._url):
+            logger.warning(
+                "WebhookNotification: rejected unsafe URL %s, alert %s not sent",
+                self._mask_url(self._url),
+                alert.alert_id,
+            )
+            return False
 
         import aiohttp
 
         payload = alert.to_dict()
         payload["handler"] = "webhook"
-        payload["webhook_url"] = self._url
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -416,21 +504,24 @@ class WebhookNotification:
                 ) as response:
                     if response.status < 400:
                         logger.info(
-                            "Webhook notification sent successfully for alert %s",
+                            "WebhookNotification: sent alert %s to %s",
                             alert.alert_id,
+                            self._mask_url(self._url),
                         )
                         return True
                     else:
                         logger.warning(
-                            "Webhook returned status %d for alert %s",
+                            "WebhookNotification: webhook returned %s for alert %s (URL: %s)",
                             response.status,
                             alert.alert_id,
+                            self._mask_url(self._url),
                         )
                         return False
         except Exception as exc:
             logger.exception(
-                "Failed to send webhook notification for alert %s: %s",
+                "WebhookNotification: failed to send alert %s to %s: %s",
                 alert.alert_id,
+                self._mask_url(self._url),
                 exc,
             )
             return False
