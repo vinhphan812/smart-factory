@@ -1,0 +1,77 @@
+# Docker Compose — Smart Factory MQTT Broker Stack
+#
+# Services:
+#   mqtt        — Mosquitto broker, unauthenticated (dev only, 1883)
+#   mqtt-tls    — Mosquitto broker with TLS and authentication (8883)
+#                 Use ONLY ONE of these at a time — both expose port 1883/8883.
+#
+# Usage:
+#   Dev (no auth):     docker compose up -d mqtt
+#   TLS (authenticated): docker compose --profile tls up -d mqtt-tls
+#                        # Or: docker compose --profile tls up -d
+#
+# Prerequisites for TLS profile:
+#   - Generate certificates: infrastructure/mqtt-broker/config/tls/generate-certs.sh
+#   - Create credentials:   infrastructure/mqtt-broker/config/tls/create-creds.sh
+#
+# WARNING: mqtt-tls sets MQTT_BIND_ADDRESS=127.0.0.1 to avoid port conflict
+#          with the plain mqtt service (1883). Both CAN coexist if you
+#          docker compose down mqtt first, but you MUST use the TLS credential.
+#
+# Environment variables (set in .env or shell):
+#   MQTT_BRIDGE_USERNAME  — bridge credential username (MUST equal deviceId, e.g. ukit-00000000)
+#   MQTT_BRIDGE_PASSWORD  — bridge credential password
+#   MQTT_GW_USERNAME     — gateway credential username
+#   MQTT_GW_PASSWORD     — gateway credential password
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: smart-factory-mqtt
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - mqtt-data:/mosquitto/data
+      - mqtt-conf:/mosquitto/config
+      - ./infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
+    environment:
+      MQTT_ADMIN_USERNAME: "${MQTT_ADMIN_USERNAME:-admin}"
+      MQTT_ADMIN_PASSWORD: "${MQTT_ADMIN_PASSWORD:-changeme}"
+    env_file:
+      - .env
+    command: >
+      sh /docker-entrypoint.d/init.sh
+
+  mqtt-tls:
+    image: eclipse-mosquitto:2
+    container_name: smart-factory-mqtt-tls
+    restart: unless-stopped
+    profiles:
+      - tls
+    ports:
+      - "${MQTT_TLS_BIND:-127.0.0.1}:8883:8883"
+    volumes:
+      - mqtt-tls-data:/mosquitto/data
+      - mqtt-tls-conf:/mosquitto/config
+      - mqtt-tls-certs:/mosquitto/certs:ro
+      - ./infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
+    environment:
+      MQTT_ADMIN_USERNAME: "${MQTT_ADMIN_USERNAME:-admin}"
+      MQTT_ADMIN_PASSWORD: "${MQTT_ADMIN_PASSWORD:-changeme}"
+      # mqtt-tls uses 127.0.0.1 for the plaintext listener (1883) to avoid
+      # port conflict with the default mqtt service when both are started.
+      # The TLS listener (8883) binds to MQTT_TLS_BIND_ADDRESS (default 127.0.0.1).
+      MQTT_BIND_ADDRESS: "${MQTT_TLS_BIND_ADDRESS:-127.0.0.1}"
+      MQTT_TLS_ENABLED: "true"
+    env_file:
+      - .env
+    command: >
+      sh /docker-entrypoint.d/init.sh
+
+volumes:
+  mqtt-data:
+  mqtt-conf:
+  mqtt-tls-data:
+  mqtt-tls-conf:
+  mqtt-tls-certs:
