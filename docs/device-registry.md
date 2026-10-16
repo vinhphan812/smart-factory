@@ -270,8 +270,46 @@ Future: broker-level MQTT client authentication (username/password or client cer
 
 ---
 
+## Configuration Ownership Matrix
+
+Beyond the device registry, the Smart Factory system has multiple configuration domains. Each is owned by a specific team/module with defined boundaries.
+
+### Ownership by Domain
+
+| Configuration Domain | Owner | Location | Change Process |
+|---------------------|-------|----------|----------------|
+| Device registry (`device-registry.json`) | controls team | `esp32/data/` | SPIFFS flash; version control |
+| ESP32 bridge compile-time config | firmware team | `esp32-ukit-bridge/esp32/include/bridge_config.h` | Firmware build + flash |
+| MQTT broker settings | infrastructure team | `infrastructure/config/` (future) | Broker restart required |
+| Gateway runtime config | gateway team | `iot-gateway/config/` (future) | Hot reload or restart |
+| Dashboard settings | ops team | `dashboard/config/` (future) | Dashboard restart |
+| Telemetry retention policy | data team | `contracts/v1/` + DB migration | Coordinated with #31 |
+
+### Module Boundary Rules (per ADR-0001)
+
+Configuration ownership respects the modular monorepo boundaries:
+
+- **esp32-ukit-bridge** owns: bridge compile-time config, device capabilities, topic templates
+- **iot-gateway** owns: event transformation rules, MQTT subscription config, REST API config
+- **dashboard** owns: UI configuration, chart preferences, alert thresholds
+- **digital-twin** owns: 3D model config, simulation parameters
+- **factory-control** owns: PLC logic, safety interlock rules
+
+Cross-module configuration (e.g., shared MQTT broker settings) must be documented in `infrastructure/config/` and approved by the infrastructure team.
+
+### Configuration Change Workflow
+
+1. **Propose** change in the owning module's PR
+2. **Review** for cross-module impact (check ADRs, integration matrix)
+3. **Test** in isolation first, then integration environment
+4. **Deploy** with rollback plan documented
+5. **Audit** configuration drift quarterly
+
+---
+
 ## Maintenance
 
 - **Rotate** `device-registry.json` copies into version control with meaningful commit messages describing what changed and why.
 - **Audit** the registry quarterly: remove entries for decommissioned devices, flag stale `last_seen` values (no heartbeat for >7 days).
 - **Validate** the registry against this schema before flashing. A JSON schema (`device-registry.schema.json`) in `esp32/data/` can be used by CI to catch field-level errors.
+- **Review** configuration ownership matrix annually or when module boundaries change.
