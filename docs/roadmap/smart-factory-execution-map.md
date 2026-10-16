@@ -2,7 +2,7 @@
 
 **Source:** master backlog issue [#52](https://github.com/vinhphan812/smart-factory/issues/52)  
 **Owner:** vinhphan812  
-**Engine:** Unity 3D (original proposal named Unity; formal institutional amendment approval unverified — see ADR-0003)  
+**Engine:** Unity 3D (original proposal named **Unreal Engine**; engineering selection Unity recorded in ADR-0003 — formal institutional amendment approval unverified)  
 **Status:** living document; update after each quarterly review.
 
 ---
