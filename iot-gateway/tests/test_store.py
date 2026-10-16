@@ -133,5 +133,7 @@ async def test_sequence_ordering(store: EventStore) -> None:
 
     events = await store.query(device_id="d1", limit=10)
     sequences = [e["sequence"] for e in events]
-    # Default query order is DESC; verify consistent ordering (not random)
-    assert sequences == sorted(sequences, reverse=True)
+    # query() returns events sorted by sequence ASC (ascending order)
+    assert sequences == sorted(sequences), (
+        "Events must be returned in ascending sequence order for deterministic replay"
+    )
