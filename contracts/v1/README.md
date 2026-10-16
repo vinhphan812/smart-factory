@@ -17,6 +17,7 @@ when a change is non-additive or removes backward compatibility. Minor additions
 | `schemas/device-event.schema.json` | Generic device event envelope (acknowledgements, errors, status changes) |
 | `schemas/command.schema.json` | Command envelope issued by SCADA/application to a bridge |
 | `schemas/telemetry.schema.json` | Telemetry payload forwarded by the ESP32 bridge |
+| `schemas/device-registry.schema.json` | Device registry and configuration ownership schema |
 
 ## Examples
 
@@ -24,6 +25,7 @@ when a change is non-additive or removes backward compatibility. Minor additions
 |------|-------------|
 | `examples/command-example.json` | `CONVEYOR_START` command with speed argument |
 | `examples/telemetry-example.json` | Periodic telemetry from uKit |
+| `examples/device-registry.json` | Smart Factory device registry example mapping nine production modules |
 
 ## Field Naming Conventions
 

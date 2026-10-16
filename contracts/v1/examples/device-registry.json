@@ -1,0 +1,168 @@
+{
+  "bridge-001": {
+    "device_id": "bridge-001",
+    "device_type": "esp32_bridge",
+    "firmware_version": "v1.2.0",
+    "capabilities": [
+      "CONVEYOR_START",
+      "CONVEYOR_STOP",
+      "RESET",
+      "PING",
+      "get_telemetry"
+    ],
+    "mqtt_topics": {
+      "command": "smart-factory/{device_id}/command",
+      "result": "smart-factory/{device_id}/result",
+      "status": "smart-factory/{device_id}/status",
+      "telemetry": "smart-factory/{device_id}/telemetry"
+    },
+    "physical_location": {
+      "factory_zone": "Production Cell 1",
+      "line": "Conveyor Line A",
+      "notes": "ESP32-S3 bridge mounted on main control rack"
+    },
+    "owner": {
+      "team": "controls",
+      "contact": "controls@aibot.dntu.edu.vn"
+    },
+    "registered_at": "2026-10-12T08:00:00Z",
+    "last_seen": "2026-10-16T10:00:00Z"
+  },
+  "conveyor-01": {
+    "device_id": "conveyor-01",
+    "device_type": "mega_reference",
+    "firmware_version": "v1.0.0",
+    "capabilities": [
+      "CONVEYOR_START",
+      "CONVEYOR_STOP",
+      "SET_SPEED",
+      "EMERGENCY_STOP"
+    ],
+    "mqtt_topics": {
+      "command": "smart-factory/{device_id}/command",
+      "result": "smart-factory/{device_id}/result",
+      "status": "smart-factory/{device_id}/status",
+      "telemetry": "smart-factory/{device_id}/telemetry"
+    },
+    "physical_location": {
+      "factory_zone": "Material Transfer",
+      "line": "Infeed Conveyor",
+      "notes": "Motor belt driven via uKit motor driver"
+    },
+    "owner": {
+      "team": "controls",
+      "contact": "controls@aibot.dntu.edu.vn"
+    },
+    "registered_at": "2026-10-12T08:00:00Z",
+    "last_seen": "2026-10-16T10:00:00Z"
+  },
+  "sorting-01": {
+    "device_id": "sorting-01",
+    "device_type": "mega_reference",
+    "firmware_version": "v1.0.0",
+    "capabilities": [
+      "SORT_CLASSIFY",
+      "SORT_ROUTE",
+      "SORT_REJECT"
+    ],
+    "mqtt_topics": {
+      "command": "smart-factory/{device_id}/command",
+      "result": "smart-factory/{device_id}/result",
+      "status": "smart-factory/{device_id}/status",
+      "telemetry": "smart-factory/{device_id}/telemetry"
+    },
+    "physical_location": {
+      "factory_zone": "Quality Routing",
+      "line": "Sorting Section",
+      "notes": "Optical inspection and sorting gates"
+    },
+    "owner": {
+      "team": "quality",
+      "contact": "qa@aibot.dntu.edu.vn"
+    },
+    "registered_at": "2026-10-12T08:00:00Z",
+    "last_seen": "2026-10-16T10:00:00Z"
+  },
+  "packaging-01": {
+    "device_id": "packaging-01",
+    "device_type": "mega_reference",
+    "firmware_version": "v1.0.0",
+    "capabilities": [
+      "PACKAGE_START",
+      "PACKAGE_SEAL",
+      "PACKAGE_EJECT"
+    ],
+    "mqtt_topics": {
+      "command": "smart-factory/{device_id}/command",
+      "result": "smart-factory/{device_id}/result",
+      "status": "smart-factory/{device_id}/status",
+      "telemetry": "smart-factory/{device_id}/telemetry"
+    },
+    "physical_location": {
+      "factory_zone": "Packaging Station",
+      "line": "Packaging End",
+      "notes": "Sealing and boxing module"
+    },
+    "owner": {
+      "team": "packaging",
+      "contact": "packaging@aibot.dntu.edu.vn"
+    },
+    "registered_at": "2026-10-12T08:00:00Z",
+    "last_seen": "2026-10-16T10:00:00Z"
+  },
+  "forklift-01": {
+    "device_id": "forklift-01",
+    "device_type": "actuator",
+    "firmware_version": "v0.9.0",
+    "capabilities": [
+      "MOVE_FORWARD",
+      "MOVE_BACKWARD",
+      "LIFT_FORK",
+      "LOWER_FORK"
+    ],
+    "mqtt_topics": {
+      "command": "smart-factory/{device_id}/command",
+      "result": "smart-factory/{device_id}/result",
+      "status": "smart-factory/{device_id}/status",
+      "telemetry": "smart-factory/{device_id}/telemetry"
+    },
+    "physical_location": {
+      "factory_zone": "Logistics Corridor",
+      "line": "Pallet Transfer",
+      "notes": "Miniature robotic forklift"
+    },
+    "owner": {
+      "team": "logistics",
+      "contact": "logistics@aibot.dntu.edu.vn"
+    },
+    "registered_at": "2026-10-12T08:00:00Z",
+    "last_seen": "2026-10-16T10:00:00Z"
+  },
+  "iot-gateway-01": {
+    "device_id": "iot-gateway-01",
+    "device_type": "iot_gateway",
+    "firmware_version": "0.1.0",
+    "capabilities": [
+      "NORMALIZE_EVENT",
+      "TIME_SYNC",
+      "EVENT_STORE_SNAPSHOT"
+    ],
+    "mqtt_topics": {
+      "command": "smart-factory/{device_id}/command",
+      "result": "smart-factory/{device_id}/result",
+      "status": "smart-factory/{device_id}/status",
+      "telemetry": "smart-factory/{device_id}/telemetry"
+    },
+    "physical_location": {
+      "factory_zone": "Server Room",
+      "line": "Central Management",
+      "notes": "FastAPI gateway running on local edge server"
+    },
+    "owner": {
+      "team": "software",
+      "contact": "sw-team@aibot.dntu.edu.vn"
+    },
+    "registered_at": "2026-10-12T08:00:00Z",
+    "last_seen": "2026-10-16T10:00:00Z"
+  }
+}

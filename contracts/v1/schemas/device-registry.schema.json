@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/v1/schemas/device-registry.schema.json",
+  "title": "DeviceRegistry",
+  "description": "Schema for Smart Factory device registry defining ownership, capabilities, topics, and physical location.",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/definitions/DeviceEntry"
+  },
+  "definitions": {
+    "DeviceEntry": {
+      "type": "object",
+      "required": [
+        "device_id",
+        "device_type",
+        "firmware_version",
+        "capabilities",
+        "mqtt_topics",
+        "owner",
+        "registered_at"
+      ],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_-]*[a-z0-9]$|^[a-z]$",
+          "description": "Unique device identifier. Lowercase alphanumeric, hyphen, underscore. Must start with a letter and not end with hyphen/underscore."
+        },
+        "device_type": {
+          "type": "string",
+          "enum": [
+            "esp32_bridge",
+            "mega_reference",
+            "iot_gateway",
+            "simulator",
+            "actuator",
+            "sensor"
+          ],
+          "description": "Classifier indicating the role and architecture layer of the device."
+        },
+        "firmware_version": {
+          "type": "string",
+          "description": "Firmware or software version string (semver or git commit hash)."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "List of command names and telemetry streams supported by the device."
+        },
+        "mqtt_topics": {
+          "type": "object",
+          "required": ["command", "result", "status"],
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "MQTT command topic pattern (supports {device_id} placeholder)."
+            },
+            "result": {
+              "type": "string",
+              "description": "MQTT result topic pattern (supports {device_id} placeholder)."
+            },
+            "status": {
+              "type": "string",
+              "description": "MQTT status topic pattern (supports {device_id} placeholder)."
+            },
+            "telemetry": {
+              "type": "string",
+              "description": "MQTT telemetry topic pattern (supports {device_id} placeholder)."
+            }
+          },
+          "additionalProperties": false
+        },
+        "physical_location": {
+          "type": "object",
+          "properties": {
+            "factory_zone": { "type": "string" },
+            "line": { "type": "string" },
+            "notes": { "type": "string" }
+          },
+          "additionalProperties": false,
+          "description": "Physical placement of the device on the factory floor."
+        },
+        "owner": {
+          "type": "object",
+          "required": ["team", "contact"],
+          "properties": {
+            "team": { "type": "string" },
+            "contact": { "type": "string" }
+          },
+          "additionalProperties": false,
+          "description": "Team and primary contact responsible for device configuration."
+        },
+        "registered_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the device was first registered."
+        },
+        "last_seen": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp of the most recent heartbeat or status update."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
