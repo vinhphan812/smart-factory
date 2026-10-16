@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from .event_store import EventStore
 from .time_sync import TimeMetrics
+from .safety_gate import SafetyGate
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ def create_http_app(
     store: EventStore,
     metrics: TimeMetrics | None = None,
     dropped_count_ref: dict[str, int] | None = None,
+    safety_gate: SafetyGate | None = None,
 ) -> FastAPI:
     """Build FastAPI app with REST endpoints backed by the event store.
 
@@ -146,7 +148,9 @@ def create_http_app(
         dropped_count_ref: Optional shared dict with key "dropped" holding the
             gateway's cumulative queue-dropped counter. The /health endpoint
             reads it to report overflow to callers.
+        safety_gate: Optional SafetyGate instance for command safety evaluation.
     """
+    gate = safety_gate or SafetyGate()
 
     app = FastAPI(
         title="Smart Factory IoT Gateway API",
@@ -283,5 +287,61 @@ def create_http_app(
             "version": "0.1.0",
             "docs": "/docs",
         }
+
+    # Safety Gate endpoints
+    @app.get("/safety-gate/status")
+    async def safety_gate_status() -> dict[str, Any]:
+        """Get current safety gate status (non-sensitive)."""
+        return gate.get_status()
+
+    @app.get("/safety-gate/audit-log")
+    async def safety_gate_audit_log(
+        limit: int = Query(100, ge=1, le=10000, description="Max entries to return")
+    ) -> dict[str, Any]:
+        """Get safety gate audit log (non-sensitive metadata only).
+
+        Returns only envelope metadata: decision_id, command_id, verdict,
+        reason_code, confidence, timestamp, issuer. Command arguments are
+        NOT included to protect secrets.
+        """
+        log = gate.audit_log
+        # Return most recent entries first
+        entries = [d.to_dict() for d in log[-limit:]]
+        return {"audit_log": entries, "count": len(entries)}
+
+    @app.post("/safety-gate/emergency-stop")
+    async def set_emergency_stop(active: bool) -> dict[str, str]:
+        """Activate or deactivate emergency stop."""
+        gate.set_emergency_stop(active)
+        return {"emergency_stop_active": str(active).lower()}
+
+    @app.post("/safety-gate/interlock/{device_id}")
+    async def set_interlock(device_id: str, blocked: bool) -> dict[str, str]:
+        """Set interlock state for a device."""
+        if blocked:
+            gate.set_interlock(device_id, True)
+        else:
+            gate.clear_interlock(device_id)
+        return {"device_id": device_id, "interlock_active": str(blocked).lower()}
+
+    @app.post("/safety-gate/operator-override")
+    async def operator_override() -> dict[str, str]:
+        """Activate operator override mode (can only HOLD, not PERMIT).
+
+        Operator override temporarily pauses commands, requiring
+        re-authorization before any command can proceed.
+        """
+        gate.activate_operator_override()
+        return {"status": "operator_override_active", "authorization_required": "true"}
+
+    @app.post("/safety-gate/authorize")
+    async def authorize() -> dict[str, str]:
+        """Authorize commands after operator override.
+
+        Must be called after operator override to allow PERMIT decisions.
+        This implements mandatory re-authorization requirement.
+        """
+        gate.authorize_after_override()
+        return {"status": "authorized"}
 
     return app
