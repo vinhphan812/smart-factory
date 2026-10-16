@@ -30,6 +30,7 @@ def test_health_returns_event_count() -> None:
     """GET /health returns status and event_count."""
     mock_store = MagicMock()
     mock_store.count = AsyncMock(return_value=42)
+    mock_store.high_watermark = AsyncMock(return_value=0)
     app = create_http_app(mock_store)
     client = TestClient(app)
     response = client.get("/health")
