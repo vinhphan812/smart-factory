@@ -43,6 +43,17 @@ esp32-ukit-bridge/dashboard/
 esp32-ukit-bridge/integration-tests/
 esp32-ukit-bridge/scripts/
 
+# === MQTT Broker TLS certificates (generated locally, never commit secrets) ===
+infrastructure/mqtt-broker/config/tls/*.key
+infrastructure/mqtt-broker/config/tls/*.crt
+infrastructure/mqtt-broker/config/tls/*.csr
+infrastructure/mqtt-broker/config/tls/*.srl
+infrastructure/mqtt-broker/config/tls/passwd
+infrastructure/mqtt-broker/config/tls/dhparam.pem
+
+# === Environment (secrets) ===
+.env
+
 # === IDE / OS ===
 .DS_Store
 Thumbs.db
