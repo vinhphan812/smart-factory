@@ -60,13 +60,13 @@ Source: [#52](https://github.com/vinhphan812/smart-factory/issues/52) execution 
 
 | # | Issue | Title | P | Milestone gate | Evidence level | Notes |
 |---|---|---|---|---|---|---|
-| #36 | OPEN | Implement robot alert notification skills and typed execution feedback | P1 | After #13, #14 | L1/L2 | MiniAlpha adapter; bounded skills; typed feedback |
+| #36 | OPEN | Implement robot alert notification skills and typed execution feedback | P1 | After #13, #14 | L1/L2 | UBTECH Yanshee adapter; bounded skills; typed feedback |
 | #46 | OPEN | Define reproducible experiments and baseline comparison methods | P1 | After #33, #67 | L0 | Scientific method; reproducibility criteria |
 | #33 | OPEN | Model nine factory modules as reusable Unity prefabs and scene objects | P1 | Q2 carry-over | L0/L1 | (see Q2) |
 | #34 | OPEN | Implement Unity time synchronization, stale data and snapshot resync | P1 | Q2 carry-over | L1/L2 | (see Q2) |
 | #67 | OPEN | Define Unity gateway transport adapter and offline replay contract fixture pack | P1 | Q2 carry-over | L0/L1 | (see Q2) |
 | #68 | OPEN | Calibrate nine-module physical-to-Unity coordinate and state mapping | P1 | Q2 carry-over | L3 | BLOCKED by #98 |
-| #13 | OPEN | MiniAlpha AI Edge Robot adapter and capability discovery | P1 | After #41, #73 | L0/L1 | MiniAlpha API unknown; capability matrix required |
+| #13 | OPEN | UBTECH Yanshee AI Edge Robot adapter and capability discovery | P1 | After #41, #73 | L0/L1 | UBTECH Yanshee API unknown; capability matrix required |
 | #14 | OPEN | Edge AI anomaly detection and bounded action policy | P1 | After #13, #37 | L1 | Anomaly detection; bounded robot action policy |
 | #38 | OPEN | Edge AI robot bounded response and escalation skills | P1 | After #14, #36 | L1/L2 | Escalation; no autonomous rescue |
 | #15 | OPEN | Dashboard operator display with telemetry, incidents and gated commands | P1 | After #67 | L1 | Role-based; read-only telemetry; incident log |
@@ -140,7 +140,7 @@ Source: [#52](https://github.com/vinhphan812/smart-factory/issues/52) execution 
                 ↓                                         │ │ │ │
 [Q3: Integration & AI]                                    │ │ │ │
                                                           │ │ │ │
- #13 MiniAlpha adapter ──────────────────────────────────┐ │ │ │
+ #13 UBTECH Yanshee adapter ──────────────────────────────────┐ │ │ │
  #14 Edge anomaly detection ───────────────────────────┐ │ │ │
  #36 robot notification skills ────────────────────────┐ │ │ │
          └─ requires #13 done                            │ │ │ │
@@ -219,7 +219,7 @@ Source: [#52](https://github.com/vinhphan812/smart-factory/issues/52) execution 
 | #34 | Unity time sync, stale data, resync | P1 | #33 |
 | #67 | Unity gateway transport adapter, offline replay fixtures | P1 | #66 (done), #41 |
 | #68 | Physical-to-Unity coordinate calibration | P1 | #33, #34, **#98** |
-| #13 | MiniAlpha AI Edge Robot adapter | P1 | #41, #73 |
+| #13 | UBTECH Yanshee AI Edge Robot adapter | P1 | #41, #73 |
 | #14 | Edge AI anomaly detection, bounded action policy | P1 | #13, #37 |
 | #36 | Robot alert notification skills, typed feedback | P1 | #13, #14 |
 | #38 | Bounded robot response and escalation | P1 | #14, #36 |
@@ -299,8 +299,8 @@ See `docs/testing-and-acceptance.md` for the full definition. This table maps ea
 |---|---|---|---|
 | Q1 | L0/L1/L2 | Schemas, unit tests, protocol parsers, offline simulation | Physical wiring, actual motor control |
 | Q2 | L1/L2/L3 (ESP32 bench) | ESP32 bench testing with TCP AMLP simulator; OTA on ESP32; gateway auth | Real Mega firmware; physical factory |
-| Q3 | L1/L2/L3 | Continued ESP32 bench; Unity prefab CI; robot adapter mock | Physical factory calibration; real MiniAlpha |
-| Q4 | **L4/L5 (hardware-dependent)** | **Only achievable if #98 is resolved** | HIL evidence, physical KPIs, real MiniAlpha |
+| Q3 | L1/L2/L3 | Continued ESP32 bench; Unity prefab CI; robot adapter mock | Physical factory calibration; real UBTECH Yanshee |
+| Q4 | **L4/L5 (hardware-dependent)** | **Only achievable if #98 is resolved** | HIL evidence, physical KPIs, real UBTECH Yanshee |
 
 > **Risk:** If #98 is not resolved before Q4, hardware evidence levels cannot advance past L2. Research KPIs (sync delay, loss rate, physical cycle reliability) cannot be measured.
 
@@ -331,7 +331,7 @@ This execution map was validated against the following authoritative sources:
 
 - No live Digital Twin pipeline (requires #34, #67, #68)
 - No physical HIL evidence (blocked by #98)
-- No MiniAlpha API integration (requires #13, #14, #36)
+- No UBTECH Yanshee API integration (requires #13, #14, #36)
 - No research KPIs measured (requires L4 hardware; #43, #46)
 - No autonomous rescue capability (explicitly excluded per safety non-goals)
 - No Unity institutional approval (flagged as unverified per ADR-0003)
