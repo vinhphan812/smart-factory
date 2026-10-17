@@ -54,6 +54,13 @@ title: "[HARDWARE] "
 - [ ] Known blockers documented as issues
 - [ ] Results linked to relevant issues
 
+## ADR Prerequisite
+
+- [ ] **ADR Trigger check** (HIL, hardware bring-up, and safety validation are
+  architectural when they alter OTA strategy, partitioning, or safety contracts)
+- [ ] Governing ADR(s): `ADR-XXXX` (e.g. ADR-0007 for OTA sign-off)
+- [ ] **ADR status verified as `Accepted`** with evidence link
+
 ## Notes
 
 <!-- Any unexpected behavior, environmental conditions, or observations -->

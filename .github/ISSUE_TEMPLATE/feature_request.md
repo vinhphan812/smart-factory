@@ -40,6 +40,24 @@ title: "[FEAT] "
 - [ ] **P1** — High: significant feature or improvement
 - [ ] **P2** — Medium: nice to have, can defer
 
+## ADR Prerequisite
+
+<!-- EVERY issue that touches an architectural surface (ADR Trigger rules below) must
+reference its governing ADR BEFORE implementation begins. Implementation PRs that
+modify architectural paths without a governing ADR in Accepted status will be blocked. -->
+
+- [ ] **ADR Trigger check** (see `docs/adr/README.md` lines 37–48):
+  - Trigger 1: Module/service boundary change?
+  - Trigger 2: Protocol, contract, or wire format change?
+  - Trigger 3: Security mechanism (TLS, signing, auth)?
+  - Trigger 4: Runtime engine change (e.g. Digital Twin)?
+  - Trigger 5: Firmware OTA, partitioning, or boot strategy?
+  - Trigger 6: Deployment topology or infrastructure architecture?
+  - Trigger 7: Cross-module dependency breaking encapsulation?
+- [ ] **If any Trigger is checked:** Governing ADR(s): `ADR-XXXX` (comma-separated)
+- [ ] **ADR status verified as `Accepted`** (not just `Proposed`) with evidence link
+- [ ] **If no Trigger applies:** No ADR required — non-architectural task
+
 ## Workstream
 
 - [ ] BRIDGE — ESP32 / MEGA firmware
