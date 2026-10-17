@@ -71,6 +71,24 @@ void test_request_update_rejects_invalid_metadata() {
   TEST_ASSERT_TRUE(ota.isIdle());
 }
 
+void test_request_update_rejects_non_https_url() {
+  MockTransport transport;
+  MockPartition partition;
+  MockSignatureVerifier verifier;
+
+  ota::OtaManager ota(&transport, &partition, &verifier);
+
+  // HTTP URL should be rejected per ADR-0007
+  ota::FirmwareMetadata meta = makeMetadata();
+  std::strncpy(meta.url, "http://firmware.example.com/fw.bin",
+               sizeof(meta.url) - 1);
+
+  bool result = ota.requestUpdate(meta);
+
+  TEST_ASSERT_FALSE(result);
+  TEST_ASSERT_TRUE(ota.isIdle());
+}
+
 void test_request_update_rejects_when_already_updating() {
   MockTransport transport;
   MockPartition partition;
@@ -87,6 +105,56 @@ void test_request_update_rejects_when_already_updating() {
 
   TEST_ASSERT_FALSE(result);
   TEST_ASSERT_EQUAL_INT(static_cast<int>(ota::State::kDownloadScheduled),
+                        static_cast<int>(ota.state()));
+}
+
+void test_maintenance_window_blocks_download() {
+  MockTransport transport;
+  MockPartition partition;
+  MockSignatureVerifier verifier;
+
+  ota::OtaManager ota(&transport, &partition, &verifier);
+  ota::FirmwareMetadata meta = makeMetadata();
+  ota.requestUpdate(meta);
+
+  // Set pending commands - maintenance window should be closed
+  ota.setPendingCommandCount(5);
+
+  // Tick should NOT transition to Downloading while maintenance is blocked
+  ota.tick(1000);
+
+  TEST_ASSERT_EQUAL_INT(static_cast<int>(ota::State::kDownloadScheduled),
+                        static_cast<int>(ota.state()));
+}
+
+void test_signature_verification_failure_triggers_rollback() {
+  MockTransport transport;
+  MockPartition partition;
+  MockSignatureVerifier verifier;
+
+  // Configure verifier to fail
+  verifier.setShouldVerify(false);
+
+  // Set up mock data for download
+  uint8_t testData[256];
+  std::memset(testData, 0x42, sizeof(testData));
+  transport.setDownloadData(testData, sizeof(testData));
+
+  ota::OtaManager ota(&transport, &partition, &verifier);
+  ota::FirmwareMetadata meta = makeMetadata();
+  meta.size = sizeof(testData);
+  std::strncpy(meta.sha256, "valid", sizeof(meta.sha256) - 1);
+  ota.requestUpdate(meta);
+
+  // Run through until validation
+  while (ota.state() != ota::State::kRollback &&
+         ota.state() != ota::State::kIdle &&
+         ota.state() != ota::State::kError) {
+    ota.tick(1000);
+  }
+
+  // Should trigger rollback due to signature verification failure
+  TEST_ASSERT_EQUAL_INT(static_cast<int>(ota::State::kRollback),
                         static_cast<int>(ota.state()));
 }
 
@@ -270,7 +338,10 @@ int main() {
   RUN_TEST(test_initial_state_is_idle);
   RUN_TEST(test_request_update_transitions_to_download_scheduled);
   RUN_TEST(test_request_update_rejects_invalid_metadata);
+  RUN_TEST(test_request_update_rejects_non_https_url);
   RUN_TEST(test_request_update_rejects_when_already_updating);
+  RUN_TEST(test_maintenance_window_blocks_download);
+  RUN_TEST(test_signature_verification_failure_triggers_rollback);
   RUN_TEST(test_maintenance_window_open_when_no_pending_commands);
   RUN_TEST(test_cancel_resets_to_idle);
   RUN_TEST(test_cancel_when_idle_returns_false);

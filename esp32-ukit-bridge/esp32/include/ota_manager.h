@@ -270,6 +270,13 @@ class OtaManager {
   uint8_t progress() const;
 
   /**
+   * Set pending command count for maintenance window gating.
+   * Called by main loop before tick() to update pending command count.
+   * @param count Number of pending actuator commands
+   */
+  void setPendingCommandCount(uint16_t count) { pendingCommandCount_ = count; }
+
+  /**
    * Request an OTA update with metadata from MQTT.
    * Only accepted if in kIdle state and maintenance window available.
    * @param metadata Firmware metadata from update announcement
@@ -334,6 +341,9 @@ class OtaManager {
   FirmwareMetadata pendingMetadata_;
   uint32_t downloadStartTime_;
   uint32_t stateEnterTime_;
+
+  // Pending command count for maintenance gating (set by main loop)
+  uint16_t pendingCommandCount_;
 
   // Download state
   uint32_t downloadedBytes_;
