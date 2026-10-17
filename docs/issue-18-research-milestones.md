@@ -54,7 +54,7 @@ Milestones map directly to the execution map (`docs/roadmap/smart-factory-execut
 | Bridge telemetry health implemented | #29 | Diagnostics counters, heartbeat, MQTT reconnect | L1/L2 |
 | Bridge publishes TEL as MQTT | #66 | `smart-factory/bridge/telemetry` topic with contract tests | L1/L2 |
 | ADR backfill complete | #81 | ADRs 0001–0009 filled and linked | L0 |
-| Dashboard telemetry charts live | #39 | Charts, event timeline, incident acknowledgment | L1/L2 |
+| Dashboard telemetry charts live | #39 | Charts, event timeline, incident acknowledgment | L1/L2 | **COMPLETED 2026-10-15** — telemetry charts, event timeline and incident acknowledgment delivered |
 
 > **Research KPI readiness Q1:** Latency and reliability KPIs (Section 3, KPI-1 through KPI-4) are defined and reviewed. Measurement tooling is implemented in simulation (L2). No physical measurement is claimed.
 
