@@ -9,7 +9,7 @@ All items are subdirectories in a **modular monorepo**. A new repository is not 
 | `iot-gateway/` (implemented; migration under #65) | Integration backbone | MQTT ingest, validation, normalized events and snapshots | #7 #8 #31 #32 |
 | `contracts/` (foundation work under #65) | System-level interface schemas | stable IDs, event versions, compatibility fixtures | #3 #30 |
 | `digital-twin/` (planned) | Unity | prefabs/GameObjects, C# telemetry-to-state mapping, reconnect, replay | #11 #12 #33–#35 |
-| `edge-ai-robot/` (planned) | MiniAlpha and Edge AI | detection, bounded robot skills, action guard | #13 #14 #36–#38 |
+| `edge-ai-robot/` (planned) | UBTECH Yanshee and Edge AI | detection, bounded robot skills, action guard | #13 #14 #36–#38 |
 | `dashboard/` (planned) | Operator display | read-only telemetry, incidents, approved requests | #15 #39 #40 |
 | `integration-tests/` (planned) | E2E quality | reproducible scenarios, HIL and reliability evidence | #16 #20 #42–#45 |
 | `infrastructure/` (planned) | Environment | local deployment, credentials and recovery | #17 #41 #51 |

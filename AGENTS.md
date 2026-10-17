@@ -3,7 +3,7 @@
 Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/repository-layout.md`, `docs/architecture/overview.md`, `docs/contracts-and-data.md`, the affected module README/source/tests and GitHub Issue, then `docs/testing-and-acceptance.md`.
 
 ## Fixed context
-- Research system = **nine-module physical mini-factory + Unity real-time Digital Twin + MiniAlpha Edge AI Robot**. Not a retail twin and not a generic chatbot demo.
+- Research system = **nine-module physical mini-factory + Unity real-time Digital Twin + UBTECH Yanshee Edge AI Robot**. Not a retail twin and not a generic chatbot demo.
 - Modular monorepo: do not split repos, create nested `.git`, or duplicate bridge implementation without an approved architecture decision.
 - **Root module ownership (P0 #65):** `esp32-ukit-bridge/` is only the ESP32 ↔ MEGA-uKit firmware, AMLP and bridge-local tests/contracts. Independent backend services such as `iot-gateway/` MUST be siblings at repository root. Never nest services under `esp32-ukit-bridge/`. Cross-system schemas belong to root `contracts/`, subject to compatibility audit; AMLP stays in the bridge.
 - Existing bridge is source of truth for its wire/JSON interface; AMLP v1 at `esp32-ukit-bridge/shared/protocol-spec/AMLP-v1.md`, MQTT contract at `esp32-ukit-bridge/docs/mqtt-contract.md`.
@@ -21,3 +21,6 @@ Read in order: `docs/PROJECT_CONTEXT.md`, `docs/architecture/repository-layout.m
 3. Provide positive/negative, duplicate/stale, offline/recovery and safety tests as applicable.
 4. Label evidence L0 static / L1 unit / L2 simulation / L3 bench / L4 HIL / L5 integrated.
 5. In PR state purpose, files, commands/results, assumptions, compatibility, risks and blockers. Do not claim achievements or invent numerical results.
+
+
+**Robot architecture decision (2026-10-17):** The only current Edge AI physical robot target is **UBTECH Yanshee** (NOT MiniAlpha). Yanshee API/SDK and firmware must be verified under #159; implementation #160 and HIL #161. Treat older MiniAlpha code/PR #145 as superseded and do not merge it unchanged. The Yanshee robot and uKit Mega are independent hardware systems. See ADR decision tracking #158.
