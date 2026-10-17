@@ -1,0 +1,9 @@
+{
+  "name": "ota",
+  "version": "1.0.0",
+  "description": "OTA manager state machine for ESP32-S3 authenticated firmware updates (ADR-0007, ADR-0008)",
+  "build": {
+    "srcFilter": ["+<src/ota_manager.cpp>"],
+    "flags": "-std=gnu++17"
+  }
+}

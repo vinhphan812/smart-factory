@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "ota_manager.h"
+#include "ota/ota_manager.h"
 #include "mocks/ota_mocks.h"
 
 namespace {

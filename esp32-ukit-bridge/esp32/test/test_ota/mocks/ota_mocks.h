@@ -3,7 +3,7 @@
 #include <cstring>
 #include <vector>
 
-#include "ota_manager.h"
+#include "ota/ota_manager.h"
 
 /**
  * Mock transport for testing OTA downloads without network.
