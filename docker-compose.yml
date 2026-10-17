@@ -1,0 +1,58 @@
+# Docker Compose — Smart Factory MQTT Broker Stack
+#
+# TLS usage:
+#   1. Copy .env.example to the ignored .env and set development-only values.
+#   2. infrastructure/mqtt-broker/config/tls/generate-certs.sh
+#   3. docker compose --profile tls up -d mqtt-tls
+#
+# MQTT_TLS_BIND controls only Docker's host-published TLS port binding.
+# The listener inside the container is controlled separately by
+# MQTT_TLS_LISTENER_ADDRESS and defaults to 0.0.0.0.
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: smart-factory-mqtt
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - mqtt-data:/mosquitto/data
+      - mqtt-conf:/mosquitto/config
+      - ./infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
+    environment:
+      MQTT_ADMIN_USERNAME: "${MQTT_ADMIN_USERNAME:-admin}"
+      MQTT_ADMIN_PASSWORD: "${MQTT_ADMIN_PASSWORD:-changeme}"
+    env_file:
+      - .env
+    entrypoint: ["sh", "/docker-entrypoint.d/init.sh"]
+
+  mqtt-tls:
+    image: eclipse-mosquitto:2
+    container_name: smart-factory-mqtt-tls
+    restart: unless-stopped
+    profiles:
+      - tls
+    ports:
+      - "${MQTT_TLS_BIND:-127.0.0.1}:8883:8883"
+    volumes:
+      - mqtt-tls-data:/mosquitto/data
+      - mqtt-tls-conf:/mosquitto/config
+      - ./infrastructure/mqtt-broker/config/tls:/mosquitto/certs:ro
+      - ./infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
+    environment:
+      MQTT_ADMIN_USERNAME: "${MQTT_ADMIN_USERNAME:-admin}"
+      MQTT_ADMIN_PASSWORD: "${MQTT_ADMIN_PASSWORD:-changeme}"
+      # MQTT_TLS_BIND above restricts the host-published port. This listener
+      # must bind inside the container, not to a host loopback address.
+      MQTT_TLS_LISTENER_ADDRESS: "${MQTT_TLS_LISTENER_ADDRESS:-0.0.0.0}"
+      MQTT_TLS_ENABLED: "true"
+    env_file:
+      - .env
+    entrypoint: ["sh", "/docker-entrypoint.d/init.sh"]
+
+volumes:
+  mqtt-data:
+  mqtt-conf:
+  mqtt-tls-data:
+  mqtt-tls-conf:

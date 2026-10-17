@@ -125,3 +125,66 @@ class TestEventNormalizer:
         payload = b"\xff\xfe\x00garbage"
         event = self.n.normalize(topic, payload)
         assert event is None
+
+    def test_telemetry_normalization(self) -> None:
+        """Telemetry topic → TELEMETRY event."""
+        topic = "smart-factory/conveyor-01/telemetry"
+        payload = json.dumps({"value": 65.5, "speed": 1.2}).encode()
+        event = self.n.normalize(topic, payload)
+        assert event is not None
+        assert event.event_type == EventType.TELEMETRY
+        assert event.device_id == "conveyor-01"
+        assert event.payload["value"] == 65.5
+
+    def test_heartbeat_normalization(self) -> None:
+        """Heartbeat topic → HEARTBEAT event."""
+        topic = "smart-factory/conveyor-01/heartbeat"
+        payload = json.dumps({"uptime_ms": 123456}).encode()
+        event = self.n.normalize(topic, payload)
+        assert event is not None
+        assert event.event_type == EventType.HEARTBEAT
+        assert event.device_id == "conveyor-01"
+        assert event.payload["uptime_ms"] == 123456
+
+    def test_esp32_telemetry_values_and_pairs(self) -> None:
+        """ESP32 bridge emits canonical AMLP telemetry as values[] + pairs{}.
+
+        The ESP32 telemetry path (bridge::publishTelemetry in mqtt_bridge.h) emits
+        a JSON payload with:
+          - "values": array of raw telemetry field strings (temperature, humidity,
+            digital inputs, etc.)
+          - "pairs": object of key=value sensor readings (e.g. SENSOR1=1)
+          - "device_id": bridge identifier
+          - "received_at_ms": millisecond timestamp
+
+        This test verifies the normalizer accepts and preserves the full canonical
+        structure end-to-end, matching what ESP32 actually emits on the wire.
+        """
+        topic = "smart-factory/bridge-001/telemetry"
+        esp32_payload = {
+            "device_id": "bridge-001",
+            "received_at_ms": 12345678,
+            "values": ["STATE", "60", "2534", "6550", "5"],
+            "pairs": {
+                "SENSOR1": "1",
+                "SENSOR2": "0",
+                "SENSOR3": "1",
+                "SENSOR4": "0",
+            },
+            "truncated": False,
+        }
+        payload_bytes = json.dumps(esp32_payload).encode()
+        event = self.n.normalize(topic, payload_bytes)
+        assert event is not None
+        assert event.event_type == EventType.TELEMETRY
+        assert event.device_id == "bridge-001"
+        # Full payload including values[] and pairs{} is preserved
+        assert "values" in event.payload
+        assert "pairs" in event.payload
+        assert event.payload["values"] == ["STATE", "60", "2534", "6550", "5"]
+        assert event.payload["pairs"]["SENSOR1"] == "1"
+        assert event.payload["pairs"]["SENSOR2"] == "0"
+        assert event.payload["pairs"]["SENSOR3"] == "1"
+        assert event.payload["pairs"]["SENSOR4"] == "0"
+        assert event.payload["received_at_ms"] == 12345678
+        assert event.payload["truncated"] is False

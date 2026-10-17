@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Factory Operator Dashboard</title>
+    <!-- Tailwind CSS for modern responsive styling -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Chart.js for telemetry charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans antialiased min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-bold tracking-wider text-blue-400">⚡ SMART FACTORY</span>
+            <span class="text-xs uppercase bg-blue-900 text-blue-200 px-2.5 py-1 rounded font-semibold">Operator Dashboard</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div id="ws-status" class="flex items-center space-x-2 text-sm text-yellow-400 bg-gray-900 px-3 py-1.5 rounded-full border border-gray-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse"></span>
+                <span id="ws-status-text">Connecting Gateway...</span>
+            </div>
+            <button onclick="exportData('csv')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm font-medium transition">Export CSV</button>
+            <button onclick="exportData('json')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm font-medium transition">Export JSON</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto w-full">
+        <!-- Left & Center: Telemetry & Charts (Col span 2) -->
+        <section class="lg:col-span-2 space-y-6">
+            <!-- Controls / Time Range Selector -->
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-wrap justify-between items-center gap-4">
+                <div class="flex items-center space-x-2">
+                    <label for="device-select" class="text-sm font-medium text-gray-300">Device:</label>
+                    <select id="device-select" onchange="switchDevice(this.value)" class="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                        <option value="conveyor-01">conveyor-01</option>
+                        <option value="robotic-arm-01">robotic-arm-01</option>
+                        <option value="cnc-mill-01">cnc-mill-01</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm font-medium text-gray-300">Time Range:</span>
+                    <div class="inline-flex rounded-md shadow-sm" role="group">
+                        <button onclick="setTimeRange('5m')" class="timer-btn px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-l border border-gray-700 transition">5m</button>
+                        <button onclick="setTimeRange('1h')" class="timer-btn px-3 py-1.5 text-xs font-medium bg-gray-900 text-gray-300 border-t border-b border-gray-700 transition">1h</button>
+                        <button onclick="setTimeRange('24h')" class="timer-btn px-3 py-1.5 text-xs font-medium bg-gray-900 text-gray-300 rounded-r border border-gray-700 transition">24h</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Summary Cards -->
+            <div class="grid grid-cols-3 gap-4">
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                    <div class="text-xs text-gray-400 font-medium uppercase">Average Rate</div>
+                    <div id="metric-avg" class="text-2xl font-bold text-blue-400 mt-1">0.0</div>
+                    <div class="text-xs text-gray-500 mt-1">units / min</div>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                    <div class="text-xs text-gray-400 font-medium uppercase">Peak Value</div>
+                    <div id="metric-peak" class="text-2xl font-bold text-green-400 mt-1">0.0</div>
+                    <div class="text-xs text-gray-500 mt-1">max observed</div>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                    <div class="text-xs text-gray-400 font-medium uppercase">Total Events</div>
+                    <div id="metric-total" class="text-2xl font-bold text-purple-400 mt-1">0</div>
+                    <div class="text-xs text-gray-500 mt-1">in selected window</div>
+                </div>
+            </div>
+
+            <!-- Telemetry Chart -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-200">Per-Device Telemetry & State Stream</h2>
+                    <span id="active-device-label" class="text-xs bg-gray-900 px-2 py-1 rounded text-blue-300">conveyor-01</span>
+                </div>
+                <div class="h-72 relative">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Unified Event Timeline -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-200">Unified Event Timeline</h2>
+                    <div class="flex space-x-2">
+                        <select id="filter-severity" onchange="renderEvents()" class="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300">
+                            <option value="">All Severities</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARN">WARN</option>
+                            <option value="ERROR">ERROR</option>
+                            <option value="CRITICAL">CRITICAL</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="event-timeline" class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                    <div class="text-sm text-gray-500 text-center py-4">Waiting for gateway events...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right: Incident Management & Audit -->
+        <section class="space-y-6">
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-200">Active Incidents</h2>
+                    <span id="incident-count" class="bg-red-900 text-red-200 text-xs px-2 py-0.5 rounded-full font-bold">0 Active</span>
+                </div>
+                <div id="incident-list" class="space-y-4 max-h-[550px] overflow-y-auto pr-2">
+                    <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 text-center text-gray-500 text-sm">
+                        No incidents recorded. System healthy.
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Info & Trace Link -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 space-y-3">
+                <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">Trace & Compliance</h3>
+                <div class="text-xs text-gray-400 space-y-1">
+                    <div>Gateway Endpoint: <span id="gateway-url" class="text-blue-400 font-mono">ws://localhost:8000</span></div>
+                    <div>Compliance Standard: <span class="text-green-400 font-mono">ADR-0005 Canonical Envelope</span></div>
+                    <div>Actor Audit: <span class="text-yellow-400 font-mono">Enforced (Operator ID + Timestamp)</span></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        var GATEWAY_WS_URL = (
+            window.SMART_FACTORY_WS_URL ||
+            (function () {
+                var params = new URLSearchParams(window.location.search);
+                return params.get('ws');
+            })() ||
+            'ws://localhost:8000'
+        );
+
+        var OPERATIONAL_MODE = 'demo';
+
+        var selectedDevice = "conveyor-01";
+        var timeRange = "5m";
+        var events = [];
+        var incidents = [];
+        var chartInstance = null;
+
+        function safeText(node, text) {
+            node.textContent = (text === null || text === undefined) ? '' : String(text);
+        }
+
+        function setMode(mode) {
+            OPERATIONAL_MODE = mode;
+            var badge = document.getElementById('mode-badge');
+            var ackLine = document.getElementById('ack-mode-line');
+            if (mode === 'live') {
+                if (badge) {
+                    badge.textContent = 'LIVE';
+                    badge.className = 'text-xs uppercase px-2.5 py-1 rounded font-semibold bg-green-900 text-green-200';
+                }
+                if (ackLine) {
+                    ackLine.textContent = 'Acknowledge: DISABLED (production mode)';
+                    ackLine.className = 'text-gray-500 font-mono text-xs';
+                }
+                events = [];
+                incidents = [];
+                renderEvents();
+                renderIncidents();
+                updateMetricsAndChart();
+            } else {
+                if (badge) {
+                    badge.textContent = 'DEMO / SIMULATION';
+                    badge.className = 'text-xs uppercase px-2.5 py-1 rounded font-semibold bg-yellow-900 text-yellow-200';
+                }
+                if (ackLine) {
+                    ackLine.textContent = 'Acknowledge: Local Demo Only';
+                    ackLine.className = 'text-yellow-400 font-mono text-xs';
+                }
+            }
+        }
+
+        let chartInstance = null;
+
+        // Initialize Chart.js
+        function initChart() {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Telemetry Value / Speed',
+                        data: [],
+                        borderColor: '#60a5fa',
+                        backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(55, 65, 81, 0.5)' },
+                            ticks: { color: '#9ca3af', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(55, 65, 81, 0.5)' },
+                            ticks: { color: '#9ca3af', font: { size: 10 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Switch active device
+        function switchDevice(deviceId) {
+            selectedDevice = deviceId;
+            document.getElementById('active-device-label').textContent = deviceId;
+            updateMetricsAndChart();
+        }
+
+        // Set time range
+        function setTimeRange(range) {
+            timeRange = range;
+            document.querySelectorAll('.timer-btn').forEach(btn => {
+                if (btn.textContent === range) {
+                    btn.className = "timer-btn px-3 py-1.5 text-xs font-medium bg-blue-600 text-white border border-gray-700 transition";
+                } else {
+                    btn.className = "timer-btn px-3 py-1.5 text-xs font-medium bg-gray-900 text-gray-300 border border-gray-700 transition";
+                }
+            });
+            updateMetricsAndChart();
+        }
+
+        function connectGateway() {
+            var statusEl = document.getElementById('ws-status');
+            var statusText = document.getElementById('ws-status-text');
+            safeText(document.getElementById('gateway-url'), GATEWAY_WS_URL);
+
+            ws = new WebSocket(GATEWAY_WS_URL);
+            ws.onopen = function() {
+                if (statusEl) {
+                    statusEl.className = "flex items-center space-x-2 text-sm text-green-400 bg-gray-900 px-3 py-1.5 rounded-full border border-green-700";
+                    if (statusEl.querySelector('span')) statusEl.querySelector('span').className = "w-2.5 h-2.5 rounded-full bg-green-400";
+                }
+                safeText(statusText, "Gateway Connected");
+                setMode('live');
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    var pkt = JSON.parse(event.data);
+                    ingestGatewayEvent(pkt);
+                } catch (err) {
+                    console.error("Failed to parse incoming WS message:", err);
+                }
+            };
+
+            ws.onerror = function(err) {
+                console.warn("WebSocket error:", err);
+            };
+
+            ws.onclose = function() {
+                if (statusEl) {
+                    statusEl.className = "flex items-center space-x-2 text-sm text-yellow-400 bg-gray-900 px-3 py-1.5 rounded-full border border-yellow-700";
+                    if (statusEl.querySelector('span')) statusEl.querySelector('span').className = "w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse";
+                }
+                safeText(statusText, "Gateway Offline (Demo Mode)");
+                setMode('demo');
+                seedDemoIncidents();
+                setTimeout(connectGateway, 5000);
+            };
+        }
+
+        function ingestGatewayEvent(pkt) {
+            var deviceId = (pkt.device_id && typeof pkt.device_id === 'string') ? pkt.device_id : 'unknown';
+            var eventType = (pkt.event_type && typeof pkt.event_type === 'string') ? pkt.event_type : 'telemetry';
+            var traceId = (pkt.trace_id && typeof pkt.trace_id === 'string') ? pkt.trace_id : '';
+
+            var ev = {
+                id: pkt.event_id || ('ev-' + Math.random().toString(36).substr(2, 9)),
+                deviceId: deviceId,
+                type: eventType,
+                severity: determineSeverity(pkt),
+                timestamp: pkt.ingested_at || new Date().toISOString(),
+                payload: pkt.payload || pkt,
+                traceId: traceId
+            };
+
+            events.unshift(ev);
+            if (events.length > 200) events.pop();
+
+            if (OPERATIONAL_MODE === 'live' && (ev.severity === 'ERROR' || ev.severity === 'CRITICAL')) {
+                incidents.unshift({
+                    id: "INC-" + Math.floor(1000 + Math.random() * 9000),
+                    severity: ev.severity,
+                    deviceId: deviceId,
+                    title: 'Event: ' + eventType,
+                    timestamp: ev.timestamp,
+                    acknowledged: false,
+                    ackBy: null,
+                    ackAt: null,
+                    notes: 'Gateway event type: ' + eventType
+                });
+            }
+
+            renderEvents();
+            renderIncidents();
+            updateMetricsAndChart();
+        }
+
+        function determineSeverity(pkt) {
+            if (pkt.event_type === 'command_ack' && pkt.payload && pkt.payload.status === 'error') return 'ERROR';
+            if (pkt.event_type === 'status_offline') return 'WARN';
+            return 'INFO';
+        }
+
+        function renderEvents() {
+            var container = document.getElementById('event-timeline');
+            var severityFilter = document.getElementById('filter-severity').value;
+            var filtered = events.filter(function(ev) { return !severityFilter || ev.severity === severityFilter; });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No events matching filter.</div>';
+                return;
+            }
+
+            var fragment = document.createDocumentFragment();
+            filtered.forEach(function(ev) {
+                var badgeColor = 'bg-blue-900 text-blue-200';
+                if (ev.severity === 'WARN') badgeColor = 'bg-yellow-900 text-yellow-200';
+                if (ev.severity === 'ERROR') badgeColor = 'bg-orange-900 text-orange-200';
+                if (ev.severity === 'CRITICAL') badgeColor = 'bg-red-900 text-red-200';
+
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'bg-gray-900 p-3 rounded-lg border border-gray-700 text-xs space-y-1';
+
+                var innerDiv1 = document.createElement('div');
+                innerDiv1.className = 'flex justify-between items-center';
+                var deviceSpan = document.createElement('span');
+                deviceSpan.className = 'font-bold text-gray-200';
+                safeText(deviceSpan, ev.deviceId);
+                innerDiv1.appendChild(deviceSpan);
+
+                var badgeSpan = document.createElement('span');
+                badgeSpan.className = badgeColor + ' px-2 py-0.5 rounded font-mono text-[10px]';
+                safeText(badgeSpan, ev.severity);
+                innerDiv1.appendChild(badgeSpan);
+                itemDiv.appendChild(innerDiv1);
+
+                var innerDiv2 = document.createElement('div');
+                innerDiv2.className = 'text-gray-400 flex justify-between';
+                var typeSpan = document.createElement('span');
+                safeText(typeSpan, 'Type: ');
+                var typeStrong = document.createElement('strong');
+                typeStrong.className = 'text-gray-300';
+                safeText(typeStrong, ev.type);
+                typeSpan.appendChild(typeStrong);
+                innerDiv2.appendChild(typeSpan);
+
+                var timeSpan = document.createElement('span');
+                timeSpan.className = 'font-mono text-[10px] text-gray-500';
+                try { safeText(timeSpan, new Date(ev.timestamp).toLocaleTimeString()); } catch (_) { safeText(timeSpan, ev.timestamp); }
+                innerDiv2.appendChild(timeSpan);
+                itemDiv.appendChild(innerDiv2);
+
+                var traceDiv = document.createElement('div');
+                traceDiv.className = 'text-gray-400 font-mono text-[10px] truncate';
+                safeText(traceDiv, 'Trace ID: ' + ev.traceId);
+                itemDiv.appendChild(traceDiv);
+
+                fragment.appendChild(itemDiv);
+            });
+
+            container.innerHTML = '';
+            container.appendChild(fragment);
+        }
+
+        function renderIncidents() {
+            var container = document.getElementById('incident-list');
+            var countEl = document.getElementById('incident-count');
+            var activeIncidents = incidents.filter(function(inc) { return !inc.acknowledged; });
+            safeText(countEl, String(activeIncidents.length) + ' Active');
+
+            if (incidents.length === 0) {
+                container.innerHTML = '<div class="bg-gray-900 p-4 rounded-lg border border-gray-700 text-center text-gray-500 text-sm">No incidents recorded. System healthy.</div>';
+                return;
+            }
+
+            var fragment = document.createDocumentFragment();
+            incidents.forEach(function(inc) {
+                var badgeColor = 'bg-red-900 text-red-200';
+                if (inc.severity === 'WARN') badgeColor = 'bg-yellow-900 text-yellow-200';
+                if (inc.severity === 'INFO') badgeColor = 'bg-blue-900 text-blue-200';
+
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'bg-gray-900 p-4 rounded-lg border ' + (inc.acknowledged ? 'border-gray-700 opacity-75' : 'border-red-600') + ' space-y-2';
+
+                var titleRow = document.createElement('div');
+                titleRow.className = 'flex justify-between items-start';
+                var titleDiv = document.createElement('div');
+                var idSpan = document.createElement('span');
+                idSpan.className = 'font-mono text-xs text-gray-400';
+                safeText(idSpan, inc.id);
+                titleDiv.appendChild(idSpan);
+
+                var h4 = document.createElement('h4');
+                h4.className = 'font-bold text-sm text-gray-100';
+                safeText(h4, inc.title);
+                titleDiv.appendChild(h4);
+                titleRow.appendChild(titleDiv);
+
+                var sevBadge = document.createElement('span');
+                sevBadge.className = badgeColor + ' px-2 py-0.5 rounded text-[10px] font-bold';
+                safeText(sevBadge, inc.severity);
+                titleRow.appendChild(sevBadge);
+                itemDiv.appendChild(titleRow);
+
+                var devDiv = document.createElement('div');
+                devDiv.className = 'text-xs text-gray-400';
+                safeText(devDiv, 'Device: ');
+                var devStrong = document.createElement('strong');
+                devStrong.className = 'text-gray-300';
+                safeText(devStrong, inc.deviceId);
+                devDiv.appendChild(devStrong);
+                itemDiv.appendChild(devDiv);
+
+                var notesDiv = document.createElement('div');
+                notesDiv.className = 'text-xs text-gray-400';
+                safeText(notesDiv, inc.notes || '');
+                itemDiv.appendChild(notesDiv);
+
+                var ackDiv = document.createElement('div');
+                ackDiv.className = 'pt-2 border-t border-gray-800 flex justify-between items-center text-xs';
+
+                if (inc.acknowledged) {
+                    var ackText = document.createElement('div');
+                    ackText.className = 'text-green-400 font-mono text-[10px]';
+                    safeText(ackText, '✓ Ack by ' + (inc.ackBy || 'unknown') + ' at ' + (inc.ackAt ? new Date(inc.ackAt).toLocaleTimeString() : 'n/a'));
+                    ackDiv.appendChild(ackText);
+                } else if (OPERATIONAL_MODE === 'demo') {
+                    var btn = document.createElement('button');
+                    btn.className = 'bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded font-medium transition w-full text-center';
+                    safeText(btn, 'Acknowledge Incident (Demo)');
+                    btn.onclick = (function(id) { return function() { acknowledgeIncident(id); }; })(inc.id);
+                    ackDiv.appendChild(btn);
+                } else {
+                    var disabledNote = document.createElement('div');
+                    disabledNote.className = 'text-gray-500 font-mono text-[10px] text-center w-full';
+                    safeText(disabledNote, 'Ack disabled in live mode');
+                    ackDiv.appendChild(disabledNote);
+                }
+
+                itemDiv.appendChild(ackDiv);
+                fragment.appendChild(itemDiv);
+            });
+
+            container.innerHTML = '';
+            container.appendChild(fragment);
+        }
+
+        function acknowledgeIncident(incId) {
+            if (OPERATIONAL_MODE !== 'demo') return;
+            var operatorId = 'demo-operator';
+            var inc = incidents.find(function(i) { return i.id === incId; });
+            if (inc) {
+                inc.acknowledged = true;
+                inc.ackBy = operatorId;
+                inc.ackAt = new Date().toISOString();
+                renderIncidents();
+            }
+        }
+
+        function updateMetricsAndChart() {
+            var pointsCount = (timeRange === '5m') ? 10 : (timeRange === '1h') ? 30 : 60;
+            var labels = [];
+            var dataValues = [];
+            var sum = 0;
+            var peak = -Infinity;
+            var totalEvents = 0;
+
+            if (OPERATIONAL_MODE === 'live') {
+                var deviceEvents = events.filter(function(ev) { return ev.deviceId === selectedDevice && ev.type === 'telemetry'; });
+                totalEvents = deviceEvents.length;
+                var sliced = deviceEvents.slice(0, pointsCount + 1).reverse();
+                sliced.forEach(function(ev) {
+                    var d = new Date(ev.timestamp);
+                    labels.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                    var val = (ev.payload && typeof ev.payload.value === 'number') ? ev.payload.value : 0;
+                    dataValues.push(val);
+                    sum += val;
+                    if (val > peak) peak = val;
+                });
+            }
+
+            if (OPERATIONAL_MODE === 'demo') {
+                var baseVal = selectedDevice === 'conveyor-01' ? 60 : selectedDevice === 'robotic-arm-01' ? 45 : 80;
+                for (var i = pointsCount; i >= 0; i--) {
+                    var d2 = new Date(Date.now() - i * (timeRange === '5m' ? 30000 : 120000));
+                    labels.push(d2.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                    var v = parseFloat((baseVal + Math.sin(i + selectedDevice.length) * 10 + Math.random() * 5).toFixed(1));
+                    dataValues.push(v);
+                    sum += v;
+                    if (v > peak) peak = v;
+                }
+                totalEvents = dataValues.length * 12;
+            }
+
+            var avg = dataValues.length > 0 ? (sum / dataValues.length).toFixed(1) : '0.0';
+            document.getElementById('metric-avg').textContent = avg;
+            document.getElementById('metric-peak').textContent = peak === -Infinity ? '0.0' : peak.toFixed(1);
+            document.getElementById('metric-total').textContent = String(totalEvents);
+
+            if (chartInstance) {
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = dataValues;
+                chartInstance.data.datasets[0].label = selectedDevice + ' Metric' + (OPERATIONAL_MODE === 'demo' ? ' (Demo)' : '');
+                chartInstance.update();
+            }
+        }
+
+        function seedDemoIncidents() {
+            if (OPERATIONAL_MODE !== 'demo' || incidents.length > 0) return;
+            incidents.push(
+                { id: 'INC-1001', severity: 'CRITICAL', deviceId: 'conveyor-01', title: '[DEMO] Thermal Threshold Exceeded', timestamp: new Date().toISOString(), acknowledged: false, ackBy: null, ackAt: null, notes: 'Demo fixture — not a real production incident.' },
+                { id: 'INC-1002', severity: 'WARN', deviceId: 'robotic-arm-01', title: '[DEMO] High Latency ACK Warning', timestamp: new Date(Date.now() - 120000).toISOString(), acknowledged: false, ackBy: null, ackAt: null, notes: 'Demo fixture — not a real production incident.' }
+            );
+        }
+
+        function seedDemoEvents() {
+            if (OPERATIONAL_MODE !== 'demo') return;
+            var sampleTypes = ['telemetry', 'status_online', 'command_ack', 'status_offline'];
+            var severities = ['INFO', 'INFO', 'WARN', 'ERROR', 'INFO'];
+            for (var i = 0; i < 15; i++) {
+                var dev = (i % 2 === 0) ? 'conveyor-01' : (i % 3 === 0) ? 'robotic-arm-01' : 'cnc-mill-01';
+                var sev = severities[i % severities.length];
+                events.push({
+                    id: 'ev-demo-' + (1000 + i),
+                    deviceId: dev,
+                    type: sampleTypes[i % sampleTypes.length],
+                    severity: sev,
+                    timestamp: new Date(Date.now() - i * 45000).toISOString(),
+                    payload: { value: 50 + (i * 2), status: sev === 'ERROR' ? 'error' : 'ok' },
+                    traceId: 'trace-demo-' + i
+                });
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            setMode('demo');
+            seedDemoEvents();
+            seedDemoIncidents();
+            initChart();
+            renderEvents();
+            renderIncidents();
+            updateMetricsAndChart();
+            connectGateway();
+        });
+    </script>
+</body>
+</html>
