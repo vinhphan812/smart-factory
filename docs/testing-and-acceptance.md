@@ -8,7 +8,7 @@
 | L2 | simulated UART/MQTT, mock device | software protocol/application behavior |
 | L3 | ESP32 connected to real controller (bench) | verified electrical and link interoperability |
 | L4 | actual moving 9-module subsystem, operator/E-stop | physical safety and actuation |
-| L5 | integrated factory→gateway→Unity→MiniAlpha | stated end-to-end scenarios with declared mock/real mix |
+| L5 | integrated factory→gateway→Unity→UBTECH Yanshee | stated end-to-end scenarios with declared mock/real mix |
 
 ## End-to-end acceptance scenarios
 | ID | Stimulus | Expected result |
@@ -21,7 +21,7 @@
 | E06 | Broker disconnect | Stale indication; no unsafe queued execution |
 | E07 | Out-of-order event | Twin state does not roll backward |
 | E08 | Reconnect | Snapshot resync; expired commands rejected |
-| E09 | MiniAlpha offline/unsupported skill | Explicit failure; no actuation |
+| E09 | UBTECH Yanshee offline/unsupported skill | Explicit failure; no actuation |
 | E10 | AI unsafe action request | Policy gate rejects; audit present |
 | E11 | Emergency stop | Works locally even without MQTT |
 | E12 | Event replay | Reproducible recorded state and trace |

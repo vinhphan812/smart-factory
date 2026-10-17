@@ -1,6 +1,6 @@
 # Smart Factory — Architecture (baseline and target)
 
-**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The current engineering target uses **Unity 3D** and MiniAlpha. The original research proposal specified Unreal Engine; this is a historical reference and its formal amendment/approval status is unverified. Earlier material also mentioned Three.js and unimplemented MQTT topics, which are not implementation claims.
+**This document deliberately separates implemented bridge behavior from the proposed integrated system.** The current engineering target uses **Unity 3D** and UBTECH Yanshee. The original research proposal specified Unreal Engine; this is a historical reference and its formal amendment/approval status is unverified. Earlier material also mentioned Three.js and unimplemented MQTT topics, which are not implementation claims.
 
 ## Existing bridge baseline
 
@@ -29,7 +29,7 @@ flowchart TD
   Gateway --> Twin[Unity Digital Twin]
   Gateway --> Dash[Dashboard]
   Gateway --> Edge[Edge anomaly detector]
-  Edge --> Robot[MiniAlpha notification / bounded skills]
+  Edge --> Robot[UBTECH Yanshee notification / bounded skills]
   Operator[Authorized operator] --> Guard[Safety authorization and fresh context guard]
   Edge -. request only .-> Guard
   Guard --> Broker
@@ -64,7 +64,7 @@ Operator/AI intent → role/capability authorization → current context and saf
 - ~~ADR-001~~: canonical system event schema and device IDs → see ADR-0005
 - ~~ADR-002~~: Unreal engine version → see ADR-0003
 - ~~ADR-003~~: per-device controller/voltage/SDK and E-stop → see ADR-0004 / ADR-0006
-- ~~ADR-004~~: MiniAlpha API and skills → see Issue #13
+- ~~ADR-004~~: UBTECH Yanshee API and skills → see Issue #13
 - ~~ADR-005~~: latency thresholds → see Issue #43
 
 See [component boundaries](components.md), [contracts](../contracts-and-data.md) and [acceptance](../testing-and-acceptance.md).
