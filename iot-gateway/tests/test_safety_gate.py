@@ -10,6 +10,9 @@ Tests cover:
 
 import time
 import pytest
+from unittest.mock import MagicMock
+from fastapi.testclient import TestClient
+
 from iot_gateway.safety_gate import (
     SafetyGate,
     SafetyRuleConfig,
@@ -420,6 +423,126 @@ class TestSafetyDecisionModel:
         assert ReasonCode.OPERATOR_OVERRIDE.value == "OPERATOR_OVERRIDE"
         assert ReasonCode.ALL_CRITERIA_MET.value == "ALL_CRITERIA_MET"
         assert ReasonCode.NO_TELEMETRY.value == "NO_TELEMETRY"
+
+
+class TestSafetyGateOperatorAuthHTTP:
+    """HTTP-layer tests for X-Operator-Token authentication on safety-gate endpoints.
+
+    These tests verify that the FastAPI dependency injection for
+    _require_operator_token is wired correctly — i.e. via Depends() so that
+    test overrides work and unauthenticated / wrong-token requests are rejected
+    at the HTTP layer before reaching business logic.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Pin the token for all HTTP-level tests — reload api module after setting
+        # the env var so that OPERATOR_TOKEN (evaluated at import time) picks it up.
+        monkeypatch.setenv("SAFETY_OPERATOR_TOKEN", "test-secret-token")
+        import importlib, iot_gateway.api
+        importlib.reload(iot_gateway.api)
+
+    @pytest.fixture
+    def _client(self, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+        from iot_gateway.api import create_http_app
+        from iot_gateway.event_store import EventStore
+        from iot_gateway.safety_gate import SafetyGate
+
+        # Pin a fresh SafetyGate so tests are isolated from any global state
+        _fresh_gate = SafetyGate()
+        store = MagicMock(spec=EventStore)
+        app = create_http_app(store, safety_gate=_fresh_gate)
+        return TestClient(app)
+
+    def test_emergency_stop_no_token_header(self, _client: TestClient) -> None:
+        """POST /safety-gate/emergency-stop without X-Operator-Token → 401."""
+        response = _client.post("/safety-gate/emergency-stop", params={"active": True})
+        assert response.status_code == 401, response.text
+        assert "X-Operator-Token" in response.json()["detail"]
+
+    def test_emergency_stop_wrong_token_header(self, _client: TestClient) -> None:
+        """POST /safety-gate/emergency-stop with wrong token → 401."""
+        response = _client.post(
+            "/safety-gate/emergency-stop",
+            params={"active": True},
+            headers={"X-Operator-Token": "wrong-token"},
+        )
+        assert response.status_code == 401, response.text
+
+    def test_emergency_stop_correct_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/emergency-stop with correct token → 200."""
+        response = _client.post(
+            "/safety-gate/emergency-stop",
+            params={"active": True},
+            headers={"X-Operator-Token": "test-secret-token"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["emergency_stop_active"] == "true"
+
+    def test_interlock_no_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/interlock/{id} without token → 401."""
+        response = _client.post(
+            "/safety-gate/interlock/robot-01",
+            params={"blocked": True},
+        )
+        assert response.status_code == 401, response.text
+
+    def test_interlock_wrong_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/interlock/{id} with wrong token → 401."""
+        response = _client.post(
+            "/safety-gate/interlock/robot-01",
+            params={"blocked": True},
+            headers={"X-Operator-Token": "wrong-token"},
+        )
+        assert response.status_code == 401, response.text
+
+    def test_interlock_correct_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/interlock/{id} with correct token → 200."""
+        response = _client.post(
+            "/safety-gate/interlock/robot-01",
+            params={"blocked": True},
+            headers={"X-Operator-Token": "test-secret-token"},
+        )
+        assert response.status_code == 200, response.text
+
+    def test_operator_override_no_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/operator-override without token → 401."""
+        response = _client.post("/safety-gate/operator-override")
+        assert response.status_code == 401, response.text
+
+    def test_operator_override_correct_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/operator-override with correct token → 200."""
+        response = _client.post(
+            "/safety-gate/operator-override",
+            headers={"X-Operator-Token": "test-secret-token"},
+        )
+        assert response.status_code == 200, response.text
+
+    def test_authorize_no_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/authorize without token → 401."""
+        response = _client.post("/safety-gate/authorize")
+        assert response.status_code == 401, response.text
+
+    def test_authorize_correct_token(self, _client: TestClient) -> None:
+        """POST /safety-gate/authorize with correct token → 200."""
+        response = _client.post(
+            "/safety-gate/authorize",
+            headers={"X-Operator-Token": "test-secret-token"},
+        )
+        assert response.status_code == 200, response.text
+
+    def test_token_not_configured_returns_503(
+        self, _client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When SAFETY_OPERATOR_TOKEN is unset the server returns 503, not 200."""
+        monkeypatch.delenv("SAFETY_OPERATOR_TOKEN", raising=False)
+        import importlib, iot_gateway.api
+        importlib.reload(iot_gateway.api)
+        response = _client.post(
+            "/safety-gate/authorize",
+            headers={"X-Operator-Token": "any"},
+        )
+        assert response.status_code == 503, response.text
 
 
 class TestSafetyGateHardwareInterlock:

@@ -8,7 +8,7 @@ import secrets
 from typing import Any
 
 import websockets
-from fastapi import FastAPI, HTTPException, Query, Header
+from fastapi import Depends, FastAPI, HTTPException, Query, Header
 from pydantic import BaseModel
 
 from .event_store import EventStore
@@ -344,7 +344,7 @@ def create_http_app(
     @app.post("/safety-gate/emergency-stop")
     async def set_emergency_stop(
         active: bool,
-        _: str = _require_operator_token,
+        _token: str = Depends(_require_operator_token),
     ) -> dict[str, str]:
         """Activate or deactivate emergency stop.
 
@@ -358,7 +358,7 @@ def create_http_app(
     async def set_interlock(
         device_id: str,
         blocked: bool,
-        _: str = _require_operator_token,
+        _token: str = Depends(_require_operator_token),
     ) -> dict[str, str]:
         """Set interlock state for a device.
 
@@ -374,7 +374,7 @@ def create_http_app(
 
     @app.post("/safety-gate/operator-override")
     async def operator_override(
-        _: str = _require_operator_token,
+        _token: str = Depends(_require_operator_token),
     ) -> dict[str, str]:
         """Activate operator override mode (can only HOLD, not PERMIT).
 
@@ -388,7 +388,7 @@ def create_http_app(
 
     @app.post("/safety-gate/authorize")
     async def authorize(
-        _: str = _require_operator_token,
+        _token: str = Depends(_require_operator_token),
     ) -> dict[str, str]:
         """Authorize commands after operator override.
 
