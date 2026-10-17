@@ -37,8 +37,8 @@ All three are scoped to `digital-twin/` and are **not yet implemented** (per iss
 Playback consumes the gateway event store via the IoT Gateway HTTP/WebSocket API.
 
 **Snapshot bootstrap (seek / initial load):**
-- `GET /snapshot?since_sequence=<last_seq>` — returns ordered events up to the current high-watermark plus per-device latest state. This is the authoritative state at the target sequence.
-- `high_watermark()` — returns the highest committed sequence number.
+- `GET /snapshot?since_sequence=<last_seq>` — returns ordered events with `sequence > since_sequence` up to the current `high_watermark`, plus `per_device_latest` (one event per device at the most recent sequence). **Important:** `/snapshot` returns the current state of the store — it does NOT return the authoritative state at a historical target sequence. It provides catch-up events from the cursor to now, which is the correct primitive for client reconnect/resync, not for historical seek.
+- `high_watermark()` — returns the highest committed sequence number in the store.
 
 **Incremental replay:**
 - `GET /events?since_sequence=<seq>&limit=<N>` — returns events after the given sequence cursor.
@@ -46,18 +46,37 @@ Playback consumes the gateway event store via the IoT Gateway HTTP/WebSocket API
 
 **Retention note:** The event store prunes events beyond `max_events` (default 10 000) oldest-by-sequence. Seek beyond the retention window returns a gap; the client must handle this gracefully (show a warning, offer the nearest available window).
 
-### 2.3 Snapshot Strategy
+### 2.3 What `/snapshot` Does NOT Do
 
-1. On seek, request `/snapshot` to get a consistent state bundle.
-2. Apply the bundle to Twin GameObjects (device states, actuator positions, sensor values).
-3. Continue replay from `snapshot.sequence + 1` via the WebSocket stream.
-4. For **rewind**, walk backward through the event list client-side or via a reverse query endpoint (not currently exposed — see open item below).
+> **The `/snapshot` endpoint returns current state only.** It is NOT a historical state reconstruction endpoint.
 
-### 2.4 Open Items (not yet implemented)
+- `/snapshot?since_sequence=N` returns events with `sequence > N` up to the current `high_watermark`. This is a catch-up primitive for reconnecting clients.
+- `/snapshot` does **not** accept a target timestamp or historical sequence to reconstruct state at an arbitrary past point. There is no checkpoint/point-in-time snapshot mechanism.
+- Historical playback requires event store **replay**: iterate events from a known-good starting sequence to the target sequence, applying each event to the Twin state. This is a client-side or service-layer concern; the gateway provides the ordered event log only.
+
+### 2.4 Historical Playback Requires Event Store Replay
+
+Playback to an arbitrary historical point is achieved by:
+1. Establishing a **known-good state anchor** (e.g. a baseline snapshot at sequence S₀, or replay from sequence 0).
+2. Replaying events from the anchor forward: `GET /events?since_sequence=<S>&limit=<N>` iterated until `sequence` reaches or exceeds the target.
+3. Applying each event to the Twin state reducer in order.
+
+> ⚠️ **Retention policy limitation:** The event store prunes events beyond `max_events` (default 10 000) oldest-by-sequence. Seek or replay beyond the retention window returns a gap; the client must handle this gracefully (show a warning, offer the nearest available window). No separate historical archive is implemented.
+
+### 2.5 Snapshot Strategy (Client Reconnect, Not Historical Seek)
+
+1. On reconnect, request `/snapshot?since_sequence=<last_known_seq>` to get catch-up events to now.
+2. If `overflow=True` in the response, request a full snapshot (`since_sequence=0`) to avoid state gaps.
+3. Apply the events to Twin GameObjects (device states, actuator positions, sensor values).
+4. Subscribe to WebSocket for live events with `sequence > high_watermark`.
+5. For **rewind**, walk backward through the cached event list client-side or via a reverse query endpoint (not currently exposed — see open item below).
+
+### 2.5 Open Items (not yet implemented)
 
 - Reverse-chronological event query endpoint (event store `query()` currently returns ascending sequence only).
 - Playback head position must track `event_timestamp_ms`, not wall-clock time, to remain accurate across pauses and disconnects (requires issue #34 work).
 - Stale indicator: if the WebSocket disconnects during playback, the Twin must show **UNKNOWN/STALE** per the architecture contract — it must not extrapolate forward.
+- Historical seek to an arbitrary point in time requires a client-side replay loop — no dedicated endpoint or gateway service provides this.
 
 ---
 
@@ -185,6 +204,9 @@ The following are **not yet implemented** and are out of scope until the listed 
 | WebSocket event stream for live/replay | Issue #34 / `iot-gateway/` WebSocket endpoint |
 | `alarm.*` event type definitions | Issue #3 schema review |
 | Unity scene prefabs for the nine factory modules | Issue #12 |
+| **Checkpoint / point-in-time snapshot mechanism** | No mechanism exists to reconstruct Twin state at an arbitrary historical sequence. `/snapshot` returns current state only. Historical playback requires a client-side replay loop (not implemented). |
+| **Event store replay service** | No gateway service provides historical replay to a target sequence or timestamp. Clients must implement their own replay logic against `/events`. |
+| **Historical retention archive** | Events beyond `max_events` (default 10 000) are pruned. No separate long-term archive exists. Historical playback is bounded by the retention window. |
 
 The IoT Gateway event store (`iot-gateway/src/iot_gateway/event_store.py`) is **implemented** and provides the data source for playback queries. All other components above are planned artefacts in this document only.
 
