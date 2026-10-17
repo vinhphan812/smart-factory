@@ -1,10 +1,20 @@
 # Factory Control — Smart Factory
 
-**Status: PLANNED** | Owner: AIBOT / DNTU | Related issues: #9 #10 #22–#27
+**Status: IN PROGRESS** | Owner: AIBOT / DNTU | Related issues: #9 #10 #22–#27
 
 ## Purpose
 
 Nine-module device adapters and production orchestration. Each module driver implements safe state machines, sensor polling, actuator command translation, and local E-stop enforcement.
+
+## Implemented Adapters
+
+| Adapter | Status | Evidence Level | Specification |
+|---|---|---|---|
+| `ConveyorAdapter` | **Implemented** | L1 Unit Tests, L2 Simulation | [docs/conveyor-adapter.md](docs/conveyor-adapter.md) (Fixes #22) |
+| SortingAdapter | Planned | — | #23 |
+| PackagingAdapter | Planned | — | #24 |
+| ForkliftAdapter | Planned | — | #25 |
+| TowerCraneAdapter | Planned | — | #26 |
 
 ## Inbound contracts
 
