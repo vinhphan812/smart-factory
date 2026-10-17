@@ -103,6 +103,33 @@ Every decision is logged with non-sensitive envelope metadata only:
 - Requires proper configuration tuning (thresholds)
 - Must be integrated into command pipeline
 
+## Integration Gap
+
+> ⚠️ **This section documents a known integration limitation. It does not block merge but must be resolved before the safety gate is operational in the physical command path.**
+
+### Gateway does NOT intercept MQTT dispatch
+
+The `SafetyGate` evaluates decisions **in isolation** via an HTTP API endpoint. The IoT Gateway (`gateway.py`) is a **read-only MQTT subscriber** — it has no `publish()` method, no MQTT dispatch interceptor, and no safety-gate integration in the command publish path. Any system that publishes commands to the broker is responsible for calling `evaluate()` and blocking on non-`PERMIT` verdicts before dispatching.
+
+Consumers (e.g., edge AI, dashboard, robot adapter) must enforce safety verdicts. The gateway does not block, gate, or otherwise intercept MQTT publish operations.
+
+### Hardware E-stop is the last line of defense
+
+Hardware E-stop buttons and physical interlocks are **hardwired** and **cannot be cleared by software**. They are the authoritative fallback when all software safety measures fail. Software cannot remotely clear a hardware E-stop.
+
+### Test evidence
+
+- **L1 unit tests**: `iot-gateway/tests/test_safety_gate.py` — 23 tests covering `evaluate()` in isolation. ✅ All pass.
+- **L2–L5 (simulation, bench, HIL, integrated)**: No physical-path integration test exists. This gap must be resolved before operational deployment.
+
+### Required follow-up
+
+Before the safety gate is operational in the physical command path:
+
+1. Integrate `evaluate()` call into MQTT publish path (gateway or consumer layer)
+2. Add E2E test covering physical command lifecycle with safety gate verdict enforcement
+3. Wire hardware E-stop state into `_config.emergency_stop_active`
+
 ## Alternatives Considered
 
 **Option A: ML-based safety classifier**
