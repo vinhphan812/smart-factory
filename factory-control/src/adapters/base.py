@@ -126,6 +126,7 @@ class BaseDeviceAdapter(abc.ABC):
         """Cache a command execution result for idempotency."""
         key = self._cache_key(command_id)
         if len(self._command_cache) >= self.max_idempotency_cache:
+            # Drop oldest key (FIFO eviction when cache reaches capacity limit)
             first_key = next(iter(self._command_cache))
             del self._command_cache[first_key]
 

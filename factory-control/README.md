@@ -10,7 +10,7 @@ Nine-module device adapters and production orchestration. Each module driver imp
 
 | Adapter | Status | Evidence Level | Specification |
 |---|---|---|---|
-| `ConveyorAdapter` | **Implemented** | L1 Unit Tests, L2 Simulation | [docs/conveyor-adapter.md](docs/conveyor-adapter.md) (Issue #22) |
+| `ConveyorAdapter` | **Implemented** | L1 Unit Tests, L2 Simulation | [docs/conveyor-adapter.md](docs/conveyor-adapter.md) (Fixes #22) |
 | `SortingAdapter` | **Implemented** | L1 Unit Tests, L2 Simulation | [docs/sorting-adapter.md](docs/sorting-adapter.md) (Fixes #23) |
 | `PackagingAdapter` | Planned | — | #24 |
 | `ForkliftAdapter` | Planned | — | #25 |
