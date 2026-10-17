@@ -196,7 +196,8 @@ Owner: Issue #65 (monorepo foundation) | Task t_e6179730 verification
 | [ADR-0007](adr-0007-signed-ota-ab-rollback.md) | Signed HTTPS OTA with A/B Rollback | Proposed | 2026-10-14 |
 | [ADR-0008](adr-0008-ota-manager-event-driven.md) | Event-driven OtaManager (No Dedicated FreeRTOS Task) | Proposed | 2026-10-14 |
 | [ADR-0009](adr-0009-telemetry-schema-compatibility.md) | Telemetry Schema Compatibility | Proposed | 2026-10-14 |
-| [ADR-0011](adr-0011-dashboard-safety.md) | Dashboard Safety, Telemetry Mode Separation & XSS Hardening | Proposed | 2026-10-15 |
+| [ADR-0011](adr-0011-dashboard-safety.md)
+| [ADR-0013](adr-0013-edge-ai-safety-gate.md) | Edge AI Safety Decision Gate | Proposed | 2026-10-16 | | Dashboard Safety, Telemetry Mode Separation & XSS Hardening | Proposed | 2026-10-15 |
 
 ## Status Lifecycle
 
