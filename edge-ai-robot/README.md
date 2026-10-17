@@ -1,6 +1,6 @@
 # Edge AI Robot — Smart Factory
 
-**Status: PLANNED** | Related issues: #13 #14 #36–#38
+**Status: IMPLEMENTED (L2 simulation)** | Related issues: #13 #14 #36–#38
 
 ## Purpose
 
