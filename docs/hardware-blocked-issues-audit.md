@@ -2,12 +2,13 @@
 
 **Generated:** 2026-10-17  
 **Reviewer:** vinhphan812  
-**Scope:** All 24 open issues from `gh issue list --state open`  
+**Scope:** 19 open issues (updated from 24 after #73, #82 closures; added #69 bracket module)  
 **Blocking taxonomy (per `docs/testing-and-acceptance.md`):**
 - **BLOCKED-simulator** — L2 simulation can unblock (mock device, simulated UART/MQTT)
 - **BLOCKED-L3** — needs bench hardware (ESP32 + real controller, voltage-verified wiring)
 - **BLOCKED-L4** — needs HIL (actual moving 9-module subsystem + operator + E-stop)
 - **BLOCKED-L5** — needs integrated factory (full chain: physical → gateway → Unity → MiniAlpha)
+- **BLOCKED-HIL** — synonym for L4 (explicit HIL hardware verification)
 
 ---
 
@@ -37,9 +38,10 @@
 | 59 | Implement safe uKit Explore motor/servo/sensor adapter | BRIDGE | BLOCKED-L3: depends on #9 (inventory) + #58 (Mega UART); real actuator calls need bench wiring + E-stop precheck | Write typed adapter with mock; real motor calls blocked by Mega board + wiring + license | dev-backend |
 | 60 | Add Mega CI and HIL flash wiring/recovery guide | BRIDGE | BLOCKED-L3: CI build implementable now; flash/recovery guide needs actual board flash_id + partition layout from #98 | CI toolchain setup L1 now; physical wiring/recovery guide blocked by #98 board verification | devops |
 | 68 | Calibrate 9-module physical-to-Unity coordinate mapping | TWIN | BLOCKED-L4/L5: depends on #9 (physical dimensions) + #11 (Unity scaffold); coordinate calibration requires actual module CAD/measurements | Define calibration format + synthetic fixture L2 now; physical calibration blocked by #9 module procurement | dev-backend |
+| 69 | Bracket structural module inventory and observability | PHYSICAL | BLOCKED-L4: depends on #9 (module inventory) + #42 + #68; purely structural (no actuator) — needs physical measurement | Physical measurement + structural-only documentation; Unity placeholder without electronic interface | dev-pm |
 | 70 | Dump Truck device adapter | PHYSICAL | BLOCKED-L4: no dump truck unit in procurement plan; simulator mock implementable L2 | Mock adapter L2 now; physical L4 blocked by dump truck procurement | dev-pm |
 | 71 | Parking Lot occupancy and logistics-slot adapter | PHYSICAL | BLOCKED-L4: parking lot module not in procurement plan | Mock L2 now; physical L4 blocked by parking lot unit procurement | dev-pm |
-| 73 | Implement authenticated HTTPS OTA client | BRIDGE | BLOCKED-simulator → BLOCKED-L3: L1 state-machine + unit tests implementable now; physical OTA requires real ESP32-S3 partition layout from #74 | Write `OtaManager` state machine with mock partition API; real flash testing blocked by #74 | dev-backend |
+| 73 | Implement authenticated HTTPS OTA client | BRIDGE | ~~BLOCKED-simulator → BLOCKED-L3~~ — **COMPLETED** L1 state-machine + unit tests; real flash blocked by #74 | Write `OtaManager` state machine with mock partition API; real flash testing blocked by #74 | dev-backend |
 | 74 | Build OTA release pipeline + staged rollout | DEVOPS | BLOCKED-L3: CI release job implementable; real ESP32-S3 bench matrix needs actual boards; SPEC-6 bench tests blocked by OTA client (#73) + real hardware | CI pipeline L1/L2 now; physical OTA bench tests blocked by #73 implementation + ESP32-S3 boards | devops |
 | 98 | HIL verification + licensing clearance for uKit Mega | BRIDGE | BLOCKED-L3: requires physical Mega board, multimeter, logic analyzer, legal clearance; prerequisite for #58, #59, #60 physical work | Procure Mega + level shifter; measure voltage; obtain license clearance; document partition layout | dev-pm |
 
@@ -89,12 +91,10 @@ Mega chain (#98 is the hard blocker):
 | 10 | dev-backend | Simulator is the L2 deliverable itself; no physical dependency |
 | 11 | dev-backend | Unity scaffold with mock events; no hardware dependency |
 | 15 | dev-backend | Dashboard against mock API; read-only role tests |
-| 47 | devops | Evidence archive design from existing artifacts |
-| 48 | dev-pm | Report skeleton; physical results inserted as BLOCKED markers |
-| 49 | dev-qa | Lab exercises from contracts + simulator |
 | 13 | dev-backend | Typed mock robot adapter; physical call HIL when unit confirmed |
 | 14 | dev-backend | Deterministic alarm rules on scripted fixtures |
-| 73 | dev-backend | OtaManager state machine; physical flash blocked by #74 |
+
+> Note: #47, #48, #49 are now CLOSED. #73 (OTA client) is CLOSED — L1 implementation done, L3 physical flash remains blocked by #74.
 
 ---
 
