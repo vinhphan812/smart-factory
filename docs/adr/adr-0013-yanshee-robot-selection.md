@@ -1,10 +1,11 @@
-# ADR-0010: UBTECH Yanshee as Smart Factory Edge AI Robot
+# ADR-0013: UBTECH Yanshee as Smart Factory Edge AI Robot
 
 **Status:** Proposed
 **Date:** 2026-10-17
 **Deciders:** Project leadership (authoritative); dev-architect review (t_b76af23e)
 **Related issues:** #158, #159, #160, #161, #13 (superseded), #145 (blocked)
 **Supersedes:** MiniAlpha references in ADR-0004, ADR-0006, overview.md, components.md, PROJECT_CONTEXT.md
+**ADR IDs already used in this repo:** 0001-0012 (0010=MQTT broker security, 0011=Dashboard safety, 0012=Unity prefab contracts)
 
 ---
 

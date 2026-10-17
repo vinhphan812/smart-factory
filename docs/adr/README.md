@@ -17,6 +17,7 @@ Owner: Issue #82 (ADR prerequisites) | Task t_08672f24 v2
 | [ADR-0009](adr-0009-telemetry-schema-compatibility.md) | Telemetry Schema Compatibility | Proposed | 2026-10-14 |
 | [ADR-0010](adr-0010-mqtt-broker-security.md) | MQTT Broker Identity, TLS, and ACL Authorization | Proposed | 2026-10-15 |
 | [ADR-0012](adr-0012-unity-digital-twin-prefab-contracts.md) | Unity Digital Twin Prefab Contracts | Proposed | 2026-10-16 |
+| [ADR-0013](adr-0013-yanshee-robot-selection.md) | UBTECH Yanshee as Smart Factory Edge AI Robot | Proposed | 2026-10-17 |
 
 ## Status Lifecycle
 
@@ -109,7 +110,12 @@ P1/P2 **open** implementation issues have been audited against the 7 ADR Trigger
 | #69 | PHYSICAL | Bracket structural module inventory, mounting and observability contract | P1 | Trigger 3, 7 | ADR-0006 | Proposed; prerequisite: #9 interface definition |
 | #36 | EDGE-AI | Implement robot alert notification skills and typed execution feedback | P1 | Trigger 7 | ADR-0003, ADR-0006 | Proposed; AI capability adapter bounded by fail-closed gate (ADR-0006 Layer 4) |
 | #37 | EDGE-AI | Add fail-closed safety decision gate between AI and physical actions | P1 | Trigger 3 | ADR-0006 | Proposed; ADR-0006 Layer 4 AI action guard governs this issue |
-| #13 | EDGE-AI | Implement MiniAlpha connectivity and bounded robot capability adapter | P1 | Trigger 3, 7 | ADR-0003, ADR-0006 | Proposed; bounded capability ADR may be required; coordinate with #37 |
+| #13 | EDGE-AI | Implement MiniAlpha connectivity and bounded robot capability adapter | P1 | Trigger 3, 7 | ADR-0003, ADR-0006 | **SUPERSEDED** — MiniAlpha replaced by Yanshee per ADR-0013; see #160 for Yanshee adapter |
+| #158 | EDGE-AI | [P1][ARCH][YANSHEE] Record UBTECH Yanshee as the Smart Factory Edge AI robot and supersede MiniAlpha assumptions | P1 | Trigger 7 | **ADR-0013** | Proposed; ADR-0013 ratification PR (#207) tracks this decision |
+| #159 | EDGE-AI | [P1][EDGE-AI][YANSHEE] Audit actual UBTECH Yanshee robot hardware, SDK/API, network interfaces and licensing | P1 | Trigger 3 | ADR-0013 | Open; must complete before Yanshee adapter implementation (#160) |
+| #160 | EDGE-AI | [P1][EDGE-AI][YANSHEE] Implement UBTECH Yanshee typed adapter and safe notification skills with mock/live separation | P1 | Trigger 3, 7 | ADR-0006, ADR-0013 | Open; prerequisite: #159 SDK audit must complete first |
+| #161 | EDGE-AI | [P1][INTEGRATION][YANSHEE] Validate Yanshee robot end-to-end alerts, operator approval and physical HIL acceptance | P1 | Trigger 6, 7 | ADR-0006, ADR-0013 | Open; prerequisite: #160 adapter implementation |
+| #178 | EDGE-AI | [P1][EDGE-AI] Build robot-independent alert skill contract and Yanshee capability authorization layer | P1 | Trigger 7 | ADR-0006, ADR-0013 | Open; robot-agnostic skill contract after #159/#160 provide concrete API surface |
 | #14 | EDGE-AI | Design edge anomaly detection, alert triage and human-safe response pipeline | P1 | Trigger 3 | ADR-0006 | Proposed; fail-closed triage pipeline must be defined before deployment |
 | #39 | DASHBOARD | Add telemetry charts, event timeline and incident acknowledgment | P1 | Trigger 2 | ADR-0005, ADR-0009 | Proposed; covered by canonical events and telemetry schema ADRs |
 | #16 | INTEGRATION | Create end-to-end acceptance suite: device → bridge → twin → edge robot | P1 | Trigger 6, 7 | ADR-0003, ADR-0005 | Proposed; E2E harness architecture ADR may be required for cross-module integration |
