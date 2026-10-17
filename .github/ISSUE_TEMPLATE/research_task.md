@@ -36,6 +36,13 @@ title: "[RESEARCH] "
 - [ ] Follow-up issues filed if implementation is recommended
 - [ ] Research artifacts committed or linked in PR
 
+## ADR Prerequisite
+
+- [ ] **If research produces an architectural decision:** An ADR is required.
+      Copy `docs/adr/adr-TEMPLATE.md` → `docs/adr/adr-XXXX-decision.md`
+- [ ] Governing ADR (if applicable): `ADR-XXXX`
+- [ ] ADR linked in this issue before research PR is merged
+
 ## Priority
 
 - [ ] **P0** — Critical blocker for core development
