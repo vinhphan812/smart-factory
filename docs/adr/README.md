@@ -18,6 +18,7 @@ Owner: Issue #82 (ADR prerequisites) | Task t_08672f24 v2
 | [ADR-0010](adr-0010-mqtt-broker-security.md) | MQTT Broker Identity, TLS, and ACL Authorization | Proposed | 2026-10-15 |
 | [ADR-0012](adr-0012-unity-digital-twin-prefab-contracts.md) | Unity Digital Twin Prefab Contracts | Proposed | 2026-10-16 |
 | [ADR-0013](adr-0013-yanshee-robot-selection.md) | UBTECH Yanshee as Smart Factory Edge AI Robot | Proposed | 2026-10-17 |
+| [ADR-0013](adr-0013-fiware-orion-ld-context.md) | FIWARE Orion-LD Context Architecture | Proposed | 2026-10-17 |
 
 ## Status Lifecycle
 

@@ -61,9 +61,9 @@ PR #162 claims to replace MiniAlpha across 13 docs, but the reviewer correctly i
 
 5. **PR #145 is blocked and must not merge**: The MiniAlpha adapter must be replaced with a Yanshee equivalent. The bounded skill contract (ADR-0006) is valid; only the robot-specific implementation changes.
 
----
-
 ## Consequences
+
+The decision has the following consequences across immediate actions, module changes, and risk posture.
 
 ### Immediate actions required
 
@@ -113,9 +113,9 @@ The bounded skill architecture is robot-agnostic and valid for Yanshee:
 | Yanshee SDK deprecated Raspi variant vs. current YanAPI | #159 must validate actual SDK | #159 |
 | Yanshee not conflated with uKit Mega | Separate module, separate network path | #160 |
 
----
+## Alternatives considered
 
-## Options considered
+Three options were evaluated; Option A is chosen.
 
 ### Option A: Adopt Yanshee (chosen)
 - Yanshee is the authoritative engineering selection
@@ -131,6 +131,15 @@ The bounded skill architecture is robot-agnostic and valid for Yanshee:
 ### Option C: Robot-agnostic abstraction
 - Define `RobotAdapterBase` interface, implement for both MiniAlpha and Yanshee
 - **Rejected for now**: The project has no live hardware for either robot; premature abstraction before SDK reality is known. Revisit after #159/#160 provide concrete Yanshee API surface.
+
+---
+
+## Evidence
+
+- Project leadership decision recorded in task t_b76af23e (2026-10-17)
+- Yanshee engineering selection: Issue #158
+- SDK/HIL verification gating: Issue #159 (audit), Issue #160 (adapter), Issue #161 (HIL)
+- MiniAlpha superseded: PR #145 blocked and must not merge; Issue #13 marked superseded
 
 ---
 
