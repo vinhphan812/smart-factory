@@ -1,31 +1,14 @@
-"""Factory Control - Nine-module device adapters and production control."""
+"""Factory Control — Smart Factory Controller Simulator.
 
-from models import (
-    CommandResult,
-    ConveyorLimits,
-    ConveyorSensors,
-    ConveyorState,
-    EStopSource,
-    ItemClass,
-    RouteDestination,
-    SortingCounts,
-    SortingSensors,
-    SortingState,
-)
-from adapters.conveyor import ConveyorAdapter
-from adapters.sorting import SortingAdapter
+This package provides a deterministic factory controller simulator and
+production state machine for offline testing and module adapter mocking.
 
-__all__ = [
-    "ConveyorAdapter",
-    "ConveyorState",
-    "ConveyorSensors",
-    "ConveyorLimits",
-    "SortingAdapter",
-    "SortingState",
-    "SortingSensors",
-    "SortingCounts",
-    "ItemClass",
-    "RouteDestination",
-    "CommandResult",
-    "EStopSource",
-]
+Key components:
+- ProductionStateMachine: Deterministic state transitions for factory production
+- DeviceAdapter: Base class for module adapters (conveyor, robot, crane, etc.)
+- FactorySimulator: Offline simulator for E2E testing without hardware
+
+See README.md for architecture and safety constraints.
+"""
+
+__version__ = "0.1.0"
