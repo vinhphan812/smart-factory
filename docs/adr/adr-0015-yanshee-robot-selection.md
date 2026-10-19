@@ -1,4 +1,4 @@
-# ADR-0013: UBTECH Yanshee as Smart Factory Edge AI Robot
+# ADR-0015: UBTECH Yanshee as Smart Factory Edge AI Robot
 
 **Status:** Proposed
 **Date:** 2026-10-17
