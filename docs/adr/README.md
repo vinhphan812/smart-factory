@@ -17,7 +17,7 @@ Owner: Issue #82 (ADR prerequisites) | Task t_08672f24 v2
 | [ADR-0009](adr-0009-telemetry-schema-compatibility.md) | Telemetry Schema Compatibility | Proposed | 2026-10-14 |
 | [ADR-0010](adr-0010-mqtt-broker-security.md) | MQTT Broker Identity, TLS, and ACL Authorization | Proposed | 2026-10-15 |
 | [ADR-0012](adr-0012-unity-digital-twin-prefab-contracts.md) | Unity Digital Twin Prefab Contracts | Proposed | 2026-10-16 |
-| [ADR-0013](adr-0013-fiware-orion-ld-context.md) | FIWARE Orion-LD Context Architecture | Proposed | 2026-10-17 |
+| [ADR-0014](adr-0014-fiware-orion-ld-context.md) | FIWARE Orion-LD Context Architecture | Proposed | 2026-10-17 |
 
 ## Status Lifecycle
 
