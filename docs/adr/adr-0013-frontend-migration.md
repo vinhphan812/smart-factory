@@ -47,22 +47,40 @@ The WebSocket client in `services/ws/client.ts` is **READ-ONLY**. It subscribes 
 
 ## Consequences
 
-### Positive
-- Type safety between gateway API contracts and frontend
-- Component-based architecture enables reuse
-- Unit tests can verify business logic
-- Vite provides fast HMR and optimized builds
+- **Positive:**
+  - Type safety between gateway API contracts and frontend
+  - Component-based architecture enables reuse
+  - Unit tests can verify business logic
+  - Vite provides fast HMR and optimized builds
 
-### Negative
-- Initial migration effort (~24 files)
-- Team must know React + TypeScript
-- Build step required (not just open HTML file)
+- **Negative:**
+  - Initial migration effort (~24 files)
+  - Team must know React + TypeScript
+  - Build step required (not just open HTML file)
 
 ## Alternatives Considered
 
 1. **Keep vanilla JS** — Rejected: no type safety, poor testability
 2. **Next.js** — Rejected: overkill for SPA with 2 pages
 3. **Svelte** — Rejected: team experience with React
+
+## Evidence
+
+- TypeScript compiles without errors (`npm run build` passes)
+- All 12 unit tests pass (`npm run test`)
+- Production build succeeds with bundled assets (no CDN runtime dependencies)
+- Legacy `dashboard/src/index.html` preserved as rollback fallback
+- WebSocket client verified READ-ONLY with security comment
+
+### Acceptance Criteria Met
+
+| Criterion | Evidence |
+|-----------|----------|
+| Type safety | TypeScript strict mode enabled, all types defined |
+| Testability | 12 vitest tests passing |
+| Build | `npm run build` produces optimized bundle |
+| Security | No MQTT publish methods, read-only client |
+| Rollback | Legacy HTML preserved at `dashboard/src/index.html` |
 
 ## Rollback
 
