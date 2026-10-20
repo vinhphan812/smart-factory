@@ -1,0 +1,253 @@
+# docker-compose.e2e.yml
+# E2E simulation — full Smart Factory stack with mock MQTT devices.
+# No physical hardware. Safe to run in CI and local development.
+#
+# Usage:
+#   docker compose -f e2e/simulation/docker-compose.e2e.yml up -d
+#   docker compose -f e2e/simulation/docker-compose.e2e.yml logs -f
+#   docker compose -f e2e/simulation/docker-compose.e2e.yml down -v
+
+services:
+  # ── MQTT Broker ────────────────────────────────────────────────────────
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: e2e-mqtt
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - e2e-mqtt-data:/mosquitto/data
+      - e2e-mqtt-conf:/mosquitto/config
+      - ../../infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
+    environment:
+      MQTT_ADMIN_USERNAME: "${MQTT_ADMIN_USERNAME:-admin}"
+      MQTT_ADMIN_PASSWORD: "${MQTT_ADMIN_PASSWORD:-changeme}"
+      MQTT_GW_USERNAME: "${MQTT_GW_USERNAME:-gateway}"
+      MQTT_GW_PASSWORD: "${MQTT_GW_PASSWORD:-changeme}"
+    entrypoint: ["sh", "/docker-entrypoint.d/init.sh"]
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-t", "test", "-m", "ping", "-h", "localhost", "-p", "1883"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - e2e-net
+
+  # ── Mock MQTT Device Simulator ──────────────────────────────────────────
+  mock-mqtt-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-publisher
+    container_name: e2e-mock-publisher
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: "${MQTT_GW_USERNAME:-gateway}"
+      MQTT_PASSWORD: "${MQTT_GW_PASSWORD:-changeme}"
+      PUBLISH_INTERVAL_S: "${MOCK_PUBLISH_INTERVAL_S:-2}"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    networks:
+      - e2e-net
+
+  # ── FIWARE ──────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: e2e-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - e2e-mongo-data:/data/db
+    env_file:
+      - ../../fiware/mongodb.env
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - e2e-net
+
+  orion-ld:
+    image: quay.io/fiware/orion-ld:1.5.0
+    container_name: e2e-orion-ld
+    restart: unless-stopped
+    ports:
+      - "${ORION_LD_PORT:-1026}:1026"
+    environment:
+      ORION_LD_HOST: 0.0.0.0
+      ORION_LD_PORT: 1026
+      ORION_LD_MONGO_HOST: mongodb
+      ORION_LD_MONGO_DB: ${MONGODB_DB:-orion}
+      ORION_LD_LOG_LEVEL: info
+      ORION_LD_USE_NGSI_LD_API: "true"
+      ORION_LD_INFORMATION_MODEL: ngsi-ld
+      ORION_LD_CORS_ORIGINS: "*"
+      ORION_LD_MAX_LIFETIME: 0
+      ORION_LD_ENTITY_ID_REGEX: ".*"
+    env_file:
+      - ../../fiware/orion-ld.env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-s", "http://localhost:1026/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - e2e-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Core: IoT Gateway ───────────────────────────────────────────────────
+  iot-gateway:
+    image: python:3.12-slim
+    container_name: e2e-iot-gateway
+    restart: unless-stopped
+    working_dir: /app
+# Build once, then run the gateway's actual orchestration process.
+    command: >
+      sh -c "pip install --no-cache-dir -e .[dev] && exec iot-gateway"
+    ports:
+      # Gateway WebSocket transport (WS_PORT)
+      - "${GW_WS_PORT:-8000}:8000"
+      # Gateway REST health/events API (WS_HTTP_PORT)
+      - "${GW_HTTP_PORT:-8001}:8001"
+    volumes:
+      - ../../iot-gateway:/app
+      - e2e-gw-data:/app/data
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: "${MQTT_GW_USERNAME:-gateway}"
+      MQTT_PASSWORD: "${MQTT_GW_PASSWORD:-changeme}"
+      DATABASE_URL: "sqlite+aiosqlite:///data/gateway.db"
+      WS_HOST: "0.0.0.0"
+      WS_PORT: "8000"
+      WS_HTTP_PORT: "8001"
+      MAX_EVENTS: "10000"
+      SAFETY_OPERATOR_TOKEN: "${SAFETY_OPERATOR_TOKEN:-}"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - e2e-net
+
+  # ── Core: Factory Control ─────────────────────────────────────────────────
+  factory-control:
+    image: python:3.12-slim
+    container_name: e2e-factory-control
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -e . &&
+             uvicorn factory_control.api:app --host 0.0.0.0 --port 8002"
+    ports:
+      - "${FC_PORT:-8002}:8002"
+    volumes:
+      - ../../factory-control:/app
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "1883"
+      MQTT_GATEWAY_URL: "http://iot-gateway:8000"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+      iot-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - e2e-net
+
+  # ── Dashboard ────────────────────────────────────────────────────────────
+  dashboard:
+    image: node:20-alpine
+    container_name: e2e-dashboard
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "npm install --prefer-offline &&
+             npm run dev -- --host 0.0.0.0"
+    ports:
+      - "${DASH_PORT:-5173}:5173"
+    volumes:
+      - ../../dashboard:/app
+      - /app/node_modules
+    environment:
+      VITE_GATEWAY_WS_URL: "ws://iot-gateway:8000/ws"
+      VITE_GATEWAY_HTTP_URL: "http://iot-gateway:8000"
+    depends_on:
+      iot-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - e2e-net
+
+  # ── Smoke Tests (runs once then exits) ───────────────────────────────────
+  smoke-tests:
+    image: python:3.12-slim
+    container_name: e2e-smoke-tests
+    working_dir: /tests
+    command: >
+      sh -c "pip install --no-cache-dir paho-mqtt websockets httpx pytest pytest-asyncio &&
+             python -m pytest smoke_tests.py -v --tb=short"
+    volumes:
+      - .:/tests
+      - ../../iot-gateway:/app/iot-gateway:ro
+    environment:
+      GW_WS_PORT: "${GW_WS_PORT:-8000}"
+      GW_HTTP_PORT: "${GW_HTTP_PORT:-8001}"
+      ORION_LD_PORT: "${ORION_LD_PORT:-1026}"
+      FC_PORT: "8002"
+      DASH_PORT: "${DASH_PORT:-5173}"
+      MQTT_PORT: "${MQTT_PORT:-1883}"
+      SMOKE_TEST_TIMEOUT_S: "${SMOKE_TEST_TIMEOUT_S:-60}"
+    depends_on:
+      iot-gateway:
+        condition: service_healthy
+      orion-ld:
+        condition: service_healthy
+      factory-control:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    networks:
+      - e2e-net
+    # Run smoke tests once and exit (do not restart)
+    restart: "no"
+
+# ── Volumes & Networks ──────────────────────────────────────────────────
+
+volumes:
+  e2e-mqtt-data:
+  e2e-mqtt-conf:
+  e2e-mongo-data:
+  e2e-gw-data:
+
+networks:
+  e2e-net:
+    driver: bridge
+    name: e2e-net
