@@ -1,0 +1,21 @@
+{
+  "$id": "https://smart-factory.example.com/contracts/v2/examples/telemetry-v2-structured.json",
+  "schema_version": "2.0",
+  "device_id": "ukit-00000000",
+  "timestamp": "2026-10-20T14:30:45.123Z",
+  "source_format": "amlp-structured",
+  "uptime_ms": 123456,
+  "structured": {
+    "state": "RUNNING",
+    "speed": 60,
+    "sensors": {
+      "temperature_centi_c": 2534,
+      "humidity_centi_percent": 6550,
+      "digital_inputs": 5
+    }
+  },
+  "metadata": {
+    "gateway_id": "gateway-001",
+    "translated_at": "2026-10-20T14:30:45.200Z"
+  }
+}

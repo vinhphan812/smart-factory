@@ -16,7 +16,9 @@ when a change is non-additive or removes backward compatibility. Minor additions
 |------|-------------|
 | `schemas/device-event.schema.json` | Generic device event envelope (acknowledgements, errors, status changes) |
 | `schemas/command.schema.json` | Command envelope issued by SCADA/application to a bridge |
-| `schemas/telemetry.schema.json` | Telemetry payload forwarded by the ESP32 bridge |
+| `schemas/telemetry.schema.json` | Telemetry payload forwarded by the ESP32 bridge | **DEPRECATED** - use v2 |
+
+> **Status:** v1 telemetry schema is **deprecated**. See [contracts/gateway/telemetry-schema-v2.md](../gateway/telemetry-schema-v2.md) for the canonical v2 schema and migration path.
 
 ## Examples
 

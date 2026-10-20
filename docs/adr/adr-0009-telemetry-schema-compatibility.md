@@ -1,9 +1,10 @@
 # ADR-0009: Telemetry Schema Compatibility
 
-**Status:** Proposed ⚠️ KNOWN MISMATCH
+**Status:** Superseded ✅ by v2 schema
 **Date:** 2026-10-14
+**Superseded by:** Issue #166 - `contracts/gateway/telemetry-schema-v2.md`
 **Deciders:** Issue #65 #66
-**Related issues:** #65 #66
+**Related issues:** #65 #66 #166
 
 ## Context
 
@@ -58,6 +59,19 @@ The canonical schema requires a **versioned compatibility bridge** before being 
 - `state` field contains structured key-value data (not `pairs`)
 - `values` (raw array) is either removed or formally documented as a separate variant
 - Producer and consumer examples in `contracts/v1/examples/` are validated against the schema
+
+## Resolution (Issue #166)
+
+This ADR was resolved by implementing Option C (versioned schema v2) via Issue #166.
+
+**Resolution artifact:** `contracts/gateway/telemetry-schema-v2.md`
+
+Key decisions implemented:
+1. v2 schema wraps raw ESP32 payload (`received_at_ms`, `values[]`, `pairs{}`) alongside structured translation
+2. Gateway translator normalizes raw format to structured `state`/`speed`/`sensors`
+3. Time domain normalized via gateway wall-clock offset estimation
+4. Phase-based migration: gateway translator → dual-format → firmware update
+5. v1 telemetry schema marked deprecated; deprecation deadline 2026-12-31
 
 ## Consequences
 
