@@ -14,6 +14,8 @@ interface ButtonProps extends HTMLAttributes<HTMLButtonElement> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   disabled?: boolean;
+  fullWidth?: boolean;
+  type?: 'button' | 'submit' | 'reset';
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -52,6 +54,7 @@ export function Button({
   rightIcon,
   className = '',
   disabled,
+  fullWidth = false,
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || isLoading;
@@ -66,6 +69,7 @@ export function Button({
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${className}
+        ${fullWidth ? 'w-full' : ''}
       `}
       disabled={isDisabled}
       {...props}
