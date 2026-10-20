@@ -1,0 +1,108 @@
+name: FIWARE Stack Smoke Test
+
+on:
+  push:
+    branches:
+      - master
+      - 'feat/issue-196-fiware-compose'
+    paths:
+      - 'docker-compose.fiware.yml'
+      - 'fiware/**'
+      - '.github/workflows/fiware-smoke-test.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.fiware.yml'
+      - 'fiware/**'
+      - '.github/workflows/fiware-smoke-test.yml'
+
+jobs:
+  smoke-test:
+    name: FIWARE Stack L0/L1/L2 Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      docker:
+        image: docker:24-dind
+        options: --privileged
+        ports:
+          - 2375:2375
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: L0 Validate Compose File
+        run: |
+          docker compose -f docker-compose.fiware.yml config --quiet
+          echo "docker-compose.fiware.yml passes validation"
+
+      - name: L1 Start FIWARE Stack
+        run: |
+          docker compose -f docker-compose.fiware.yml up -d
+          echo "FIWARE stack started"
+
+      - name: L1 Wait for Services
+        run: |
+          echo "Waiting for services to become healthy"
+          timeout=120
+          elapsed=0
+          interval=10
+          
+          until docker compose -f docker-compose.fiware.yml ps | grep -q "(healthy)"; do
+            echo "Waiting for health checks... ${elapsed}s elapsed"
+            sleep $interval
+            elapsed=$((elapsed + interval))
+            if [ $elapsed -ge $timeout ]; then
+              echo "Timeout waiting for services"
+              docker compose -f docker-compose.fiware.yml logs
+              docker compose -f docker-compose.fiware.yml ps
+              exit 1
+            fi
+          done
+          echo "Services are healthy"
+
+      - name: L1 Verify Container Status
+        run: |
+          docker compose -f docker-compose.fiware.yml ps
+
+      - name: L2 Check Orion-LD Health
+        run: |
+          echo "Checking Orion-LD health endpoint"
+          retries=12
+          until curl -sf http://localhost:1026/health; do
+            echo "Waiting for Orion-LD /health"
+            sleep 5
+            retries=$((retries - 1))
+            if [ $retries -eq 0 ]; then
+              echo "Orion-LD health check failed"
+              docker compose -f docker-compose.fiware.yml logs orion-ld
+              exit 1
+            fi
+          done
+          echo "Orion-LD /health returns 200"
+
+      - name: L2 Check JSON-LD Context Service
+        run: |
+          echo "Checking JSON-LD context service"
+          curl -sf http://localhost:3000/health || \
+            curl -sf http://localhost:3000/contexts/smart-factory-context.jsonld
+
+      - name: L2 Verify Smart Factory Context
+        run: |
+          echo "Verifying Smart Factory context content"
+          curl -sf http://localhost:3000/contexts/smart-factory-context.jsonld | \
+            grep -q "SmartFactory" && echo "Smart Factory context verified"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker-compose.fiware.yml down -v
+          echo "FIWARE stack cleaned up"
