@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/device.json",
+  "title": "Device",
+  "description": "NGSI-LD Device entity schema for Smart Factory",
+  "type": "object",
+  "required": ["id", "type", "name", "deviceType", "deviceId", "capabilities", "status", "createdAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Device:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Device"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable device name"
+    },
+    "deviceType": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["esp32_bridge", "mega_reference", "simulator", "iot_gateway"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "deviceId": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}[a-z0-9]$"
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "firmwareVersion": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Array" },
+        "value": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["online", "offline", "maintenance", "error"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "location": {
+      "$ref": "./geojson.json#/definitions/GeoProperty"
+    },
+    "owner": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "controlledBy": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "lastSeen": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "createdAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "modifiedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}

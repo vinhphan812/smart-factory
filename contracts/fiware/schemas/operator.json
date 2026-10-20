@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/operator.json",
+  "title": "Operator",
+  "description": "NGSI-LD Operator entity schema for Smart Factory",
+  "type": "object",
+  "required": ["id", "type", "name", "employeeId", "role", "authorizationLevel", "status", "createdAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Operator:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Operator"
+    },
+    "name": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "employeeId": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "role": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["operator", "supervisor", "maintenance", "admin"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "authorizationLevel": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 1, "maximum": 5 }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["active", "inactive", "suspended"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "email": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string", "format": "email" }
+      },
+      "required": ["type", "value"]
+    },
+    "phone": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "assignedZone": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "certifications": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Array" },
+        "value": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "lastActiveAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "createdAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "modifiedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}

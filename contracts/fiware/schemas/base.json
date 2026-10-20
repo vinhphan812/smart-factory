@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/base.json",
+  "title": "NGSI-LD Base Definitions",
+  "description": "Shared base definitions for NGSI-LD entities",
+  "definitions": {
+    "Relationship": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Relationship" },
+        "object": { "type": "string" },
+        "datasetId": { "type": "string" }
+      },
+      "required": ["type", "object"]
+    },
+    "Property": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Property" },
+        "value": {},
+        "datasetId": { "type": "string" },
+        "observedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "GeoProperty": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "GeoProperty" },
+        "value": {},
+        "observedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "DateTime": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "Text": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "Integer": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer" }
+      },
+      "required": ["type", "value"]
+    },
+    "Number": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Number" },
+        "value": { "type": "number" }
+      },
+      "required": ["type", "value"]
+    },
+    "Boolean": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Boolean" },
+        "value": { "type": "boolean" }
+      },
+      "required": ["type", "value"]
+    },
+    "Array": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Array" },
+        "value": {
+          "type": "array"
+        }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}

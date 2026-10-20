@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/material.json",
+  "title": "Material",
+  "description": "NGSI-LD Material entity schema for Smart Factory",
+  "type": "object",
+  "required": ["id", "type", "name", "materialType", "quantity", "status", "createdAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Material:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Material"
+    },
+    "name": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "materialType": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["raw", "work_in_progress", "finished", "packaged", "waste"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "sku": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "quantity": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["type", "value"]
+    },
+    "unit": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["available", "in_transit", "processing", "stored", "consumed"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "location": {
+      "$ref": "./geojson.json#/definitions/GeoProperty"
+    },
+    "sourceModule": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "destinationModule": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "belongsToJob": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "createdAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "modifiedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}
