@@ -1,0 +1,50 @@
+{
+  "@context": [
+    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld",
+    {
+      "SmartFactory": "https://smart-factory/digital-twin#SmartFactory",
+      "FactoryModule": "https://smart-factory/digital-twin#FactoryModule",
+      "conveyor": "https://smart-factory/digital-twin#conveyor",
+      "sorting": "https://smart-factory/digital-twin#sorting",
+      "forklift": "https://smart-factory/digital-twin#forklift",
+      "dumpTruck": "https://smart-factory/digital-twin#dumpTruck",
+      "towerCrane": "https://smart-factory/digital-twin#towerCrane",
+      "storage": "https://smart-factory/digital-twin#storage",
+      "parking": "https://smart-factory/digital-twin#parking",
+      "bracket": "https://smart-factory/digital-twin#bracket",
+      "robot": "https://smart-factory/digital-twin#robot",
+      "edgeAI": "https://smart-factory/digital-twin#edgeAI",
+      "uKitExplore": "https://smart-factory/bridge#uKitExplore",
+      "arduinoMega": "https://smart-factory/bridge#arduinoMega",
+      "esp32Bridge": "https://smart-factory/bridge#esp32Bridge",
+      "moduleState": {
+        "@type": "Property",
+        "https://smart-factory/digital-twin#moduleState"
+      },
+      "operationalStatus": {
+        "@type": "Property",
+        "https://smart-factory/digital-twin#operationalStatus"
+      },
+      "position": {
+        "@type": "GeoProperty",
+        "https://smart-factory/digital-twin#position"
+      },
+      "telemetry": {
+        "@type": "Property",
+        "https://smart-factory/digital-twin#telemetry"
+      },
+      "command": {
+        "@type": "Property",
+        "https://smart-factory/digital-twin#command"
+      },
+      "safetyStatus": {
+        "@type": "Property",
+        "https://smart-factory/digital-twin#safetyStatus"
+      },
+      "lastUpdated": {
+        "@type": "Property",
+        "https://smart-factory/digital-twin#lastUpdated"
+      }
+    }
+  ]
+}
