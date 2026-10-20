@@ -2,7 +2,27 @@
  * HTTP client for the Smart Factory Gateway REST API
  */
 
-import type { DeviceSnapshot, SystemHealth, TelemetryDataPoint, TimeRange, DeviceId, Incident, IncidentWithAudit, IncidentStatus, IncidentSeverity } from '../../contracts/gateway';
+import type { 
+  DeviceSnapshot, 
+  SystemHealth, 
+  TelemetryDataPoint, 
+  TimeRange, 
+  DeviceId, 
+  Incident, 
+  IncidentWithAudit, 
+  IncidentStatus, 
+  IncidentSeverity,
+  LoginCredentials,
+  AuthResponse,
+  AuthTokens,
+  AuthUser,
+  RefreshTokenRequest,
+  ProductionJob,
+  ProductionMaterial,
+  ProductionJobWithLineage,
+  JobStatus,
+  MaterialStatus,
+} from '../../contracts/gateway';
 
 const DEFAULT_API_URL = import.meta.env.VITE_GATEWAY_API_URL || 'http://localhost:8000';
 
@@ -159,6 +179,180 @@ class GatewayApiClient {
     });
     if (!response.ok) {
       throw new Error(`Failed to resolve incident: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  // ============ Auth API Methods ============
+
+  /**
+   * Login with username and password
+   */
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    const response = await fetch(`${this.baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Login failed' }));
+      throw new Error(error.detail || `Login failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Refresh access token using refresh token
+   */
+  async refreshToken(request: RefreshTokenRequest): Promise<AuthTokens> {
+    const response = await fetch(`${this.baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      throw new Error(`Token refresh failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Logout (invalidate refresh token)
+   */
+  async logout(refreshToken: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!response.ok) {
+      throw new Error(`Logout failed: ${response.status}`);
+    }
+  }
+
+  /**
+   * Get current user info
+   */
+  async getCurrentUser(accessToken: string): Promise<AuthUser> {
+    const response = await fetch(`${this.baseUrl}/api/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get user: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  // ============ Job & Material API Methods ============
+
+  /**
+   * Get all production jobs with optional filters
+   */
+  async getJobs(
+    status?: JobStatus,
+    limit: number = 100
+  ): Promise<ProductionJob[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (status) {
+      params.set('status', status);
+    }
+    const response = await fetch(`${this.baseUrl}/api/jobs?${params}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch jobs: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.jobs || [];
+  }
+
+  /**
+   * Get a single job by ID with full lineage
+   */
+  async getJob(jobId: string): Promise<ProductionJobWithLineage> {
+    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch job: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Create a new production job
+   */
+  async createJob(
+    job: Partial<ProductionJob>,
+    accessToken: string
+  ): Promise<ProductionJob> {
+    const response = await fetch(`${this.baseUrl}/api/jobs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(job),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create job: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Cancel a production job
+   */
+  async cancelJob(
+    jobId: string,
+    accessToken: string
+  ): Promise<ProductionJob> {
+    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to cancel job: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get all materials with optional filters
+   */
+  async getMaterials(
+    status?: MaterialStatus,
+    batchId?: string,
+    limit: number = 100
+  ): Promise<ProductionMaterial[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (status) {
+      params.set('status', status);
+    }
+    if (batchId) {
+      params.set('batch_id', batchId);
+    }
+    const response = await fetch(`${this.baseUrl}/api/materials?${params}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch materials: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.materials || [];
+  }
+
+  /**
+   * Get a single material by ID with full lineage
+   */
+  async getMaterial(materialId: string): Promise<ProductionMaterial> {
+    const response = await fetch(`${this.baseUrl}/api/materials/${materialId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch material: ${response.status}`);
     }
     return response.json();
   }
