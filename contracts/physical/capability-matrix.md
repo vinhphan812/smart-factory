@@ -52,6 +52,8 @@
 | `CONV_HUMIDITY_AI` | A1 | `AI` | 0–4095 | ADC | R/O | Ambient humidity |
 | `CONV_ESTOP_LOOP` | D28 | `ESTOP` | NC/OPEN | bool | R/O | Hardware E-stop NC relay |
 
+> ⚠️ **A1 temporal multiplexing (design rationale):** `CONV_HUMIDITY_AI` (A1) and `TRUCK_DUMP_ANGLE_AI` (A1) share ADC channel A1. This is intentional: the dump truck and conveyor belt are never active simultaneously in the canonical production sequence — the truck delivers material to the forklift before the crane places it on the conveyor. The ESP32 firmware must configure A1 muxer select based on active module context. This must be enforced in the adapter implementation and documented in Issue #98 hardware verification.
+
 **Safety envelope:** Speed 10–100 mm/s. Jam → `E_STOP`. E-stop loop OPEN → `E_STOP`.
 
 ---

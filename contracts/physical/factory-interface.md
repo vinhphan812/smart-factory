@@ -38,6 +38,8 @@ Every module carries a canonical `device_id` of the form `<module-slug>-<instanc
 | Encoder Input | `ENC` | Quadrature A/B pulse counter | Position feedback |
 | E-Stop Loop | `ESTOP` | Normally-closed relay; OPEN = fault | Hardware safety loop |
 
+> **Note:** `ESTOP` signals are tracked as their own IO type and are **excluded from DI counts** in capability-matrix.md summary tables. An `ESTOP` is a normally-closed relay chain, not a generic binary sensor; it must never be counted alongside standard `DI` signals.
+
 ### 1.3 Telemetry Envelope
 
 All modules emit telemetry strictly conforming to `contracts/v1/telemetry.schema.json`:
@@ -74,7 +76,8 @@ Inbound commands follow `contracts/v1/command.schema.json`. Every command MUST c
 | `CONV_OPT_EXIT` | D23 | `DI` | Input | Exit photoelectric sensor |
 | `CONV_JAM_SENSE` | D24 | `DI` | Input | Mechanical jam / obstruction |
 | `CONV_TEMP_AI` | A0 | `AI` | Input | Motor temperature (ADC 0–4095) |
-| `CONV_ESTOP_LOOP` | D28 | `ESTOP` | Input | Hardware E-stop normally-closed relay |
+| `CONV_HUMIDITY_AI` | A1 | `AI` | Input | Ambient humidity (ADC 0–4095) |
+| `CONV_ESTOP_LOOP` | D28 | `ESTOP` | Input | Hardware E-stop normally-closed relay *(shared hardware E-stop relay chain with sorting-01; see §3.1 note)* |
 
 ### 2.2 State Machine
 
@@ -137,15 +140,17 @@ FAULT ──[RESET & bus restored]──▶ IDLE
 | `SORT_OPT_INLET` | D25 | `DI` | Input | Item entering sorting station |
 | `SORT_IND_METAL` | D26 | `DI` | Input | Inductive metal detection |
 | `SORT_JAM_SENSE` | D27 | `DI` | Input | Diverter channel jam |
-| `SORT_ESTOP_LOOP` | D28 | `ESTOP` | Input | Hardware E-stop normally-closed relay |
+| `SORT_ESTOP_LOOP` | D28 | `ESTOP` | Input | Hardware E-stop normally-closed relay *(shared hardware E-stop relay chain with conveyor-01; see §2.1 note)* |
 
 ### 3.2 State Machine
 
 ```
 IDLE ──[SORT_ITEM]──▶ CLASSIFYING ──[valid class]──▶ ROUTING ──[diverter cycle done]──▶ IDLE
 CLASSIFYING ──[unknown/defective]──▶ REJECTING ──[reject confirmed]──▶ IDLE
+ANY ──[SORTING_STOP]──▶ STOPPED
 ANY ──[jam / E-stop]──▶ E_STOP
 ANY ──[sensor bus heartbeat loss]──▶ FAULT
+STOPPED ──[SORT_ITEM]──▶ CLASSIFYING
 E_STOP ──[RESET & jam cleared & button released]──▶ IDLE
 FAULT ──[RESET & bus restored]──▶ IDLE
 ```
