@@ -1,6 +1,7 @@
 """WebSocket and HTTP API servers for the gateway."""
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -12,6 +13,9 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Header
 from pydantic import BaseModel
 
 from .event_store import EventStore
+from .device_registry import DeviceRegistry, Device, DeviceStatus, DeviceType
+from .provisioning import ProvisioningService
+from .ota_control import OtaControl, OtaJobStatus
 from .time_sync import TimeMetrics
 from .safety_gate import SafetyGate
 from .incidents import IncidentStore, get_incident_store
@@ -173,6 +177,9 @@ def create_http_app(
     dropped_count_ref: dict[str, int] | None = None,
     safety_gate: SafetyGate | None = None,
     incident_store: IncidentStore | None = None,
+    registry: "DeviceRegistry | None" = None,
+    provisioning: "ProvisioningService | None" = None,
+    ota: "OtaControl | None" = None,
 ) -> FastAPI:
     """Build FastAPI app with REST endpoints backed by the event store.
 
@@ -184,6 +191,9 @@ def create_http_app(
             reads it to report overflow to callers.
         safety_gate: Optional SafetyGate instance for command safety evaluation.
         incident_store: Optional IncidentStore instance for incident management.
+        registry: Optional DeviceRegistry for device management endpoints.
+        provisioning: Optional ProvisioningService for enrollment/certificate endpoints.
+        ota: Optional OtaControl for OTA job management endpoints.
     """
     gate = safety_gate or SafetyGate()
     incident_store = incident_store or get_incident_store()
@@ -455,5 +465,373 @@ def create_http_app(
         if incident is None:
             raise HTTPException(status_code=404, detail="Incident not found")
         return incident
+
+    # ------------------------------------------------------------------
+    # Device Registry endpoints
+    # ------------------------------------------------------------------
+
+    if registry is not None:
+
+        @app.get("/devices")
+        async def list_devices(
+            status: str | None = Query(None, description="Filter by status (online, offline, maintenance, error)"),
+            device_type: str | None = Query(None, description="Filter by device type"),
+            limit: int = Query(100, ge=1, le=10000),
+            offset: int = Query(0, ge=0),
+        ) -> dict[str, Any]:
+            """List all registered devices with optional filters."""
+            devices, total = await registry.list_all(
+                status=status, device_type=device_type,
+                limit=limit, offset=offset,
+            )
+            return {
+                "devices": [d.to_summary_dict() for d in devices],
+                "count": len(devices),
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+
+        @app.get("/devices/{device_id}")
+        async def get_device(device_id: str) -> dict[str, Any]:
+            """Get a single device by URN (e.g. urn:ngsi-ld:Device:bridge-001)."""
+            device = await registry.get(device_id)
+            if device is None:
+                raise HTTPException(status_code=404, detail="Device not found")
+            return device.to_dict()
+
+        @app.post("/devices")
+        async def register_device(device_data: dict[str, Any]) -> dict[str, Any]:
+            """Register a new device.
+
+            Requires X-Operator-Token header.
+            """
+            try:
+                device = Device(
+                    device_id=device_data["id"],
+                    device_type=device_data.get("deviceTypeValue", "esp32_bridge"),
+                    name=device_data["name"],
+                    manufacturer=device_data.get("manufacturer"),
+                    firmware_version=device_data.get("firmwareVersion"),
+                    capabilities=device_data.get("capabilities", []),
+                    owner=device_data.get("owner"),
+                    controlled_by_module=device_data.get("controlledBy"),
+                    location=device_data.get("location"),
+                    metadata=device_data.get("metadata", {}),
+                )
+                result = await registry.create(device)
+                return {"status": "created", "device": result.to_dict()}
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+
+        @app.patch("/devices/{device_id}")
+        async def update_device(device_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+            """Partial update of a device record.
+
+            Requires X-Operator-Token header.
+            Allowed fields: name, manufacturer, firmware_version, status, capabilities,
+            owner, controlled_by_module, location, metadata.
+            """
+            result = await registry.update(device_id, updates)
+            if result is None:
+                raise HTTPException(status_code=404, detail="Device not found")
+            return {"status": "updated", "device": result.to_dict()}
+
+        @app.delete("/devices/{device_id}")
+        async def deregister_device(device_id: str) -> dict[str, str]:
+            """Deregister a device.
+
+            Requires X-Operator-Token header.
+            """
+            deleted = await registry.delete(device_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="Device not found")
+            return {"status": "deregistered", "device_id": device_id}
+
+        @app.post("/devices/{device_id}/heartbeat")
+        async def heartbeat(device_id: str) -> dict[str, Any]:
+            """Record a heartbeat for a device.
+
+            Updates last_heartbeat_at and sets status to online.
+            """
+            device = await registry.update_heartbeat(device_id)
+            if device is None:
+                raise HTTPException(status_code=404, detail="Device not found")
+            await registry.set_status(device_id, DeviceStatus.ONLINE.value)
+            return {"device_id": device_id, "status": DeviceStatus.ONLINE.value}
+
+        @app.get("/devices/stale/list")
+        async def list_stale_devices(
+            threshold_seconds: int = Query(
+                300, ge=1, le=86400,
+                description="Heartbeat stale threshold in seconds (default 300 = 5 min)",
+            ),
+        ) -> dict[str, Any]:
+            """List devices whose last heartbeat is older than threshold."""
+            stale = await registry.list_stale_devices(threshold_seconds)
+            return {"stale_devices": [d.to_summary_dict() for d in stale], "count": len(stale)}
+
+        @app.get("/devices/online")
+        async def list_online_devices() -> dict[str, Any]:
+            """List all online devices."""
+            devices = await registry.list_online_devices()
+            return {"devices": [d.to_summary_dict() for d in devices], "count": len(devices)}
+
+    # ------------------------------------------------------------------
+    # Provisioning endpoints
+    # ------------------------------------------------------------------
+
+    if provisioning is not None:
+
+        @app.post("/provisioning/bootstrap-token")
+        async def issue_bootstrap_token(
+            device_id_short: str | None = Query(None, description="Optional device ID hint"),
+        ) -> dict[str, Any]:
+            """Issue a one-time bootstrap token.
+
+            The token is valid for 15 minutes. Provide it during device enrollment.
+            """
+            token, expires = await provisioning.issue_bootstrap_token(device_id_short)
+            return {"bootstrap_token": token, "expires_at": expires.isoformat()}
+
+        @app.post("/provisioning/enroll")
+        async def enroll_device(
+            request: dict[str, Any],
+        ) -> dict[str, Any]:
+            """Enroll a device: validate bootstrap token, issue certificate, register device.
+
+            Request body:
+              - short_device_id: e.g. "bridge-001"
+              - device_name: Human-readable name
+              - device_type: esp32_bridge | mega_reference | simulator | iot_gateway
+              - bootstrap_token: One-time token from /provisioning/bootstrap-token
+              - csr_pem: (optional) base64-encoded PKCS#10 CSR PEM
+              - capabilities: list of supported commands
+              - manufacturer: (optional)
+              - firmware_version: (optional)
+            """
+            csr_b64 = request.get("csr_pem")
+            csr_pem: bytes | None = None
+            if csr_b64:
+                try:
+                    csr_pem = base64.b64decode(csr_b64)
+                except Exception as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid csr_pem base64: {exc}")
+
+            try:
+                result = await provisioning.enroll_device(
+                    short_device_id=request["short_device_id"],
+                    device_name=request["device_name"],
+                    device_type=request["device_type"],
+                    bootstrap_token=request["bootstrap_token"],
+                    csr_pem=csr_pem,
+                    capabilities=request.get("capabilities"),
+                    manufacturer=request.get("manufacturer"),
+                    firmware_version=request.get("firmware_version"),
+                )
+                return {"status": "enrolled", **result}
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+
+        @app.post("/provisioning/{device_id}/renew-cert")
+        async def renew_cert(
+            device_id: str,
+            request: dict[str, Any],
+        ) -> dict[str, Any]:
+            """Renew a device's TLS certificate.
+
+            Request body:
+              - csr_pem: (optional) base64-encoded PKCS#10 CSR PEM
+            """
+            csr_b64 = request.get("csr_pem")
+            csr_pem: bytes | None = None
+            if csr_b64:
+                try:
+                    csr_pem = base64.b64decode(csr_b64)
+                except Exception as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid csr_pem base64: {exc}")
+
+            try:
+                result = await provisioning.renew_cert(device_id, csr_pem)
+                return {"status": "renewed", **result}
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+
+        @app.patch("/provisioning/{device_id}/capabilities")
+        async def update_capabilities(
+            device_id: str,
+            request: dict[str, Any],
+        ) -> dict[str, Any]:
+            """Update device capabilities after enrollment."""
+            caps = request.get("capabilities", [])
+            if not isinstance(caps, list):
+                raise HTTPException(status_code=422, detail="capabilities must be a list")
+            device = await provisioning.register_capabilities(device_id, caps)
+            if device is None:
+                raise HTTPException(status_code=404, detail="Device not found")
+            return {"status": "updated", "device": device.to_dict()}
+
+        @app.post("/provisioning/{device_id}/revoke")
+        async def revoke_device(device_id: str) -> dict[str, Any]:
+            """Revoke a device's certificate and set it offline.
+
+            Requires X-Operator-Token header.
+            """
+            ok = await provisioning.revoke_device(device_id)
+            if not ok:
+                raise HTTPException(status_code=404, detail="Device not found")
+            return {"status": "revoked", "device_id": device_id}
+
+    # ------------------------------------------------------------------
+    # OTA control plane endpoints
+    # ------------------------------------------------------------------
+
+    if ota is not None:
+
+        @app.post("/ota/jobs")
+        async def create_ota_job(
+            request: dict[str, Any],
+        ) -> dict[str, Any]:
+            """Create an OTA job.
+
+            Requires X-Operator-Token header.
+
+            Request body:
+              - target_device_ids: list of device URNs
+              - target_type: esp32_bridge | mega_reference | simulator
+              - firmware_version: semantic version string
+              - firmware_url: URL or local path to firmware binary
+              - firmware_sha256: (optional) SHA-256 hex digest for integrity check
+              - firmware_size_bytes: (optional) size in bytes
+              - schedule_at: (optional) ISO-8601 datetime to start the job
+              - notes: (optional) description
+              - timeout_seconds: (optional) per-job timeout (default 600)
+            """
+            schedule_at_str = request.get("schedule_at")
+            schedule_at = None
+            if schedule_at_str:
+                from datetime import datetime as dt
+                schedule_at = dt.fromisoformat(schedule_at_str.replace("Z", "+00:00"))
+
+            job = await ota.create_job(
+                target_device_ids=request["target_device_ids"],
+                target_type=request["target_type"],
+                firmware_version=request["firmware_version"],
+                firmware_url=request["firmware_url"],
+                firmware_sha256=request.get("firmware_sha256"),
+                firmware_size_bytes=request.get("firmware_size_bytes"),
+                schedule_at=schedule_at,
+                created_by=request.get("created_by"),
+                notes=request.get("notes"),
+                timeout_seconds=request.get("timeout_seconds", 600),
+            )
+            return {"status": "created", "job": job.to_dict()}
+
+        @app.get("/ota/jobs")
+        async def list_ota_jobs(
+            status: str | None = Query(None, description="Filter by job status"),
+            limit: int = Query(50, ge=1, le=500),
+            offset: int = Query(0, ge=0),
+        ) -> dict[str, Any]:
+            """List OTA jobs with optional status filter."""
+            jobs, total = await ota.list_jobs(status=status, limit=limit, offset=offset)
+            return {
+                "jobs": [j.to_summary_dict() for j in jobs],
+                "count": len(jobs),
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+
+        @app.get("/ota/jobs/{job_id}")
+        async def get_ota_job(job_id: str) -> dict[str, Any]:
+            """Get full details of an OTA job including per-device progress."""
+            job = await ota.get_job(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail="OTA job not found")
+            return job.to_dict()
+
+        @app.post("/ota/jobs/{job_id}/start")
+        async def start_ota_job(job_id: str) -> dict[str, Any]:
+            """Start a PENDING OTA job. Issues OTA tokens for each target device.
+
+            Requires X-Operator-Token header.
+            """
+            try:
+                job = await ota.start_job(job_id)
+                if job is None:
+                    raise HTTPException(status_code=404, detail="OTA job not found")
+                return {"status": "started", "job": job.to_dict()}
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+
+        @app.post("/ota/jobs/{job_id}/cancel")
+        async def cancel_ota_job(job_id: str) -> dict[str, Any]:
+            """Cancel a pending or in-progress OTA job.
+
+            Requires X-Operator-Token header.
+            """
+            try:
+                job = await ota.cancel_job(job_id)
+                if job is None:
+                    raise HTTPException(status_code=404, detail="OTA job not found")
+                return {"status": "cancelled", "job": job.to_dict()}
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+
+        @app.post("/ota/jobs/{job_id}/progress")
+        async def update_ota_progress(
+            job_id: str,
+            request: dict[str, Any],
+        ) -> dict[str, Any]:
+            """Update OTA progress for a specific device.
+
+            Called by devices or the gateway as OTA progresses.
+
+            Request body:
+              - device_id: device URN
+              - status: downloading | flashing | verifying | completed | failed
+              - bytes_downloaded: bytes received so far
+              - bytes_total: total firmware size in bytes
+              - error: (optional) error message if failed
+            """
+            job = await ota.update_progress(
+                job_id=job_id,
+                device_id=request["device_id"],
+                status=request["status"],
+                bytes_downloaded=request.get("bytes_downloaded", 0),
+                bytes_total=request.get("bytes_total", 0),
+                error=request.get("error"),
+            )
+            if job is None:
+                raise HTTPException(status_code=404, detail="OTA job not found")
+            return {"status": "progress_updated", "job": job.to_dict()}
+
+        @app.get("/ota/jobs/{job_id}/progress/{device_id}")
+        async def get_device_ota_progress(
+            job_id: str,
+            device_id: str,
+        ) -> dict[str, Any]:
+            """Get OTA progress for a specific device within a job."""
+            progress = await ota.get_device_progress(job_id, device_id)
+            if progress is None:
+                raise HTTPException(status_code=404, detail="Job or device progress not found")
+            return {"device_id": device_id, "job_id": job_id, "progress": progress}
+
+        @app.post("/ota/jobs/{job_id}/tokens/{device_id}")
+        async def issue_ota_token(
+            job_id: str,
+            device_id: str,
+        ) -> dict[str, Any]:
+            """Issue a short-lived OTA token for a job/device pair.
+
+            Requires X-Operator-Token header.
+            """
+            job = await ota.get_job(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail="OTA job not found")
+            token, expires = await ota.issue_ota_token(job_id, device_id)
+            return {"token": token, "job_id": job_id, "device_id": device_id, "expires_at": expires.isoformat()}
+>>>>>>> 36c33f5 (feat(iot-gateway): implement device registry, provisioning and OTA control plane)
 
     return app
