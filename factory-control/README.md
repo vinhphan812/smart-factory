@@ -1,12 +1,12 @@
-# Factory Control — Smart Factory
+# Factory Control — Smart Factory Controller Simulator
 
-**Status: IN PROGRESS** | Owner: AIBOT / DNTU | Related issues: #9 #10 #22–#27
+**Status: IMPLEMENTED** | Owner: AIBOT / DNTU | Related issues: #9 #10 #22–#27
 
 ## Purpose
 
-Nine-module device adapters and production orchestration. Each module driver implements safe state machines, sensor polling, actuator command translation, and local E-stop enforcement.
+Nine-module device adapters and production orchestration with a deterministic state machine simulator for offline testing, module adapter mocks, Twin state mapping, and E2E testing.
 
-## Implemented Adapters
+## Implementation
 
 | Adapter | Status | Evidence Level | Specification |
 |---|---|---|---|
@@ -30,33 +30,78 @@ Nine-module device adapters and production orchestration. Each module driver imp
 
 ```
 factory-control/
-├── README.md
-├── pyproject.toml
-├── docs/
-│   ├── conveyor-adapter.md
-│   └── sorting-adapter.md
 ├── src/
-│   ├── __init__.py
-│   ├── models.py
+│   ├── __init__.py           # Package init
+│   ├── state_machine.py      # Deterministic production state machine
+│   ├── simulator.py          # Factory simulator for offline testing
 │   └── adapters/
-│       ├── __init__.py
-│       ├── base.py
-│       ├── conveyor.py
-│       └── sorting.py
+│       ├── __init__.py       # DeviceAdapter base class + concrete adapters
+│       └── adapters.py        # Re-exports
 └── tests/
-    ├── __init__.py
-    ├── test_conveyor_adapter.py
-    └── test_sorting_adapter.py
+    ├── conftest.py           # Test configuration
+    ├── test_state_machine.py # State machine tests (26 tests)
+    ├── test_adapters.py     # Adapter tests (23 tests)
+    └── test_simulator.py    # Simulator tests (12 tests)
 ```
 
-## Readiness
+### Key Features
 
-- **Software Implementation (L1/L2):** Implemented with deterministic FSM, payload-bound command idempotency, item deduplication, and sensor safety interlocks.
-- **Hardware Integration (L3/L4):** Physical wiring, electrical levels, and uKit actuators remain **BLOCKED-L3** pending Issue #98 and Issue #9.
+1. **Deterministic Production State Machine**
+   - States: IDLE, INITIALIZING, READY, RUNNING, PAUSED, STOPPING, STOPPED, ERROR, ESTOP
+   - Valid transitions defined per state
+   - Auto-transitions (e.g., INITIALIZING → READY after 10 ticks)
+   - Full transition history for traceability
 
-## Safety constraints
+2. **Device Adapters**
+   - Base `DeviceAdapter` class
+   - Concrete adapters: `ConveyorAdapter`, `RobotAdapter`, `CraneAdapter`
+   - Command validation (TTL, correlation ID, state machine)
+   - Telemetry generation
 
-- Local E-stop and motion limits are enforced by device adapters, not by MQTT or AI.
-- Commands from network must not bypass device-local safety interlocks.
-- Physical hardware E-Stop button press cannot be cleared by network software reset (ADR-0006).
-- AI/Twin/dashboard cannot initiate unapproved physical actions.
+3. **Factory Simulator**
+   - Multiple device management
+   - Command execution interface
+   - Event and telemetry callbacks
+   - Preset factory configurations (`create_minimal_factory()`, `create_demo_factory()`)
+
+### Usage
+
+```python
+from simulator import create_minimal_factory
+
+# Create simulator
+sim = create_minimal_factory()
+
+# Execute commands
+sim.execute_command("conveyor-01", "RESET", command_id=1)
+
+# Run simulation
+sim.run(10)  # Complete initialization
+
+# Get state
+state = sim.get_state()
+print(state["devices"]["conveyor-01"]["state"])  # "ready"
+```
+
+### Inbound Contracts
+
+- MQTT commands from ESP32 bridge (`smart-factory/{deviceId}/command/down`)
+- Physical sensor state from device hardware (simulated)
+
+### Outbound Contracts
+
+- MQTT telemetry via ESP32 bridge (simulated)
+- Physical actuator commands to device controllers (simulated)
+
+## Tests
+
+```bash
+python -m pytest factory-control/tests/ -v
+# 61 tests pass
+```
+
+## Safety Constraints
+
+- Local E-stop and motion limits enforced by device adapters
+- Commands from network must not bypass device-local safety interlocks
+- AI/Twin/dashboard cannot initiate unapproved physical actions
