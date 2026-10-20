@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 #: X-Operator-Token value from environment. Empty string if not configured.
 OPERATOR_TOKEN = os.environ.get("SAFETY_OPERATOR_TOKEN", "")
 
-
 def _require_operator_token(x_operator_token: str = Header(None)) -> str:
     """Validate X-Operator-Token against SAFETY_OPERATOR_TOKEN.
 
@@ -52,12 +51,10 @@ def _require_operator_token(x_operator_token: str = Header(None)) -> str:
         )
     return x_operator_token
 
-
 class EventQuery(BaseModel):
     device_id: str | None = None
     event_type: str | None = None
     limit: int = 100
-
 
 class WebSocketServer:
     """Broadcasts events to all connected WebSocket clients.
@@ -169,7 +166,6 @@ class WebSocketServer:
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
-
 
 def create_http_app(
     store: EventStore,
@@ -832,6 +828,5 @@ def create_http_app(
                 raise HTTPException(status_code=404, detail="OTA job not found")
             token, expires = await ota.issue_ota_token(job_id, device_id)
             return {"token": token, "job_id": job_id, "device_id": device_id, "expires_at": expires.isoformat()}
->>>>>>> 36c33f5 (feat(iot-gateway): implement device registry, provisioning and OTA control plane)
 
     return app
