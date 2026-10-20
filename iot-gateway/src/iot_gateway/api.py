@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from .event_store import EventStore
 from .time_sync import TimeMetrics
 from .safety_gate import SafetyGate
+from .incidents import IncidentStore, get_incident_store
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,7 @@ def create_http_app(
     metrics: TimeMetrics | None = None,
     dropped_count_ref: dict[str, int] | None = None,
     safety_gate: SafetyGate | None = None,
+    incident_store: IncidentStore | None = None,
 ) -> FastAPI:
     """Build FastAPI app with REST endpoints backed by the event store.
 
@@ -181,8 +183,10 @@ def create_http_app(
             gateway's cumulative queue-dropped counter. The /health endpoint
             reads it to report overflow to callers.
         safety_gate: Optional SafetyGate instance for command safety evaluation.
+        incident_store: Optional IncidentStore instance for incident management.
     """
     gate = safety_gate or SafetyGate()
+    incident_store = incident_store or get_incident_store()
 
     app = FastAPI(
         title="Smart Factory IoT Gateway API",
@@ -399,5 +403,57 @@ def create_http_app(
         """
         gate.authorize_after_override()
         return {"status": "authorized"}
+
+    # --- Incident Management endpoints ---
+
+    @app.get("/incidents")
+    async def list_incidents(
+        status: str | None = Query(None, description="Filter by status: open, acknowledged, resolved"),
+        severity: str | None = Query(None, description="Filter by severity: INFO, WARNING, CRITICAL"),
+        device_id: str | None = Query(None, description="Filter by device ID"),
+        limit: int = Query(100, ge=1, le=10000, description="Max incidents to return"),
+    ) -> dict[str, Any]:
+        """Get all incidents with optional filters."""
+        incidents = incident_store.query(
+            status=status,
+            severity=severity,
+            device_id=device_id,
+            limit=limit,
+        )
+        return {"incidents": incidents, "count": len(incidents)}
+
+    @app.get("/incidents/{incident_id}")
+    async def get_incident(incident_id: str) -> dict[str, Any]:
+        """Get a single incident with full audit trail."""
+        incident = incident_store.get(incident_id)
+        if incident is None:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return incident
+
+    @app.post("/incidents/{incident_id}/acknowledge")
+    async def acknowledge_incident(
+        incident_id: str,
+        _token: str = Depends(_require_operator_token),
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Acknowledge an incident."""
+        notes = body.get("notes") if body else None
+        incident = incident_store.acknowledge(incident_id, _token, notes)
+        if incident is None:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return incident
+
+    @app.post("/incidents/{incident_id}/resolve")
+    async def resolve_incident(
+        incident_id: str,
+        _token: str = Depends(_require_operator_token),
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Resolve an incident."""
+        notes = body.get("notes") if body else None
+        incident = incident_store.resolve(incident_id, _token, notes)
+        if incident is None:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return incident
 
     return app

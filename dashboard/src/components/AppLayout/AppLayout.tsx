@@ -15,6 +15,7 @@ interface AppLayoutProps {
 const navItems = [
   { path: '/telemetry', label: 'Telemetry', icon: '📊' },
   { path: '/events', label: 'Events', icon: '📋' },
+  { path: '/incidents', label: 'Incidents', icon: '🚨' },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {

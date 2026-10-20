@@ -76,18 +76,53 @@ export interface TelemetryDataPoint {
 }
 
 /**
+ * Incident status lifecycle
+ */
+export type IncidentStatus = 'open' | 'acknowledged' | 'resolved';
+
+/**
+ * Incident severity levels (matching AlertSeverity from backend)
+ */
+export type IncidentSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+
+/**
+ * Audit trail entry for incident state changes
+ */
+export interface IncidentAuditEntry {
+  id: string;
+  incident_id: string;
+  action: 'created' | 'acknowledged' | 'resolved' | 'note_added';
+  operator_id?: string;
+  operator_name?: string;
+  timestamp: string;
+  details?: string;
+}
+
+/**
  * Incident for tracking errors and critical events
  */
 export interface Incident {
   id: string;
-  severity: Severity;
+  severity: IncidentSeverity;
   device_id: DeviceId;
   title: string;
+  message: string;
   timestamp: string;
-  acknowledged: boolean;
-  ack_by?: string;
-  ack_at?: string;
+  status: IncidentStatus;
+  acknowledged_by?: string;
+  acknowledged_at?: string;
+  resolved_by?: string;
+  resolved_at?: string;
   notes?: string;
+  source?: string;
+  recommended_action?: string;
+}
+
+/**
+ * Extended incident with audit trail
+ */
+export interface IncidentWithAudit extends Incident {
+  audit_trail: IncidentAuditEntry[];
 }
 
 /**

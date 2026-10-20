@@ -2,7 +2,7 @@
  * HTTP client for the Smart Factory Gateway REST API
  */
 
-import type { DeviceSnapshot, SystemHealth, TelemetryDataPoint, TimeRange, DeviceId } from '../../contracts/gateway';
+import type { DeviceSnapshot, SystemHealth, TelemetryDataPoint, TimeRange, DeviceId, Incident, IncidentWithAudit, IncidentStatus, IncidentSeverity } from '../../contracts/gateway';
 
 const DEFAULT_API_URL = import.meta.env.VITE_GATEWAY_API_URL || 'http://localhost:8000';
 
@@ -76,6 +76,89 @@ class GatewayApiClient {
     const response = await fetch(`${this.baseUrl}/api/events?${params}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch events: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get all incidents with optional filters
+   */
+  async getIncidents(
+    status?: IncidentStatus,
+    severity?: IncidentSeverity,
+    deviceId?: DeviceId,
+    limit: number = 100
+  ): Promise<Incident[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    
+    if (status) {
+      params.set('status', status);
+    }
+    if (severity) {
+      params.set('severity', severity);
+    }
+    if (deviceId) {
+      params.set('device_id', deviceId);
+    }
+    
+    const response = await fetch(`${this.baseUrl}/api/incidents?${params}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch incidents: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get a single incident by ID with full audit trail
+   */
+  async getIncident(incidentId: string): Promise<IncidentWithAudit> {
+    const response = await fetch(`${this.baseUrl}/api/incidents/${incidentId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch incident: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Acknowledge an incident
+   */
+  async acknowledgeIncident(
+    incidentId: string,
+    operatorToken: string,
+    notes?: string
+  ): Promise<Incident> {
+    const response = await fetch(`${this.baseUrl}/api/incidents/${incidentId}/acknowledge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Operator-Token': operatorToken,
+      },
+      body: JSON.stringify({ notes }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to acknowledge incident: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Resolve an incident
+   */
+  async resolveIncident(
+    incidentId: string,
+    operatorToken: string,
+    notes?: string
+  ): Promise<Incident> {
+    const response = await fetch(`${this.baseUrl}/api/incidents/${incidentId}/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Operator-Token': operatorToken,
+      },
+      body: JSON.stringify({ notes }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to resolve incident: ${response.status}`);
     }
     return response.json();
   }

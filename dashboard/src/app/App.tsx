@@ -8,6 +8,7 @@ import { AppLayout } from '../components/AppLayout';
 import { GatewayWsProvider } from '../hooks/useGatewayWs';
 import { TelemetryPage } from '../pages/TelemetryPage';
 import { EventsPage } from '../pages/EventsPage';
+import { IncidentsPage, IncidentDetailPage } from '../pages/incidents';
 
 // Error Boundary class component
 interface ErrorBoundaryState {
@@ -66,6 +67,8 @@ function App(): React.ReactElement {
               <Route path="/" element={<TelemetryPage />} />
               <Route path="/telemetry" element={<TelemetryPage />} />
               <Route path="/events" element={<EventsPage />} />
+              <Route path="/incidents" element={<IncidentsPage />} />
+              <Route path="/incidents/:incidentId" element={<IncidentDetailPage />} />
             </Routes>
           </AppLayout>
         </GatewayWsProvider>
