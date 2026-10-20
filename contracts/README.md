@@ -8,7 +8,9 @@ This root module holds **validated versioned interfaces shared by multiple root 
 
 - `esp32-ukit-bridge/shared/protocol-spec/AMLP-v1.md` remains bridge-local; do **not** copy AMLP into this directory.
 - `contracts/v1/` holds cross-system schemas: command-lifecycle.md, command.schema.json, telemetry.schema.json, device-event.schema.json, and examples.
-- In particular, `telemetry.schema.json` requires `timestamp` and `state`, whereas issue #66 firmware TEL payload uses `received_at_ms`, `values`, and `pairs`. This mismatch requires a versioned compatibility decision before promoting the file as canonical. See `v1/schemas/telemetry.schema.json` and `esp32-ukit-bridge/docs/mqtt-contract.md` for current wire formats.
+- `contracts/v2/` holds v2 schemas: telemetry.schema.json and examples.
+- `contracts/gateway/` holds gateway-specific canonical documentation including telemetry-schema-v2.md.
+- In particular, `telemetry.schema.json` requires `timestamp` and `state`, whereas issue #66 firmware TEL payload uses `received_at_ms`, `values`, and `pairs`. This mismatch has been resolved by v2 schema (Issue #166, `contracts/gateway/telemetry-schema-v2.md`).
 - A schema is **canonical** only when its version, producer, consumers, examples, validation tests and compatibility policy are documented. No duplicate authoritative schema copies.
 - See [ADR-0009: Telemetry Schema Compatibility](../docs/adr/adr-0009-telemetry-schema-compatibility.md) for the known mismatch between `telemetry.schema.json` and the actual bridge telemetry format.
 

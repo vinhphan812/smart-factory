@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/v2/schemas/telemetry.schema.json",
+  "title": "Telemetry v2",
+  "description": "Canonical telemetry payload emitted by ESP32 bridge and consumed by iot-gateway, Digital Twin, and dashboard. Resolves incompatibility between ESP32 raw format (received_at_ms/values/pairs) and v1 schema (timestamp/state/sensors).",
+  "type": "object",
+  "required": ["schema_version", "device_id", "timestamp", "source_format"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0",
+      "description": "Schema version identifier. Must be '2.0' for v2 canonical format."
+    },
+    "device_id": {
+      "type": "string",
+      "description": "Bridge device identifier (e.g., 'ukit-00000000').",
+      "examples": ["ukit-00000000"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) when the telemetry was captured at the gateway boundary. Converted from ESP32 received_at_ms + gateway wall-clock offset."
+    },
+    "source_format": {
+      "type": "string",
+      "enum": ["amlp-raw", "amlp-structured"],
+      "description": "Indicates the original telemetry format from the bridge. 'amlp-raw' = v1 legacy (values/pairs); 'amlp-structured' = future structured format."
+    },
+    "uptime_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "ESP32 monotonic timestamp (milliseconds since boot) at telemetry capture. Identical to received_at_ms from raw payload."
+    },
+    "raw": {
+      "type": "object",
+      "description": "Original ESP32 telemetry payload (v1 bridge output). Present when source_format is 'amlp-raw'.",
+      "properties": {
+        "received_at_ms": {
+          "type": "integer",
+          "description": "Monotonic millisecond timestamp from ESP32."
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Raw string values from AMLP TEL frame."
+        },
+        "pairs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Key-value pairs from AMLP TEL frame."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True if any telemetry fields were dropped due to buffer overflow."
+        },
+        "overflow_dropped_values": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of raw values dropped due to overflow."
+        },
+        "overflow_dropped_pairs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of key-value pairs dropped due to overflow."
+        }
+      },
+      "required": ["received_at_ms"],
+      "additionalProperties": false
+    },
+    "structured": {
+      "type": "object",
+      "description": "Normalized sensor and state data. Populated by gateway translator from raw payload.",
+      "properties": {
+        "state": {
+          "type": "string",
+          "description": "Current device state (e.g., 'RUNNING', 'IDLE', 'FAULT').",
+          "examples": ["RUNNING", "IDLE", "STOPPED"]
+        },
+        "speed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Conveyor speed setting (0 when stopped)."
+        },
+        "sensors": {
+          "type": "object",
+          "description": "Normalized sensor readings.",
+          "properties": {
+            "digital_inputs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535,
+              "description": "16-bit bitmask of digital input states."
+            },
+            "temperature_centi_c": {
+              "type": "integer",
+              "description": "Temperature in hundredths of degrees Celsius (divide by 100)."
+            },
+            "humidity_centi_percent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "description": "Relative humidity in hundredths of a percent (divide by 100)."
+            },
+            "custom": {
+              "type": "object",
+              "description": "Additional sensor key-value pairs not mapped to standard fields.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Gateway-side metadata.",
+      "properties": {
+        "gateway_id": {
+          "type": "string",
+          "description": "Identifier of the gateway that processed this telemetry."
+        },
+        "translated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when the gateway performed translation."
+        },
+        "translation_errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Any errors encountered during translation."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

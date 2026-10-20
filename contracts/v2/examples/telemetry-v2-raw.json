@@ -1,0 +1,28 @@
+{
+  "$id": "https://smart-factory.example.com/contracts/v2/examples/telemetry-v2-raw.json",
+  "schema_version": "2.0",
+  "device_id": "ukit-00000000",
+  "timestamp": "2026-10-20T14:30:45.123Z",
+  "source_format": "amlp-raw",
+  "uptime_ms": 123456,
+  "raw": {
+    "received_at_ms": 123456,
+    "values": ["CONVEYOR", "RUNNING", "60"],
+    "pairs": { "SENSOR1": "1" },
+    "truncated": false,
+    "overflow_dropped_values": 0,
+    "overflow_dropped_pairs": 0
+  },
+  "structured": {
+    "state": "RUNNING",
+    "speed": 60,
+    "sensors": {
+      "digital_inputs": 1,
+      "custom": { "SENSOR1": "1" }
+    }
+  },
+  "metadata": {
+    "gateway_id": "gateway-001",
+    "translated_at": "2026-10-20T14:30:45.200Z"
+  }
+}
