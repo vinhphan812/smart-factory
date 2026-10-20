@@ -182,9 +182,11 @@ All categories missing — tests cannot run at all.
 
 ## 7. Recommendations
 
+> **Path convention:** All CI workflow recommendations below use root-relative `.github/workflows/` paths (e.g. `.github/workflows/dashboard-ci.yml`). GitHub Actions only executes workflows placed at this location.
+
 ### Priority 1 — Add Missing CI Workflows
 
-1. **Create `docs/quality/.github/workflows/dashboard-ci.yml`**
+1. **Create `.github/workflows/dashboard-ci.yml`**
    ```yaml
    name: Dashboard Tests
    on:
