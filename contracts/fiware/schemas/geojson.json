@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/geojson.json",
+  "title": "GeoJSON for NGSI-LD",
+  "description": "GeoJSON Point and Polygon definitions for NGSI-LD location properties",
+  "definitions": {
+    "Point": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Point" },
+        "coordinates": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[longitude, latitude]"
+        }
+      },
+      "required": ["type", "coordinates"]
+    },
+    "LineString": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "LineString" },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 2
+        }
+      },
+      "required": ["type", "coordinates"]
+    },
+    "Polygon": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Polygon" },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "minItems": 1,
+          "description": "Array of linear rings. First ring is exterior, others are holes."
+        }
+      },
+      "required": ["type", "coordinates"]
+    },
+    "MultiPoint": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "MultiPoint" },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "required": ["type", "coordinates"]
+    },
+    "MultiLineString": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "MultiLineString" },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      },
+      "required": ["type", "coordinates"]
+    },
+    "MultiPolygon": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "MultiPolygon" },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        }
+      },
+      "required": ["type", "coordinates"]
+    },
+    "GeoJSON": {
+      "oneOf": [
+        { "$ref": "#/definitions/Point" },
+        { "$ref": "#/definitions/LineString" },
+        { "$ref": "#/definitions/Polygon" },
+        { "$ref": "#/definitions/MultiPoint" },
+        { "$ref": "#/definitions/MultiLineString" },
+        { "$ref": "#/definitions/MultiPolygon" }
+      ]
+    },
+    "GeoProperty": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "GeoProperty" },
+        "value": {
+          "$ref": "#/definitions/GeoJSON"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "Location": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Location" },
+        "value": {
+          "$ref": "#/definitions/GeoJSON"
+        }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}

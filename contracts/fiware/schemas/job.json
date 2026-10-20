@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/job.json",
+  "title": "Job",
+  "description": "NGSI-LD Job entity schema for Smart Factory",
+  "type": "object",
+  "required": ["id", "type", "name", "jobType", "status", "createdAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Job:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Job"
+    },
+    "name": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "jobType": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["production", "maintenance", "transport", "sorting", "packaging"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed", "paused", "cancelled", "failed"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "priority": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["type", "value"]
+    },
+    "progress": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 0, "maximum": 100 }
+      },
+      "required": ["type", "value"]
+    },
+    "quantity": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["type", "value"]
+    },
+    "completedQuantity": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["type", "value"]
+    },
+    "startedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "estimatedEndAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "completedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "createdBy": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "assignedTo": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "usesMaterials": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "produces": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "createdAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "modifiedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}

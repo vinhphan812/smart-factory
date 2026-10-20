@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/alert.json",
+  "title": "Alert",
+  "description": "NGSI-LD Alert entity schema for Smart Factory",
+  "type": "object",
+  "required": ["id", "type", "name", "severity", "category", "description", "status", "timestamp", "createdAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Alert:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Alert"
+    },
+    "name": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "severity": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["info", "warning", "critical", "emergency"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "category": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["equipment", "safety", "quality", "performance", "anomaly"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "description": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["active", "acknowledged", "resolved"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "triggeredBy": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "acknowledgedBy": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "acknowledgedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "resolvedBy": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "resolvedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "resolution": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "timestamp": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "createdAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}

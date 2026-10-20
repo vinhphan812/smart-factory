@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/module.json",
+  "title": "Module",
+  "description": "NGSI-LD Module entity schema for Smart Factory",
+  "type": "object",
+  "required": ["id", "type", "name", "moduleType", "status", "location", "createdAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Module:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Module"
+    },
+    "name": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "moduleType": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["conveyor", "sorting", "crane", "forklift", "dump_truck", "packaging", "bracket", "parking", "combine"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "description": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["idle", "running", "maintenance", "error", "emergency_stop"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "speed": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Integer" },
+        "value": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["type", "value"]
+    },
+    "location": {
+      "$ref": "./geojson.json#/definitions/GeoProperty"
+    },
+    "zone": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "line": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "controlledBy": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "hasJob": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "processes": {
+      "$ref": "./base.json#/definitions/Relationship"
+    },
+    "createdAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "modifiedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    }
+  }
+}
