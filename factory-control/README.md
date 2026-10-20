@@ -8,7 +8,25 @@ Nine-module device adapters and production orchestration with a deterministic st
 
 ## Implementation
 
-### Components
+| Adapter | Status | Evidence Level | Specification |
+|---|---|---|---|
+| `ConveyorAdapter` | **Implemented** | L1 Unit Tests, L2 Simulation | [docs/conveyor-adapter.md](docs/conveyor-adapter.md) (Fixes #22) |
+| `SortingAdapter` | **Implemented** | L1 Unit Tests, L2 Simulation | [docs/sorting-adapter.md](docs/sorting-adapter.md) (Fixes #23) |
+| `PackagingAdapter` | Planned | — | #24 |
+| `ForkliftAdapter` | Planned | — | #25 |
+| `TowerCraneAdapter` | Planned | — | #26 |
+
+## Inbound contracts
+
+- MQTT commands from ESP32 bridge (`smart-factory/{deviceId}/command/down`)
+- Physical sensor state from device hardware
+
+## Outbound contracts
+
+- MQTT telemetry via ESP32 bridge
+- Physical actuator commands to device controllers
+
+## Module structure
 
 ```
 factory-control/
