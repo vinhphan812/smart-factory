@@ -134,6 +134,86 @@ npm run dev
 
 The page attempts connecting to the gateway WebSocket endpoint (defaulting to `ws://localhost:8000`, configurable via environment variables). When disconnected, it explicitly operates in **Simulation / Demo Mode** with demo fixtures. In live mode, it renders real canonical telemetry and restricts local demonstration acknowledgments.
 
+## Docker / Static Hosting
+
+The dashboard is a static React SPA. Build first, then serve from any static host.
+
+### Build
+
+```bash
+npm run build
+```
+
+Output is in `dist/`.
+
+### Docker (Nginx)
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+```nginx
+# nginx.conf
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  index index.html;
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+  location /api/ {
+    proxy_pass http://iot-gateway:8000/;
+  }
+  location /ws/ {
+    proxy_pass http://iot-gateway:8000/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}
+```
+
+```bash
+docker build -t smart-factory-dashboard .
+docker run -p 8080:80 smart-factory-dashboard
+```
+
+Dashboard available at http://localhost:8080
+
+### Environment Variables
+
+Set at build time via `.env` (VITE_ prefix required):
+
+| Variable | Default | Description |
+|---|---|---|
+| VITE_GATEWAY_WS_URL | ws://localhost:8000 | WebSocket endpoint |
+| VITE_GATEWAY_API_URL | http://localhost:8000 | HTTP API endpoint |
+
+For production, rebuild with production endpoints:
+
+```bash
+echo "VITE_GATEWAY_WS_URL=wss://your-gateway.example.com" > .env.production
+npm run build
+```
+
+### Static Hosting (Vercel / Netlify / S3)
+
+Build produces static files in `dist/`. Upload directly or configure your host to:
+- Serve `index.html` for all routes (SPA routing)
+- Set `Content-Security-Policy` to allow gateway WebSocket connection
+- Configure `X-Frame-Options` as needed
+
 ## Security
 
 The WebSocket client is **READ-ONLY**. It subscribes to telemetry but never initiates physical actuation. Browser never sends MQTT commands to devices.

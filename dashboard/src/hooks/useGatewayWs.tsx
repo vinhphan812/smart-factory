@@ -66,12 +66,15 @@ export function GatewayWsProvider({ children, config }: GatewayWsProviderProps) 
     setLastEvent(null);
   }, []);
 
+  // Auto-connect on mount
   useEffect(() => {
+    connect();
     return () => {
       if (clientRef.current) {
         clientRef.current.disconnect();
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value: GatewayWsContextValue = {

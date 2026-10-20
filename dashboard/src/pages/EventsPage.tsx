@@ -2,7 +2,7 @@
  * EventsPage - displays unified event timeline with filtering
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useGatewayEvents } from '../hooks/useGatewayEvents';
 import { useGatewayWs } from '../hooks/useGatewayWs';
 import type { Severity, DeviceId } from '../contracts/gateway';

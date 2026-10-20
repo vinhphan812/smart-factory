@@ -22,6 +22,14 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-900 text-gray-100">
+      {/* Skip to content link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-[var(--color-primary)] focus:text-white focus:px-4 focus:py-2 focus:rounded focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        Skip to content
+      </a>
+
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
@@ -38,28 +46,29 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="flex-1 flex">
         {/* Sidebar */}
         <aside className="w-56 bg-gray-800 border-r border-gray-700 p-4">
-          <nav className="space-y-2">
+          <nav className="space-y-2" aria-label="Dashboard navigation">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
+                tabIndex={0}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] ${
                     isActive
                       ? 'bg-[var(--color-primary)] text-white'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }`
                 }
               >
-                <span className="text-lg">{item.icon}</span>
-                <span className="font-medium">{item.label}</span>
+                <span className="text-lg" aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
               </NavLink>
             ))}
           </nav>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        <main id="main-content" className="flex-1 p-6 overflow-auto">
           {children}
         </main>
       </div>

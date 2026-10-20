@@ -112,5 +112,10 @@ export type TimeRange = '5m' | '1h' | '24h';
 
 /**
  * Application mode
+ *
+ * - 'live': Connected to real gateway, showing actual telemetry
+ * - 'demo': Disconnected, showing simulated demo data
+ * - 'simulated': Manually triggered simulation mode (future)
+ * - 'replay': Historical event replay mode (future)
  */
-export type AppMode = 'live' | 'demo';
+export type AppMode = 'live' | 'demo' | 'simulated' | 'replay';
