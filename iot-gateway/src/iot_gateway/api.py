@@ -19,11 +19,14 @@ from .ota_control import OtaControl, OtaJobStatus
 from .time_sync import TimeMetrics
 from .safety_gate import SafetyGate
 from .incidents import IncidentStore, get_incident_store
+from . import auth
+from . import lineage
 
 logger = logging.getLogger(__name__)
 
 #: X-Operator-Token value from environment. Empty string if not configured.
 OPERATOR_TOKEN = os.environ.get("SAFETY_OPERATOR_TOKEN", "")
+
 
 def _require_operator_token(x_operator_token: str = Header(None)) -> str:
     """Validate X-Operator-Token against SAFETY_OPERATOR_TOKEN.
@@ -51,10 +54,12 @@ def _require_operator_token(x_operator_token: str = Header(None)) -> str:
         )
     return x_operator_token
 
+
 class EventQuery(BaseModel):
     device_id: str | None = None
     event_type: str | None = None
     limit: int = 100
+
 
 class WebSocketServer:
     """Broadcasts events to all connected WebSocket clients.
