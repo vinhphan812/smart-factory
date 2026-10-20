@@ -1,0 +1,87 @@
+%% Gateway Northbound Live-State Fanout and Downstream Synchronization
+%% Issue #194 — Wave 2-gateway-core, P0
+%% Version: 1.0.0 — Status: Draft
+
+flowchart TD
+    %% ─── Ingress layer ─────────────────────────────────────────────────────────
+    MQTT[("MQTT Broker\nsmart-factory/{bridge}/result\nsmart-factory/{bridge}/telemetry")]
+    ESP32["ESP32 Bridge\n(AMLP ↔ UART)"]
+
+    ESP32 -->|"AMLP v1 UART"| Bridge
+    Bridge["ESP32 UKIT Bridge"]
+    Bridge -->|"authenticated MQTT\nJSON"| MQTT
+
+    %% ─── Gateway core ──────────────────────────────────────────────────────────
+    subgraph gateway["IoT Gateway  (iot-gateway/)"]
+        direction TB
+        Normalizer["EventNormalizer\n→ CanonicalEvent"]
+        Store["EventStore\n(SQLite)\nsequence, event_id\npersistence + query"]
+        WS["WebSocketServer\n(broadcast → all clients)\nmax 64 msg/client queue"]
+        HTTPRest["FastAPI HTTP\n/health /events /snapshot\n/safety-gate/*"]
+        Metrics["TimeMetrics\nlatency · stale · OOO"]
+        AlertSvc["AlertService\nAlertHandler pluggable"]
+    end
+
+    MQTT -->|"mqtt_client.py"| Normalizer
+    Normalizer -->|"write queue\n(max 500)"| Store
+    Store -->|"broadcast()"| WS
+    Store -->|"backed by"| HTTPRest
+    Normalizer -->|"observe()"| Metrics
+    Normalizer -->|"publish()"| AlertSvc
+
+    %% ─── Northbound fanout ─────────────────────────────────────────────────────
+    subgraph fanout["Northbound Fanout (live-state-fanout.md)"]
+        direction LR
+        WS -->|"ws://gateway:8765/"| ConsumersWS
+        HTTPRest -->|"GET /events/stream\nSSE text/event-stream"| ConsumersSSE
+    end
+
+    subgraph consumersWS["WebSocket Consumers"]
+        Unity["Unity Digital Twin\n(sync-contracts.md §1)\nSnapshot + WS resync"]
+        React["React Dashboard\n(sync-contracts.md §2)\nSnapshot + WS + REST"]
+    end
+
+    subgraph consumersSSE["SSE Consumers"]
+        FIWARESSE["FIWARE Orion-LD\n(ngsi-ld-entity-schema.md)\nLast-Event-ID replay"]
+    end
+
+    WS --> Unity
+    WS --> React
+    HTTPRest --> FIWARESSE
+
+    %% ─── MQTT re-publish path ─────────────────────────────────────────────────
+    Normalizer -->|"mqtt_republish()\n(topic: canon/+)"| MQTTPub["MQTT Broker\n(smart-factory/gateway/canon/)"]
+    MQTTPub -->|"subscribe\n+/+/+"| CSink["ContextSink\n(OrionLdAdapter)\niot-gateway/adapters/\norion_ld.py"]
+    MQTTPub -->|"subscribe\nalert/critical\nalert/warning"| Yanshee["Yanshee Robot\nAlertService dispatch\nADR-0013 §4"]
+
+    CSink -->|"NGSI-LD UPSERT\nHTTP POST"| OrionLD["Orion-LD\n(MongoDB)\nContext Broker"]
+    OrionLD -->|"NGSI-LD\nSubscriptions"| OrionSub["FIWARE Subscribers\nUnity / React\nExternal clients"]
+
+    %% ─── AlertService downstream ──────────────────────────────────────────────
+    AlertSvc -->|"AlertHandler\nplugged in"| Yanshee
+    AlertSvc -->|"WebhookNotification\nwebhook → allowed hosts"| Webhook["External\nWebhook\n(SSRF-protected)"]
+    AlertSvc -->|"LoggingHandler"| Log["Logger\n(all severities)"]
+
+    %% ─── Stability and safety ─────────────────────────────────────────────────
+    Store -.->|"high_watermark\nsequence gaps"| Gap["Gap Detection\n→ full snapshot retry"]
+    Metrics -.->|"queue_dropped_count"| Health["GET /health\nqueue overflow"]
+
+    Unity -.->|"disconnect > 60s\n→ full snapshot"| Gap
+    React -.->|"disconnect > 60s\n→ full snapshot"| Gap
+
+    %% ─── Safety gate ──────────────────────────────────────────────────────────
+    HTTPRest -->|"POST /safety-gate/*\nX-Operator-Token"| SafetyGate["SafetyGate\n(interlock · E-stop\noperator override)"]
+    SafetyGate -.->|"blocks commands\nACK ≠ physical done"| Bridge
+
+    %% ─── Styling ─────────────────────────────────────────────────────────────
+    classDef factory fill:#2d2d2d,stroke:#aaa,color:#fff
+    classDef gateway fill:#1a3a5c,stroke:#4fc3f7,color:#e0f7fa
+    classDef fanout fill:#1b4332,stroke:#52b788,color:#d8f3dc
+    classDef consumer fill:#4a1942,stroke:#ce93d8,color:#f3e5f5
+    classDef safety fill:#7b2d00,stroke:#ff7043,color:#fff3e0
+
+    class MQTT,ESP32 factory
+    class gateway,Normalizer,Store,WS,HTTPRest,Metrics,AlertSvc gateway
+    class fanout,ConsumersWS,ConsumersSSE fanout
+    class Unity,React,FIWARESSE,Yanshee,OrionLD,OrionSub consumer
+    class SafetyGate,Webhook,Log,Gap,Health safety
