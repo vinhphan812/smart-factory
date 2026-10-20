@@ -27,6 +27,12 @@ export default [
         fetch: 'readonly',
         URLSearchParams: 'readonly',
         HTMLSelectElement: 'readonly',
+<<<<<<< HEAD
+=======
+        HTMLButtonElement: 'readonly',
+        HTMLDivElement: 'readonly',
+        HTMLLinkElement: 'readonly',
+>>>>>>> 6dcf5f0 (feat(dashboard): #149 implement design system, navigation shell, and 9-module overview)
       },
     },
     plugins: {

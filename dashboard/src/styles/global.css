@@ -1,3 +1,9 @@
+<<<<<<< HEAD
+=======
+/* Design System - Base Styles */
+@import '../design-system/tokens.css';
+
+>>>>>>> 6dcf5f0 (feat(dashboard): #149 implement design system, navigation shell, and 9-module overview)
 :root {
   /* Primary brand color - Linear lavender #5E6AD2 */
   --color-primary: #5E6AD2;
