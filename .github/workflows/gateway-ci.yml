@@ -1,9 +1,16 @@
 name: IoT Gateway Tests
 
+# Routing truth table:
+# | Trigger        | Paths              | Runs? | Reason                          |
+# |----------------|--------------------|-------|---------------------------------|
+# | push master    | iot-gateway/**     | ✓     | Primary integration branch       |
+# | push other     | iot-gateway/**     | ✓     | Path-filtered, no branch restrict|
+# | PR             | iot-gateway/**     | ✓     | Standard PR gate                 |
+# | any other path | any                | ✗     | Path filter excludes other dirs  |
+
 on:
   push:
     branches:
-      - fix/p0-root-module-boundaries
       - master
     paths:
       - iot-gateway/**

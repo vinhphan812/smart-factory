@@ -1,5 +1,11 @@
 name: ADR Lint & Architecture Governance Gate
 
+# Routing truth table:
+# | Trigger | Paths | Runs? | Reason                                         |
+# |---------|-------|-------|------------------------------------------------|
+# | any     | any   | ✓     | Global hygiene gate — ADR changes may affect   |
+# |         |       |       | any module; lint is fast and must always run   |
+
 on:
   push:
     branches:

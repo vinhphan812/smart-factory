@@ -1,5 +1,14 @@
 name: CI
 
+# Routing truth table:
+# | Trigger | Paths                    | Runs? | Reason                            |
+# |---------|--------------------------|-------|-----------------------------------|
+# | push    | esp32-ukit-bridge/**     | ✓     | Bridge firmware + tests changed   |
+# | push    | .github/workflows/**     | ✓     | CI workflow config changed        |
+# | PR      | esp32-ukit-bridge/**     | ✓     | Bridge code under review           |
+# | PR      | .github/workflows/**     | ✓     | CI config under review            |
+# | any     | other/paths             | ✗     | Path filter excludes other dirs   |
+
 on:
   push:
     paths:

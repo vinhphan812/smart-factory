@@ -1,5 +1,12 @@
 name: Factory Control Tests
 
+# Routing truth table:
+# | Trigger | Paths              | Runs? | Reason                         |
+# |---------|--------------------|-------|--------------------------------|
+# | push    | factory-control/** | ✓     | Factory control code changed   |
+# | PR      | factory-control/** | ✓     | Factory control code under rev  |
+# | any     | other/paths       | ✗     | Path filter excludes other dirs |
+
 on:
   push:
     branches:
