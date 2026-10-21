@@ -5,9 +5,16 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI
 import jwt
 import os
+import sys
 
-# Set test JWT secret before importing
-os.environ["JWT_SECRET"] = "test-secret-key"
+# Remove any cached modules to force fresh import with new env
+for mod in list(sys.modules.keys()):
+    if mod.startswith('iot_gateway'):
+        del sys.modules[mod]
+
+# Set test JWT secret before importing (must be >= 32 chars)
+os.environ["JWT_SECRET"] = "test-secret-key-for-testing-minimum-32-chars"
+os.environ["AUTH_TEST_MODE"] = "1"
 
 from iot_gateway import auth
 from iot_gateway.auth import (
@@ -21,7 +28,11 @@ from iot_gateway.auth import (
     decode_token,
     get_current_user,
     get_user_by_username,
+    initialize_test_users,
 )
+
+# Ensure test users are initialized
+initialize_test_users()
 
 
 class TestPasswordHashing:
@@ -170,8 +181,12 @@ class TestAuthRoutes:
     @pytest.fixture
     def client(self):
         """Create test client."""
-        # Set test secret
-        os.environ["JWT_SECRET"] = "test-secret-key"
+        # Set test secret (must be >= 32 chars)
+        os.environ["JWT_SECRET"] = "test-secret-key-for-testing-minimum-32-chars"
+        os.environ["AUTH_TEST_MODE"] = "1"
+
+        # Ensure test users are initialized
+        auth.initialize_test_users()
 
         app = FastAPI()
         auth.create_auth_routes(app)
@@ -213,6 +228,8 @@ class TestAuthRoutes:
             "/api/auth/login",
             json={"username": "operator", "password": "operator123"},
         )
+        print("Login status:", login_response.status_code)
+        print("Login body:", login_response.json())
         token = login_response.json()["tokens"]["access_token"]
 
         # Get user info
@@ -220,6 +237,9 @@ class TestAuthRoutes:
             "/api/auth/me",
             headers={"Authorization": f"Bearer {token}"},
         )
+
+        print("Me status:", response.status_code)
+        print("Me response:", response.json())
 
         assert response.status_code == 200
         data = response.json()

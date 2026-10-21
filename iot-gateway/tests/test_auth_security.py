@@ -26,24 +26,34 @@ class TestJWTSecretFailClosed:
 
     def test_jwt_secret_not_configured_fails(self):
         """Request fails with 503 when JWT_SECRET is not set."""
-        with patch.dict(os.environ, {}, clear=False):
-            # Remove JWT_SECRET from environment
-            original = os.environ.pop("JWT_SECRET", None)
+        # Save original env
+        original_secret = os.environ.get("JWT_SECRET")
+        original_test_mode = os.environ.get("AUTH_TEST_MODE")
+
+        # Clear JWT_SECRET but keep AUTH_TEST_MODE for reload
+        try:
+            os.environ.pop("JWT_SECRET", None)
             # Reload auth module with cleared JWT_SECRET
             import importlib
-            import iot_gateway.auth as auth_module
-            importlib.reload(auth_module)
+            import iot_gateway.auth as auth_reloaded
+            importlib.reload(auth_reloaded)
             
             # Now test that it fails
             try:
-                auth_module._get_jwt_secret()
+                auth_reloaded._get_jwt_secret()
                 pytest.fail("Expected HTTPException but none was raised")
             except Exception as e:
                 assert "503" in str(e) or "not configured" in str(e).lower()
-            finally:
-                # Restore
-                if original:
-                    os.environ["JWT_SECRET"] = original
+        finally:
+            # Restore env vars
+            if original_secret:
+                os.environ["JWT_SECRET"] = original_secret
+            if original_test_mode:
+                os.environ["AUTH_TEST_MODE"] = original_test_mode
+            # Reload to restore module state
+            import importlib
+            import iot_gateway.auth as auth_module
+            importlib.reload(auth_module)
 
     def test_jwt_secret_too_short_fails(self):
         """Request fails when JWT_SECRET is less than 32 characters."""

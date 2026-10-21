@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response, Header
 from pydantic import BaseModel
 
 
@@ -390,7 +390,7 @@ def logout(refresh_token: str) -> None:
     REFRESH_TOKENS.pop(refresh_token, None)
 
 
-def get_current_user(authorization: str | None = None) -> UserResponse:
+def get_current_user(authorization: str | None = Header(None, alias="Authorization")) -> UserResponse:
     """Get current authenticated user from access token."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
