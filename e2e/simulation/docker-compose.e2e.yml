@@ -26,7 +26,14 @@ services:
       MQTT_GW_PASSWORD: "${MQTT_GW_PASSWORD:-changeme}"
     entrypoint: ["sh", "/docker-entrypoint.d/init.sh"]
     healthcheck:
-      test: ["CMD", "mosquitto_pub", "-t", "test", "-m", "ping", "-h", "localhost", "-p", "1883"]
+      # The broker runs with allow_anonymous false, so the probe must
+      # authenticate. The admin credential has readwrite on smart-factory/#.
+      test:
+        - "CMD-SHELL"
+        - >-
+          mosquitto_pub -h localhost -p 1883
+          -u "$$MQTT_ADMIN_USERNAME" -P "$$MQTT_ADMIN_PASSWORD"
+          -t "smart-factory/healthcheck" -m "ping" -q 1
       interval: 15s
       timeout: 5s
       retries: 3
@@ -44,8 +51,13 @@ services:
     environment:
       MQTT_BROKER: mqtt
       MQTT_PORT: "1883"
-      MQTT_USERNAME: "${MQTT_GW_USERNAME:-gateway}"
-      MQTT_PASSWORD: "${MQTT_GW_PASSWORD:-changeme}"
+      # The mock publisher *originates* device traffic, so it needs a
+      # readwrite credential. The gateway credential is read-only by design
+      # (see infrastructure/mqtt-broker/entrypoint.d/init.sh ACL), so the
+      # simulation uses the admin credential, which is documented as
+      # testing/management only.
+      MQTT_USERNAME: "${MQTT_ADMIN_USERNAME:-admin}"
+      MQTT_PASSWORD: "${MQTT_ADMIN_PASSWORD:-changeme}"
       PUBLISH_INTERVAL_S: "${MOCK_PUBLISH_INTERVAL_S:-2}"
     depends_on:
       mqtt:
@@ -237,6 +249,32 @@ services:
     networks:
       - e2e-net
     # Run smoke tests once and exit (do not restart)
+    restart: "no"
+
+  # ── Backup/Restore Drill (runs once then exits) ───────────────────────────
+  # Exercises WAL-safe backup + atomic restore against the LIVE gateway
+  # database (shared e2e-gw-data volume) while the gateway is running.
+  # Evidence level: L2 simulation.
+  backup-restore-drill:
+    image: python:3.12-slim
+    container_name: e2e-backup-restore-drill
+    working_dir: /tests
+    command: >
+      sh -c "pip install --no-cache-dir pytest pytest-asyncio 'sqlalchemy[asyncio]' aiosqlite &&
+             python -m pytest backup_restore_drill.py -v --tb=short"
+    volumes:
+      - .:/tests
+      - ../../iot-gateway:/app/iot-gateway:ro
+      - e2e-gw-data:/app/data
+    environment:
+      GATEWAY_DB_PATH: "/app/data/gateway.db"
+      GW_HTTP_PORT: "${GW_HTTP_PORT:-8001}"
+      DRILL_SCRATCH_DIR: "/tmp/backup-restore-drill"
+    depends_on:
+      iot-gateway:
+        condition: service_healthy
+    networks:
+      - e2e-net
     restart: "no"
 
 # ── Volumes & Networks ──────────────────────────────────────────────────
