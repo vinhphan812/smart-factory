@@ -171,13 +171,13 @@ async def test_backup_and_restore_roundtrip(tmp_db_path):
     store = EventStore(database_url=f"sqlite+aiosqlite:///{tmp_db_path}", max_events=100)
     await store.init()
 
-    from iot_gateway.models import CanonicalEvent
+    from iot_gateway.models import CanonicalEvent, EventType
     import time, uuid
     for i in range(3):
         ev = CanonicalEvent(
             event_id=str(uuid.uuid4()),
             device_id=f"dev-{i}",
-            event_type="telemetry",
+            event_type=EventType.TELEMETRY,
             payload={"v": i},
             mqtt_topic=f"sf/dev-{i}/t",
             mqtt_timestamp_ms=int(time.time() * 1000),
@@ -186,10 +186,6 @@ async def test_backup_and_restore_roundtrip(tmp_db_path):
         )
         await store.insert(ev)
     await store.close()
-
-    original_count = (await EventStore(database_url=f"sqlite+aiosqlite:///{tmp_db_path}", max_events=100).query()) or 0
-    if isinstance(original_count, list):
-        original_count = len(original_count)
 
     # Create a backup copy
     bak_path = tmp_db_path.parent / f"{tmp_db_path.name}.test.bak"

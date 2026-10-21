@@ -48,16 +48,17 @@ def _integrity_check(db_path: Path) -> bool:
 
     Returns True if the database passes all integrity checks, False otherwise.
     """
+    conn = None
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except sqlite3.Error:
-        return False
-    try:
         cur = conn.execute("PRAGMA integrity_check")
         result = cur.fetchone()
         return result is not None and result[0] == "ok"
+    except (sqlite3.Error, sqlite3.DatabaseError, OSError):
+        return False
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 def cmd_backup(db_arg: str | None) -> int:
