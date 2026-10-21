@@ -263,8 +263,8 @@ PR #206 body explicitly states: `closes no implementation issue. architecture re
 
 | Check | Result |
 |---|---|
-| Total `.md` files in `docs/adr/` | 13 ADRs (ADR-0001 through ADR-0013, minus ADR-0010 and ADR-0011) |
-| ADR lint pass | ✅ All 12 ADRs validated |
+| Total `.md` files in `docs/adr/` | 15 ADRs (ADR-0001 through ADR-0015, sequential) |
+| ADR lint pass | ✅ All 15 ADRs validated |
 | Closed issues with `gate:hardware` label | #23 (L3 blocked) |
 | Open issues remaining | Run `gh issue list --state open --repo vinhphan812/smart-factory --limit 100` |
 

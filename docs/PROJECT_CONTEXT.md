@@ -79,8 +79,7 @@ This section records the authoritative merge sequence, open PR status, and resol
 - **Branch:** `feat/issue-148-react-vite-bootstrap`
 - **Status:** OPEN, MERGEABLE (`mergeStateStatus: CLEAN`)
 - **Files:** `dashboard/` (33 files, 6 725 additions)
-- **ADR created:** `docs/adr/adr-0013-frontend-migration.md`
-- ⚠️ **BLOCKER — ADR-0013 numbering conflict:** `adr-0013-frontend-migration.md` reuses ADR-0013, which is already assigned to **Edge AI Safety Gate** (merged via PR #110). The FIWARE ADR was renumbered to ADR-0014 precisely to avoid this conflict. The frontend migration ADR must use **ADR-0015** (next available) and the `docs/adr/README.md` index entry must be added. Fix: rename `adr-0013-frontend-migration.md` → `adr-0015-frontend-migration.md`, update index.
+- **ADR created:** `docs/adr/adr-0015-frontend-migration.md` ✅ — numbering conflict resolved: `adr-0013-frontend-migration.md` renamed to `adr-0015-frontend-migration.md` to avoid collision with ADR-0013 (Edge AI Safety Gate, PR #110). Index updated in `docs/adr/README.md`.
 - **Other compatibility:** `dashboard/src/contracts/gateway.ts` adds TypeScript types for `iot-gateway/` REST/WebSocket API — read-only client, no MQTT publish. Does not conflict with `iot-gateway/` safety gate module.
 - **Evidence:** `npm run test` (12 tests) PASS; `npm run build` PASS; legacy `dashboard/src/index.html` preserved as rollback.
 
@@ -114,13 +113,11 @@ The original concern in Issue #172 was overlapping `safety_gate.py` logic across
 ### 8.6 ADR index state (on master)
 | ADR | Title | Status |
 |-----|-------|--------|
-| 0001–0012 | Core infrastructure ADRs | Proposed |
-| ADR-0013 | Edge AI Safety Decision Gate | Proposed (PR #110) |
-| ADR-0014 | FIWARE Orion-LD Context Architecture | Proposed (PR #206) |
-| **ADR-0015** | **(available — pending PR #211 fix)** | Fix: rename `adr-0013-frontend-migration.md` → `adr-0015-frontend-migration.md` |
+| 0001–0014 | Core infrastructure and FIWARE ADRs | Proposed |
+| ADR-0015 | Frontend Migration to React + TypeScript + Vite | Proposed (PR #211) |
 
 ### 8.7 Recommended merge sequence
-1. **PR #211** — fix ADR-0013 conflict first: rename to `adr-0015-frontend-migration.md`, update `docs/adr/README.md` index, then merge
+1. **PR #211** — ADR-0015 conflict resolved ✅ (this doc-hygiene PR); merge as-is (MERGEABLE)
 2. **PR #145** — merge as-is (MERGEABLE, L2 evidence complete)
 3. **Conveyor adapter** — new clean PR from current master, following `sorting.py` pattern (ADR-0006 + L2 tests)
 
@@ -129,7 +126,7 @@ The original concern in Issue #172 was overlapping `safety_gate.py` logic across
 |------|--------|----------|
 | Integration queue in `docs/PROJECT_CONTEXT.md` | ✅ DONE | This section §8 |
 | Conflicting scope resolved with rationale | ✅ DONE | §8.5 factory-control vs. safety-gate boundary |
-| AGENTS.md current with merged ADRs | ✅ DONE | ADR-0013 (safety gate), ADR-0014 (FIWARE) both on master |
+| AGENTS.md current with merged ADRs | ✅ DONE | ADR-0001 through ADR-0015 (15 ADRs) all on master; ADR-0013 (safety gate), ADR-0014 (FIWARE), ADR-0015 (frontend migration) included |
 | All open PRs audited | ✅ DONE | #211 MERGEABLE, #145 MERGEABLE |
 | Recommended merge order documented | ✅ DONE | §8.7 |
 | S3 robot updated to Yanshee | ✅ DONE | §2 S3 |
