@@ -243,7 +243,7 @@
 | Surface | Vector | Severity | Control |
 |---------|--------|----------|---------|
 | Browser XSS via WebSocket messages | Malicious event payload rendered in UI | Medium | ⚠️ React escapes by default; must verify no `dangerouslySetInnerHTML` |
-| Session token stored in localStorage | XSS theft | Medium | ⚠️ No auth token currently; none stored |
+| Session token stored in localStorage | XSS theft | Medium | ⚠️ PR #242 introduces localStorage access/refresh token persistence in the dashboard. [Concurrent implementation; not production-approved. Risk: XSS → token theft. No TLS on MQTT still applies.] |
 | Dashboard → Gateway REST calls | CSRF if cookies used | Medium | ⚠️ No CSRF protection if cookie-based auth added |
 | Dashboard → MQTT commands | Command injection | **Critical** | Commands go through broker ACL + ESP32 validation; dashboard not privileged |
 
@@ -501,11 +501,11 @@
 | Safety gate fail-closed when token unset | ✅ Implemented | 503 on missing `SAFETY_OPERATOR_TOKEN` |
 | Safety gate default-deny | ✅ Implemented | `SafetyGate.evaluate()` |
 | Safety gate audit log (no args) | ✅ Implemented | ADR-0013 §Audit Trail |
-| Webhook SSRF fail-closed (empty allowlist) | ✅ Implemented + Tested | `test_ssrf.py` |
-| Webhook strict hostname allowlist | ✅ Implemented + Tested | `test_ssrf.py` |
-| Webhook `allow_redirects=False` | ✅ Implemented + Tested | `test_ssrf.py` |
-| Webhook hostname normalization (strip userinfo/port) | ✅ Implemented + Tested | `test_ssrf.py` |
-| No raw URL/credentials in webhook logs | ✅ Implemented + Tested | `test_ssrf.py` |
+| Webhook SSRF fail-closed (empty allowlist) | ✅ Implemented | L1: `test_security_abuse.py::TestSSRFWebhookNotification` (mocked HTTP via aioresponses) |
+| Webhook strict hostname allowlist | ✅ Implemented | L1: `test_security_abuse.py::TestSSRFWebhookNotification` (mocked HTTP via aioresponses) |
+| Webhook `allow_redirects=False` | ✅ Implemented | L1: `test_security_abuse.py::TestSSRFWebhookNotification` (mocked HTTP via aioresponses) |
+| Webhook hostname normalization (strip userinfo/port) | ✅ Implemented | L1: `test_security_abuse.py::TestSSRFWebhookNotification` (mocked HTTP via aioresponses) |
+| No raw URL/credentials in webhook logs | ✅ Implemented | L1: `test_security_abuse.py::TestSSRFWebhookNotification` (mocked HTTP via aioresponses) |
 | Orion-LD write endpoint auth | ⚠️ Not yet implemented | ADR-0014 F3 |
 | Orion-LD subscription callback SSRF protection | ⚠️ Not yet implemented | ADR-0014 F3 |
 | Orion-LD `@context` local-only | ⚠️ Not yet implemented | ADR-0014 §Deployment |
