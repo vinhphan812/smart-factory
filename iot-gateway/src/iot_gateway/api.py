@@ -15,6 +15,7 @@ from .event_store import EventStore
 from .time_sync import TimeMetrics
 from .safety_gate import SafetyGate
 from .incidents import IncidentStore, get_incident_store
+from . import auth
 
 logger = logging.getLogger(__name__)
 
@@ -455,5 +456,8 @@ def create_http_app(
         if incident is None:
             raise HTTPException(status_code=404, detail="Incident not found")
         return incident
+
+    # --- Authentication routes ---
+    auth.create_auth_routes(app)
 
     return app
