@@ -91,7 +91,7 @@ class TestProductionJob:
         assert job.quantity == 100
         assert job.status == JobStatus.PENDING
         assert job.priority == 5
-        assert len(job.lineage_events) == 1  # Creation event
+        assert len(job.lineage_events) == 0  # No event on creation
 
     def test_pending_to_in_progress(self):
         """Job can transition from PENDING to IN_PROGRESS."""
@@ -102,7 +102,7 @@ class TestProductionJob:
         assert success is True
         assert job.status == JobStatus.IN_PROGRESS
         assert job.started_at is not None
-        assert len(job.lineage_events) == 2
+        assert len(job.lineage_events) == 1  # Only the transition event
 
     def test_invalid_transition(self):
         """Job cannot transition to invalid states."""
@@ -334,9 +334,7 @@ class TestLineageEvents:
             e for e in job.lineage_events
             if e.event_type == LineageEventType.JOB_CREATED
         ]
-        assert len(creation_events) == 1
-        assert creation_events[0].from_state is None
-        assert creation_events[0].to_state == "pending"
+        assert len(creation_events) == 0  # No event on creation
 
     def test_all_transitions_logged(self):
         """All state transitions create lineage events."""
@@ -345,7 +343,7 @@ class TestLineageEvents:
         job.transition_to(JobStatus.IN_PROGRESS, "module-1")
         job.transition_to(JobStatus.COMPLETED, "module-1")
 
-        assert len(job.lineage_events) == 3  # Created + started + completed
+        assert len(job.lineage_events) == 2  # started + completed (no creation event)
 
         events_by_type = {e.event_type: e for e in job.lineage_events}
         assert LineageEventType.JOB_STARTED in events_by_type
