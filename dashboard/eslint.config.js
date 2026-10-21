@@ -27,12 +27,9 @@ export default [
         fetch: 'readonly',
         URLSearchParams: 'readonly',
         HTMLSelectElement: 'readonly',
-<<<<<<< HEAD
-=======
         HTMLButtonElement: 'readonly',
         HTMLDivElement: 'readonly',
         HTMLLinkElement: 'readonly',
->>>>>>> 6dcf5f0 (feat(dashboard): #149 implement design system, navigation shell, and 9-module overview)
       },
     },
     plugins: {
@@ -48,6 +45,15 @@ export default [
       'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       'react-hooks/set-state-in-effect': 'warn',
+      // Base ESLint rules that misfire on TypeScript syntax. Undefined
+      // identifiers and redeclarations are reported by `tsc` (TS2304 /
+      // TS2451), and `@typescript-eslint/no-redeclare` understands the
+      // const-object + same-named-type pattern.
+      'no-undef': 'off',
+      'no-redeclare': 'off',
+      // An interface that extends a single type without adding members is an
+      // intentional type alias, not an empty interface.
+      '@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'with-single-extends' }],
     },
   },
   {
