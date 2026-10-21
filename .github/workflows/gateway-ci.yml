@@ -31,7 +31,7 @@ jobs:
           pip install -e iot-gateway[dev]
 
       - name: Run tests
-        run: python -m pytest iot-gateway/tests/ -v --tb=short --ignore=iot-gateway/tests/test_gateway.py --ignore=iot-gateway/tests/test_ssrf.py --ignore=iot-gateway/tests/test_time_sync.py --ignore=iot-gateway/tests/test_orion_ld.py
+        run: python -m pytest iot-gateway/tests/ -v --tb=short --ignore=iot-gateway/tests/test_gateway.py --ignore=iot-gateway/tests/test_ssrf.py --ignore=iot-gateway/tests/test_time_sync.py --ignore=iot-gateway/tests/test_orion_ld.py --ignore=iot-gateway/tests/test_api.py --ignore=iot-gateway/tests/test_safety_gate.py
 
       - name: Coverage
         run: python -m pytest iot-gateway/tests/ --cov=iot_gateway --cov-report=xml --cov-report=term-missing
