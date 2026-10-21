@@ -1,9 +1,20 @@
 """Pytest configuration and shared fixtures for iot-gateway tests."""
 
 import asyncio
+import os
 from typing import Generator
 
 import pytest
+
+# Test-only auth configuration. Must be set BEFORE iot_gateway.api (and
+# therefore iot_gateway.auth) is imported, because auth.py captures
+# AUTH_TEST_MODE and JWT_SECRET at module import time. Without this the
+# test users are never provisioned and USERS_DB stays empty.
+os.environ.setdefault("AUTH_TEST_MODE", "1")
+os.environ.setdefault(
+    "JWT_SECRET",
+    "test-secret-key-for-testing-purposes-minimum-32-characters-long",
+)
 
 from iot_gateway.api import WebSocketServer
 from iot_gateway.event_store import EventStore

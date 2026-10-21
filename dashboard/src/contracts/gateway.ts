@@ -226,16 +226,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionScope[]> = {
 };
 
 /**
- * Auth tokens returned from login
- */
-export interface AuthTokens {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;  // seconds
-  token_type: 'Bearer';
-}
-
-/**
  * User info from auth
  */
 export interface AuthUser {
@@ -255,11 +245,13 @@ export interface LoginCredentials {
 }
 
 /**
- * Auth response with user and tokens
+ * Auth response from login.
+ *
+ * SECURITY: token material is delivered via httpOnly cookies only and is
+ * never present in the response body, so it is not part of this contract.
  */
 export interface AuthResponse {
   user: AuthUser;
-  tokens: AuthTokens;
 }
 
 /**

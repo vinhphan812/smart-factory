@@ -832,115 +832,115 @@ def create_http_app(
             return {"token": token, "job_id": job_id, "device_id": device_id, "expires_at": expires.isoformat()}
 
 
-        auth.create_auth_routes(app)
+    auth.create_auth_routes(app)
 
-        # --- Job & Material Lineage endpoints ---
+    # --- Job & Material Lineage endpoints ---
 
-        @app.get("/api/jobs")
-        async def list_jobs(
-            status: str | None = Query(None, description="Filter by job status"),
-            limit: int = Query(100, ge=1, le=10000, description="Max jobs to return"),
-        ) -> dict[str, Any]:
-            """Get all production jobs with optional filters."""
-            job_status = None
-            if status:
-                try:
-                    job_status = lineage.JobStatus(status)
-                except ValueError:
-                    raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+    @app.get("/api/jobs")
+    async def list_jobs(
+        status: str | None = Query(None, description="Filter by job status"),
+        limit: int = Query(100, ge=1, le=10000, description="Max jobs to return"),
+    ) -> dict[str, Any]:
+        """Get all production jobs with optional filters."""
+        job_status = None
+        if status:
+            try:
+                job_status = lineage.JobStatus(status)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
-            jobs = lineage.job_store.list(status=job_status, limit=limit)
-            return {"jobs": [j.to_dict() for j in jobs], "count": len(jobs)}
+        jobs = lineage.job_store.list(status=job_status, limit=limit)
+        return {"jobs": [j.to_dict() for j in jobs], "count": len(jobs)}
 
-        @app.get("/api/jobs/{job_id}")
-        async def get_job(job_id: str) -> dict[str, Any]:
-            """Get a single job with full lineage."""
-            job = lineage.job_store.get(job_id)
-            if job is None:
-                raise HTTPException(status_code=404, detail="Job not found")
+    @app.get("/api/jobs/{job_id}")
+    async def get_job(job_id: str) -> dict[str, Any]:
+        """Get a single job with full lineage."""
+        job = lineage.job_store.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
 
-            # Include materials for this job's batch
-            materials = lineage.material_store.list(batch_id=job.batch_id)
+        # Include materials for this job's batch
+        materials = lineage.material_store.list(batch_id=job.batch_id)
 
-            return {
-                **job.to_dict(),
-                "materials": [m.to_dict() for m in materials],
-            }
+        return {
+            **job.to_dict(),
+            "materials": [m.to_dict() for m in materials],
+        }
 
-        @app.post("/api/jobs")
-        async def create_job(
-            job_data: dict[str, Any],
-            _user: auth.UserResponse = Depends(auth.get_current_user),
-        ) -> dict[str, Any]:
-            """Create a new production job."""
-            # Check permission
-            if "jobs:create" not in _user.permissions:
-                raise HTTPException(status_code=403, detail="Insufficient permissions")
+    @app.post("/api/jobs")
+    async def create_job(
+        job_data: dict[str, Any],
+        _user: auth.UserResponse = Depends(auth.get_current_user),
+    ) -> dict[str, Any]:
+        """Create a new production job."""
+        # Check permission
+        if "jobs:create" not in _user.permissions:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-            required = ["batch_id", "product_type", "quantity"]
-            for field in required:
-                if field not in job_data:
-                    raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        required = ["batch_id", "product_type", "quantity"]
+        for field in required:
+            if field not in job_data:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
 
-            job = lineage.job_store.create(
-                batch_id=job_data["batch_id"],
-                product_type=job_data["product_type"],
-                quantity=job_data["quantity"],
-                priority=job_data.get("priority", 0),
-                module_id=job_data.get("module_id", "entry"),
-            )
+        job = lineage.job_store.create(
+            batch_id=job_data["batch_id"],
+            product_type=job_data["product_type"],
+            quantity=job_data["quantity"],
+            priority=job_data.get("priority", 0),
+            module_id=job_data.get("module_id", "entry"),
+        )
 
-            return job.to_dict()
+        return job.to_dict()
 
-        @app.post("/api/jobs/{job_id}/cancel")
-        async def cancel_job(
-            job_id: str,
-            _user: auth.UserResponse = Depends(auth.get_current_user),
-        ) -> dict[str, Any]:
-            """Cancel a production job."""
-            # Check permission
-            if "jobs:cancel" not in _user.permissions:
-                raise HTTPException(status_code=403, detail="Insufficient permissions")
+    @app.post("/api/jobs/{job_id}/cancel")
+    async def cancel_job(
+        job_id: str,
+        _user: auth.UserResponse = Depends(auth.get_current_user),
+    ) -> dict[str, Any]:
+        """Cancel a production job."""
+        # Check permission
+        if "jobs:cancel" not in _user.permissions:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-            job = lineage.job_store.update(
-                job_id,
-                lineage.JobStatus.CANCELLED,
-                module_id="cancel",
-                operator_id=_user.user_id,
-            )
+        job = lineage.job_store.update(
+            job_id,
+            lineage.JobStatus.CANCELLED,
+            module_id="cancel",
+            operator_id=_user.user_id,
+        )
 
-            if job is None:
-                raise HTTPException(status_code=404, detail="Job not found")
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
 
-            return job.to_dict()
+        return job.to_dict()
 
-        @app.get("/api/materials")
-        async def list_materials(
-            status: str | None = Query(None, description="Filter by material status"),
-            batch_id: str | None = Query(None, description="Filter by batch ID"),
-            limit: int = Query(100, ge=1, le=10000, description="Max materials to return"),
-        ) -> dict[str, Any]:
-            """Get all materials with optional filters."""
-            material_status = None
-            if status:
-                try:
-                    material_status = lineage.MaterialStatus(status)
-                except ValueError:
-                    raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+    @app.get("/api/materials")
+    async def list_materials(
+        status: str | None = Query(None, description="Filter by material status"),
+        batch_id: str | None = Query(None, description="Filter by batch ID"),
+        limit: int = Query(100, ge=1, le=10000, description="Max materials to return"),
+    ) -> dict[str, Any]:
+        """Get all materials with optional filters."""
+        material_status = None
+        if status:
+            try:
+                material_status = lineage.MaterialStatus(status)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
-            materials = lineage.material_store.list(
-                status=material_status,
-                batch_id=batch_id,
-                limit=limit,
-            )
-            return {"materials": [m.to_dict() for m in materials], "count": len(materials)}
+        materials = lineage.material_store.list(
+            status=material_status,
+            batch_id=batch_id,
+            limit=limit,
+        )
+        return {"materials": [m.to_dict() for m in materials], "count": len(materials)}
 
-        @app.get("/api/materials/{material_id}")
-        async def get_material(material_id: str) -> dict[str, Any]:
-            """Get a single material with full lineage."""
-            material = lineage.material_store.get(material_id)
-            if material is None:
-                raise HTTPException(status_code=404, detail="Material not found")
-            return material.to_dict()
+    @app.get("/api/materials/{material_id}")
+    async def get_material(material_id: str) -> dict[str, Any]:
+        """Get a single material with full lineage."""
+        material = lineage.material_store.get(material_id)
+        if material is None:
+            raise HTTPException(status_code=404, detail="Material not found")
+        return material.to_dict()
 
-        return app
+    return app

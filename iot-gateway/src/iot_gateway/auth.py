@@ -202,8 +202,20 @@ class UserResponse(BaseModel):
 
 
 class AuthResponse(BaseModel):
+    """Internal login result. Carries token material for server-side callers."""
+
     user: UserResponse
     tokens: TokenResponse
+
+
+class LoginResponse(BaseModel):
+    """Public login response body.
+
+    Deliberately has no ``tokens`` field: session tokens are delivered via
+    httpOnly cookies only, so token material never reaches browser JavaScript.
+    """
+
+    user: UserResponse
 
 
 # =============================================================================
@@ -393,7 +405,7 @@ def logout(refresh_token: str) -> None:
 
 def get_current_user(
     authorization: str | None = None,
-    request: Request | None = None,
+    request: Request = None,
 ) -> UserResponse:
     """Get current authenticated user from access token.
     
@@ -449,15 +461,21 @@ def require_permission(required_permission: str):
 
 
 def get_current_user_from_request(request: Request) -> UserResponse:
-    """Dependency that gets current user from request (cookie or header)."""
-    return get_current_user(request=request)
+    """Dependency that gets current user from request (cookie or header).
+
+    Reads the Authorization header directly from the request so that
+    non-browser API clients (CLI, service accounts, Unity) can still use
+    Bearer tokens. Browsers use the httpOnly cookie path.
+    """
+    authorization = request.headers.get("Authorization")
+    return get_current_user(authorization=authorization, request=request)
 
 
 def create_auth_routes(app: FastAPI) -> None:
     """Add authentication routes to the FastAPI app."""
 
-    @app.post("/api/auth/login", response_model=AuthResponse)
-    async def auth_login(request: LoginRequest, response: Response) -> AuthResponse:
+    @app.post("/api/auth/login", response_model=LoginResponse)
+    async def auth_login(request: LoginRequest, response: Response) -> LoginResponse:
         """Login with username and password.
 
         SECURITY: Returns tokens ONLY in httpOnly cookies, NOT in response body.
@@ -484,8 +502,11 @@ def create_auth_routes(app: FastAPI) -> None:
             max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         )
 
-        # Return user only - tokens are in cookies
-        return AuthResponse(user=result.user, tokens=result.tokens)
+        # Return user only - tokens are in httpOnly cookies, never in the body.
+        # Exposing token material in the JSON body would let any script running
+        # in the page (or any XSS) read the session token, which is exactly what
+        # the httpOnly cookie is meant to prevent.
+        return LoginResponse(user=result.user)
 
     @app.post("/api/auth/refresh", response_model=dict)
     async def auth_refresh(request: Request, response: Response) -> dict:

@@ -177,10 +177,10 @@ class TestAuthRoutes:
         app = FastAPI()
         auth.create_auth_routes(app)
 
-        return TestClient(app)
+        return TestClient(app, base_url="https://testserver")
 
     def test_login_endpoint(self, client):
-        """Login endpoint returns tokens."""
+        """Login endpoint returns user info and sets session cookies."""
         response = client.post(
             "/api/auth/login",
             json={"username": "operator", "password": "operator123"},
@@ -188,8 +188,10 @@ class TestAuthRoutes:
 
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data["tokens"]
-        assert "refresh_token" in data["tokens"]
+        # Token material is delivered via httpOnly cookies, not in the body
+        assert "tokens" not in data
+        assert response.cookies.get("access_token")
+        assert response.cookies.get("refresh_token")
         assert data["user"]["username"] == "operator"
 
     def test_login_invalid_credentials(self, client):
@@ -208,19 +210,16 @@ class TestAuthRoutes:
         assert response.status_code == 401
 
     def test_me_endpoint_with_auth(self, client):
-        """Me endpoint returns user info with valid token."""
-        # Login first
+        """Me endpoint returns user info for an authenticated session."""
+        # Login first - the session is established via httpOnly cookie
         login_response = client.post(
             "/api/auth/login",
             json={"username": "operator", "password": "operator123"},
         )
-        token = login_response.json()["tokens"]["access_token"]
+        assert login_response.status_code == 200
 
-        # Get user info
-        response = client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        # Get user info using the session cookie
+        response = client.get("/api/auth/me")
 
         assert response.status_code == 200
         data = response.json()
@@ -234,7 +233,7 @@ class TestAuthRoutes:
             "/api/auth/login",
             json={"username": "operator", "password": "operator123"},
         )
-        refresh_token = login_response.json()["tokens"]["refresh_token"]
+        refresh_token = login_response.cookies.get("refresh_token")
 
         # Refresh
         response = client.post(
@@ -243,7 +242,9 @@ class TestAuthRoutes:
         )
 
         assert response.status_code == 200
-        assert "access_token" in response.json()
+        # Token material is delivered via httpOnly cookies, never in the body
+        assert "access_token" not in response.json()
+        assert response.cookies.get("access_token")
 
     def test_logout_endpoint(self, client):
         """Logout endpoint invalidates token."""
@@ -252,7 +253,7 @@ class TestAuthRoutes:
             "/api/auth/login",
             json={"username": "operator", "password": "operator123"},
         )
-        refresh_token = login_response.json()["tokens"]["refresh_token"]
+        refresh_token = login_response.cookies.get("refresh_token")
 
         # Logout
         response = client.post(
@@ -300,7 +301,7 @@ class TestCookieBasedAuthIntegration:
         app = FastAPI()
         auth_module.create_auth_routes(app)
         
-        return TestClient(app)
+        return TestClient(app, base_url="https://testserver")
 
     def test_login_sets_httponly_cookies(self, client):
         """Login should set httpOnly, Secure cookies."""
@@ -316,32 +317,38 @@ class TestCookieBasedAuthIntegration:
         assert "access_token" in cookies
         assert "refresh_token" in cookies
         
-        # Verify cookie attributes
-        access_cookie = cookies["access_token"]
-        assert access_cookie["httponly"] is True
-        assert access_cookie["secure"] is True
-        assert access_cookie["samesite"] == "strict"
+        # Verify cookie attributes from the raw Set-Cookie headers
+        set_cookie_headers = response.headers.get_list("set-cookie")
+        access_header = next(
+            h for h in set_cookie_headers if h.startswith("access_token=")
+        )
+        assert "httponly" in access_header.lower()
+        assert "secure" in access_header.lower()
+        assert "samesite=strict" in access_header.lower()
 
-    def test_login_response_contains_tokens_for_backwards_compat(self, client):
-        """Login response still contains tokens for backwards compatibility.
-        
-        Note: In production, frontend should use cookies, not response body.
+    def test_login_response_does_not_expose_tokens(self, client):
+        """Login response body must NOT contain token material.
+
+        Tokens are delivered via httpOnly cookies only. Returning them in the
+        body would let any script in the page read the session token.
         """
         response = client.post(
             "/api/auth/login",
             json={"username": "operator", "password": "operator123"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
-        # Response body still has tokens (for backwards compat)
-        assert "tokens" in data
-        assert "access_token" in data["tokens"]
-        assert "refresh_token" in data["tokens"]
-        
-        # But primary auth should be via cookies
+
+        # No token material in the response body
+        assert "tokens" not in data
+        assert "access_token" not in data
+        assert "refresh_token" not in data
+        assert "token" not in data
+
+        # Session is established via httpOnly cookies
         assert response.cookies.get("access_token") is not None
+        assert response.cookies.get("refresh_token") is not None
 
     def test_me_endpoint_requires_auth(self, client):
         """GET /api/auth/me should reject unauthenticated requests."""
@@ -431,7 +438,7 @@ class TestRoleBasedAccessNegative:
         app = FastAPI()
         auth_module.create_auth_routes(app)
         
-        return TestClient(app)
+        return TestClient(app, base_url="https://testserver")
 
     def test_no_auth_returns_401(self, client):
         """Request without auth should return 401."""

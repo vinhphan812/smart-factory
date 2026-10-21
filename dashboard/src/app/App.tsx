@@ -60,11 +60,12 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBounda
  * App wrapper that checks for existing session on mount
  */
 function AuthCheck({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, tokens, refreshSession } = useAuth();
+  const { isAuthenticated, refreshSession } = useAuth();
 
   useEffect(() => {
-    // Try to refresh session if tokens exist
-    if (tokens?.refresh_token && !isAuthenticated) {
+    // Session state is validated via the httpOnly cookie. If there is no
+    // valid session yet, try one cookie-based refresh before giving up.
+    if (!isAuthenticated) {
       refreshSession();
     }
   }, []);

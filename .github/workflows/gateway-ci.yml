@@ -46,8 +46,7 @@ jobs:
             --ignore=iot-gateway/tests/test_gateway.py \
             --ignore=iot-gateway/tests/test_ssrf.py \
             --ignore=iot-gateway/tests/test_time_sync.py \
-            --ignore=iot-gateway/tests/test_orion_ld.py \
-            --ignore=iot-gateway/tests/test_auth.py
+            --ignore=iot-gateway/tests/test_orion_ld.py
 
       - name: Coverage
         run: |
