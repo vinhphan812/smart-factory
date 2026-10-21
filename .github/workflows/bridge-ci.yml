@@ -1,3 +1,14 @@
+# ==============================================================================
+# Routing truth table (path → workflow):
+#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
+#   esp32-ukit-bridge/**                          → bridge-ci.yml  (this file)
+#   factory-control/**                            → factory-control-ci.yml
+#   iot-gateway/**                                → gateway-ci.yml
+#
+# Module ownership:
+#   esp32-ukit-bridge/    : ESP32 ↔ MEGA-uKit firmware + AMLP bridge
+# ==============================================================================
+
 name: CI
 
 on:

@@ -1,3 +1,14 @@
+# ==============================================================================
+# Routing truth table (path → workflow):
+#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
+#   esp32-ukit-bridge/**                          → bridge-ci.yml
+#   factory-control/**                            → factory-control-ci.yml  (this file)
+#   iot-gateway/**                                → gateway-ci.yml
+#
+# Module ownership:
+#   factory-control/    : Factory controller simulator + PLC adapter
+# ==============================================================================
+
 name: Factory Control Tests
 
 on:

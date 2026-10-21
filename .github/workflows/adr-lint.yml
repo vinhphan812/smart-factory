@@ -1,3 +1,18 @@
+# ==============================================================================
+# Routing truth table (path → workflow):
+#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml  (this file)
+#   esp32-ukit-bridge/**                          → bridge-ci.yml
+#   factory-control/**                            → factory-control-ci.yml
+#   iot-gateway/**                                → gateway-ci.yml
+#
+# Module ownership:
+#   adr/                          : global governance (all modules)
+#   docs/                         : global documentation
+#   esp32-ukit-bridge/            : ESP32 ↔ MEGA-uKit firmware + AMLP bridge
+#   factory-control/              : factory controller simulator + PLC adapter
+#   iot-gateway/                 : MQTT broker + HTTP/WebSocket API server
+# ==============================================================================
+
 name: ADR Lint & Architecture Governance Gate
 
 on:
@@ -28,7 +43,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
+          pip install pytest yamllint
+
+      - name: YAML lint (workflow hygiene)
+        run: yamllint .github/workflows/
 
       - name: Run ADR Linter & Governance Gate
         env:
