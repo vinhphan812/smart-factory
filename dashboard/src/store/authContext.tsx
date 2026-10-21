@@ -1,15 +1,19 @@
 /**
- * Auth context and provider for session management with refresh token pattern
+ * Auth context and provider for session management with cookie-based auth
+ * 
+ * SECURITY: P0 - Token persistence removed
+ * - No tokens stored in localStorage/sessionStorage
+ * - Uses httpOnly cookies via credentials: 'include' for all API calls
+ * - Session validated via /api/auth/me endpoint
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { gatewayApi } from '../services/api/client';
-import type { AuthUser, AuthTokens, LoginCredentials, PermissionScope } from '../contracts/gateway';
+import type { AuthUser, LoginCredentials, PermissionScope } from '../contracts/gateway';
 import { ROLE_PERMISSIONS } from '../contracts/gateway';
 
 interface AuthContextType {
   user: AuthUser | null;
-  tokens: AuthTokens | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -18,60 +22,33 @@ interface AuthContextType {
   refreshSession: () => Promise<void>;
   clearError: () => void;
   hasPermission: (permission: PermissionScope) => boolean;
-  getAccessToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Token refresh buffer time (refresh 1 minute before expiry)
-const REFRESH_BUFFER_SECONDS = 60;
-
-// Local storage keys
-const AUTH_STORAGE_KEY = 'smart-factory-auth';
-
-interface StoredAuth {
-  user: AuthUser;
-  tokens: AuthTokens;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [tokens, setTokens] = useState<AuthTokens | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTimer, setRefreshTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load persisted auth on mount
+  // Check for existing session on mount using /api/auth/me
+  // This validates the httpOnly cookie-based session
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const auth: StoredAuth = JSON.parse(stored);
-        setUser(auth.user);
-        setTokens(auth.tokens);
-
-        // Schedule token refresh
-        const timeUntilRefresh = (auth.tokens.expires_in - REFRESH_BUFFER_SECONDS) * 1000;
-        if (timeUntilRefresh > 0) {
-          const timer = setTimeout(() => {
-            refreshSession();
-          }, timeUntilRefresh);
-          setRefreshTimer(timer);
-        }
+    const checkSession = async () => {
+      try {
+        const currentUser = await gatewayApi.getCurrentUser();
+        setUser(currentUser);
+      } catch {
+        // No valid session - user is not authenticated
+        setUser(null);
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      // Ignore parse errors
-    }
+    };
+    
+    checkSession();
   }, []);
-
-  // Persist auth to localStorage
-  useEffect(() => {
-    if (user && tokens) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, tokens }));
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  }, [user, tokens]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -82,18 +59,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshTimer]);
 
-  const scheduleRefresh = useCallback((newTokens: AuthTokens) => {
+  const scheduleRefresh = useCallback(() => {
+    // Schedule token refresh via cookie-based refresh endpoint
+    // Refresh 5 minutes before the 30-minute access token expires
     if (refreshTimer) {
       clearTimeout(refreshTimer);
     }
 
-    const timeUntilRefresh = (newTokens.expires_in - REFRESH_BUFFER_SECONDS) * 1000;
-    if (timeUntilRefresh > 0) {
-      const timer = setTimeout(() => {
-        refreshSession();
-      }, timeUntilRefresh);
-      setRefreshTimer(timer);
-    }
+    // Refresh every 25 minutes (5 minutes before 30-minute expiry)
+    const refreshInterval = 25 * 60 * 1000;
+    const timer = setTimeout(() => {
+      refreshSession();
+    }, refreshInterval);
+    setRefreshTimer(timer);
   }, [refreshTimer]);
 
   const login = async (credentials: LoginCredentials) => {
@@ -101,12 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await gatewayApi.login(credentials);
-      const { user: newUser, tokens: newTokens } = response;
-
-      setUser(newUser);
-      setTokens(newTokens);
-      scheduleRefresh(newTokens);
+      // Login sets httpOnly cookies via response
+      // We still call it to get user info and establish session
+      const userInfo = await gatewayApi.login(credentials);
+      
+      setUser(userInfo.user);
+      
+      // Schedule token refresh
+      scheduleRefresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
@@ -122,39 +102,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRefreshTimer(null);
     }
 
-    // Attempt to invalidate refresh token (ignore errors)
+    // Attempt to invalidate session (ignore errors)
     try {
-      if (tokens?.refresh_token) {
-        await gatewayApi.logout(tokens.refresh_token);
-      }
+      await gatewayApi.logout();
     } catch {
       // Ignore logout errors - local state cleanup is more important
     }
 
     setUser(null);
-    setTokens(null);
     setIsLoading(false);
     setError(null);
   };
 
   const refreshSession = async () => {
-    if (!tokens?.refresh_token) {
-      await logout();
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const newTokens = await gatewayApi.refreshToken({
-        refresh_token: tokens.refresh_token,
-      });
-
-      setTokens(newTokens);
-      scheduleRefresh(newTokens);
+      // Refresh via cookie - this updates the httpOnly cookies
+      await gatewayApi.refreshToken();
+      
+      // Re-fetch user info to verify session is still valid
+      const currentUser = await gatewayApi.getCurrentUser();
+      setUser(currentUser);
+      
+      // Schedule next refresh
+      scheduleRefresh();
     } catch (error) {
-      console.error('Token refresh failed:', error);
-      await logout();
+      console.error('Session refresh failed:', error);
+      // Session is invalid - clear state
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -169,14 +145,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.permissions.includes(permission);
   };
 
-  const getAccessToken = (): string | null => {
-    return tokens?.access_token || null;
-  };
-
   const value: AuthContextType = {
     user,
-    tokens,
-    isAuthenticated: !!user && !!tokens,
+    isAuthenticated: !!user,
     isLoading,
     error,
     login,
@@ -184,7 +155,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession,
     clearError,
     hasPermission,
-    getAccessToken,
   };
 
   return (

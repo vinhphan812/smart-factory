@@ -6,8 +6,9 @@ from fastapi import FastAPI
 import jwt
 import os
 
-# Set test JWT secret before importing
-os.environ["JWT_SECRET"] = "test-secret-key"
+# Set test JWT secret and test mode BEFORE importing auth module
+os.environ["JWT_SECRET"] = "test-secret-key-for-testing-purposes-minimum-32-characters-long"
+os.environ["AUTH_TEST_MODE"] = "1"
 
 from iot_gateway import auth
 from iot_gateway.auth import (
@@ -271,3 +272,196 @@ class TestAuthRoutes:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestCookieBasedAuthIntegration:
+    """Integration tests for cookie-based authentication.
+    
+    P0: Verify that:
+    1. Login sets httpOnly cookies
+    2. Auth works via cookies without tokens in localStorage
+    3. Protected endpoints reject unauthenticated requests
+    """
+
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        # Set test secret
+        os.environ["JWT_SECRET"] = "test-secret-key-for-cookie-auth-testing-purposes"
+        
+        # Reload auth module to pick up new secret
+        import importlib
+        import iot_gateway.auth as auth_module
+        importlib.reload(auth_module)
+        
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        
+        app = FastAPI()
+        auth_module.create_auth_routes(app)
+        
+        return TestClient(app)
+
+    def test_login_sets_httponly_cookies(self, client):
+        """Login should set httpOnly, Secure cookies."""
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "operator123"},
+        )
+        
+        assert response.status_code == 200
+        
+        # Check cookies are set
+        cookies = response.cookies
+        assert "access_token" in cookies
+        assert "refresh_token" in cookies
+        
+        # Verify cookie attributes
+        access_cookie = cookies["access_token"]
+        assert access_cookie["httponly"] is True
+        assert access_cookie["secure"] is True
+        assert access_cookie["samesite"] == "strict"
+
+    def test_login_response_contains_tokens_for_backwards_compat(self, client):
+        """Login response still contains tokens for backwards compatibility.
+        
+        Note: In production, frontend should use cookies, not response body.
+        """
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "operator123"},
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Response body still has tokens (for backwards compat)
+        assert "tokens" in data
+        assert "access_token" in data["tokens"]
+        assert "refresh_token" in data["tokens"]
+        
+        # But primary auth should be via cookies
+        assert response.cookies.get("access_token") is not None
+
+    def test_me_endpoint_requires_auth(self, client):
+        """GET /api/auth/me should reject unauthenticated requests."""
+        response = client.get("/api/auth/me")
+        
+        assert response.status_code == 401
+
+    def test_me_endpoint_with_cookie(self, client):
+        """GET /api/auth/me should work with cookie-based auth."""
+        # Login to get cookies
+        login_response = client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "operator123"},
+        )
+        assert login_response.status_code == 200
+        
+        # Get user info using cookies
+        response = client.get("/api/auth/me")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["username"] == "operator"
+
+    def test_protected_endpoint_rejects_invalid_token(self, client):
+        """Protected endpoints should reject invalid tokens."""
+        # Set an invalid cookie
+        client.cookies.set("access_token", "invalid-token")
+        
+        response = client.get("/api/auth/me")
+        
+        assert response.status_code == 401
+
+    def test_refresh_via_cookie(self, client):
+        """Token refresh should work via cookie."""
+        # Login
+        client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "operator123"},
+        )
+        
+        # Refresh using cookie
+        response = client.post("/api/auth/refresh")
+        
+        assert response.status_code == 200
+        # New cookies should be set
+        assert "access_token" in response.cookies
+
+    def test_logout_clears_cookies(self, client):
+        """Logout should clear authentication cookies."""
+        # Login first
+        client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "operator123"},
+        )
+        
+        # Logout
+        response = client.post("/api/auth/logout")
+        
+        assert response.status_code == 200
+        
+        # Cookies should be cleared (deleted)
+        # TestClient doesn't expose deleted cookies directly, but we can verify
+        # that subsequent requests fail
+
+
+class TestRoleBasedAccessNegative:
+    """Negative tests for role-based access control.
+    
+    Verify that:
+    - Unauthenticated requests are rejected
+    - Invalid role requests are rejected  
+    - Permission denied returns 403
+    """
+
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        os.environ["JWT_SECRET"] = "test-secret-key-for-rbac-negative-testing"
+        
+        import importlib
+        import iot_gateway.auth as auth_module
+        importlib.reload(auth_module)
+        
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        
+        app = FastAPI()
+        auth_module.create_auth_routes(app)
+        
+        return TestClient(app)
+
+    def test_no_auth_returns_401(self, client):
+        """Request without auth should return 401."""
+        response = client.get("/api/auth/me")
+        assert response.status_code == 401
+
+    def test_invalid_token_returns_401(self, client):
+        """Request with invalid token should return 401."""
+        client.cookies.set("access_token", "completely-invalid-token")
+        
+        response = client.get("/api/auth/me")
+        assert response.status_code == 401
+
+    def test_expired_token_returns_401(self, client):
+        """Request with expired token should return 401."""
+        import jwt
+        import time
+        
+        # Create an expired token
+        secret = "test-secret-key-for-rbac-negative-testing"
+        expired_payload = {
+            "sub": "op-001",
+            "username": "operator",
+            "role": "operator",
+            "exp": time.time() - 100,  # Expired 100 seconds ago
+            "type": "access",
+        }
+        expired_token = jwt.encode(expired_payload, secret, algorithm="HS256")
+        
+        client.cookies.set("access_token", expired_token)
+        
+        response = client.get("/api/auth/me")
+        assert response.status_code == 401

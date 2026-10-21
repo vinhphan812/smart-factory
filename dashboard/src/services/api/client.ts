@@ -1,5 +1,10 @@
 /**
  * HTTP client for the Smart Factory Gateway REST API
+ * 
+ * SECURITY: Cookie-based authentication
+ * - All requests use credentials: 'include' to send httpOnly cookies
+ * - No tokens stored in localStorage/sessionStorage
+ * - Tokens managed via httpOnly cookies set by the server
  */
 
 import type {
@@ -14,9 +19,7 @@ import type {
   IncidentSeverity,
   LoginCredentials,
   AuthResponse,
-  AuthTokens,
   AuthUser,
-  RefreshTokenRequest,
   ProductionJob,
   ProductionMaterial,
   ProductionJobWithLineage,
@@ -37,7 +40,9 @@ class GatewayApiClient {
    * Get device snapshots (current state of all devices)
    */
   async getSnapshots(): Promise<DeviceSnapshot[]> {
-    const response = await fetch(`${this.baseUrl}/api/snapshot`);
+    const response = await fetch(`${this.baseUrl}/api/snapshot`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch snapshots: ${response.status}`);
     }
@@ -48,7 +53,9 @@ class GatewayApiClient {
    * Get system health status
    */
   async getHealth(): Promise<SystemHealth> {
-    const response = await fetch(`${this.baseUrl}/api/health`);
+    const response = await fetch(`${this.baseUrl}/api/health`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch health: ${response.status}`);
     }
@@ -69,7 +76,9 @@ class GatewayApiClient {
       metric,
     });
 
-    const response = await fetch(`${this.baseUrl}/api/metrics?${params}`);
+    const response = await fetch(`${this.baseUrl}/api/metrics?${params}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch metrics: ${response.status}`);
     }
@@ -93,7 +102,9 @@ class GatewayApiClient {
       params.set('severity', severity);
     }
 
-    const response = await fetch(`${this.baseUrl}/api/events?${params}`);
+    const response = await fetch(`${this.baseUrl}/api/events?${params}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch events: ${response.status}`);
     }
@@ -121,7 +132,9 @@ class GatewayApiClient {
       params.set('device_id', deviceId);
     }
 
-    const response = await fetch(`${this.baseUrl}/api/incidents?${params}`);
+    const response = await fetch(`${this.baseUrl}/api/incidents?${params}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch incidents: ${response.status}`);
     }
@@ -132,7 +145,9 @@ class GatewayApiClient {
    * Get a single incident by ID with full audit trail
    */
   async getIncident(incidentId: string): Promise<IncidentWithAudit> {
-    const response = await fetch(`${this.baseUrl}/api/incidents/${incidentId}`);
+    const response = await fetch(`${this.baseUrl}/api/incidents/${incidentId}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch incident: ${response.status}`);
     }
@@ -154,6 +169,7 @@ class GatewayApiClient {
         'X-Operator-Token': operatorToken,
       },
       body: JSON.stringify({ notes }),
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Failed to acknowledge incident: ${response.status}`);
@@ -176,6 +192,7 @@ class GatewayApiClient {
         'X-Operator-Token': operatorToken,
       },
       body: JSON.stringify({ notes }),
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Failed to resolve incident: ${response.status}`);
@@ -183,10 +200,11 @@ class GatewayApiClient {
     return response.json();
   }
 
-  // ============ Auth API Methods ============
+  // ============ Auth API Methods (Cookie-based) ============
 
   /**
    * Login with username and password
+   * Sets httpOnly cookies on successful login
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     const response = await fetch(`${this.baseUrl}/api/auth/login`, {
@@ -195,6 +213,7 @@ class GatewayApiClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(credentials),
+      credentials: 'include',
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Login failed' }));
@@ -204,32 +223,28 @@ class GatewayApiClient {
   }
 
   /**
-   * Refresh access token using refresh token
+   * Refresh access token using cookie-based auth
+   * Reads refresh_token from cookie, sets new tokens in cookies
    */
-  async refreshToken(request: RefreshTokenRequest): Promise<AuthTokens> {
+  async refreshToken(): Promise<void> {
     const response = await fetch(`${this.baseUrl}/api/auth/refresh`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Token refresh failed: ${response.status}`);
     }
-    return response.json();
+    // Tokens are in httpOnly cookies - no need to handle response body
   }
 
   /**
-   * Logout (invalidate refresh token)
+   * Logout (invalidate session)
+   * Clears httpOnly cookies
    */
-  async logout(refreshToken: string): Promise<void> {
+  async logout(): Promise<void> {
     const response = await fetch(`${this.baseUrl}/api/auth/logout`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Logout failed: ${response.status}`);
@@ -238,12 +253,11 @@ class GatewayApiClient {
 
   /**
    * Get current user info
+   * Uses cookie-based authentication
    */
-  async getCurrentUser(accessToken: string): Promise<AuthUser> {
+  async getCurrentUser(): Promise<AuthUser> {
     const response = await fetch(`${this.baseUrl}/api/auth/me`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Failed to get user: ${response.status}`);
@@ -251,7 +265,7 @@ class GatewayApiClient {
     return response.json();
   }
 
-  // ============ Job & Material API Methods ============
+  // ============ Job & Material API Methods (Cookie-based) ============
 
   /**
    * Get all production jobs with optional filters
@@ -264,7 +278,9 @@ class GatewayApiClient {
     if (status) {
       params.set('status', status);
     }
-    const response = await fetch(`${this.baseUrl}/api/jobs?${params}`);
+    const response = await fetch(`${this.baseUrl}/api/jobs?${params}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch jobs: ${response.status}`);
     }
@@ -276,7 +292,9 @@ class GatewayApiClient {
    * Get a single job by ID with full lineage
    */
   async getJob(jobId: string): Promise<ProductionJobWithLineage> {
-    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}`);
+    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch job: ${response.status}`);
     }
@@ -287,16 +305,15 @@ class GatewayApiClient {
    * Create a new production job
    */
   async createJob(
-    job: Partial<ProductionJob>,
-    accessToken: string
+    job: Partial<ProductionJob>
   ): Promise<ProductionJob> {
     const response = await fetch(`${this.baseUrl}/api/jobs`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify(job),
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Failed to create job: ${response.status}`);
@@ -308,14 +325,11 @@ class GatewayApiClient {
    * Cancel a production job
    */
   async cancelJob(
-    jobId: string,
-    accessToken: string
+    jobId: string
   ): Promise<ProductionJob> {
     const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/cancel`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Failed to cancel job: ${response.status}`);
@@ -338,7 +352,9 @@ class GatewayApiClient {
     if (batchId) {
       params.set('batch_id', batchId);
     }
-    const response = await fetch(`${this.baseUrl}/api/materials?${params}`);
+    const response = await fetch(`${this.baseUrl}/api/materials?${params}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch materials: ${response.status}`);
     }

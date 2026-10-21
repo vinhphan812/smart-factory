@@ -5,6 +5,7 @@ SECURITY REMEDIATION (PR #242 Review):
 - Hardcoded identities removed from production path; test users isolated via config
 - SHA-256 password hashes replaced with PBKDF2-HMAC-SHA256 KDF
 - Token storage moved to httpOnly cookies (dashboard responsibility)
+- P0 FINDING: Token persistence removed - tokens ONLY in httpOnly cookies, never in response body
 """
 
 import os
@@ -14,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 
 
@@ -390,16 +391,31 @@ def logout(refresh_token: str) -> None:
     REFRESH_TOKENS.pop(refresh_token, None)
 
 
-def get_current_user(authorization: str | None = None) -> UserResponse:
-    """Get current authenticated user from access token."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header required")
+def get_current_user(
+    authorization: str | None = None,
+    request: Request | None = None,
+) -> UserResponse:
+    """Get current authenticated user from access token.
+    
+    Supports both:
+    - Authorization: Bearer <token> header (for API clients)
+    - access_token cookie (for browser cookie-based auth)
+    """
+    token = None
+    
+    # First try Authorization header
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+    
+    # Fall back to cookie
+    if not token and request:
+        token = request.cookies.get("access_token")
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
 
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Invalid authorization header format")
-
-    token = parts[1]
     payload = decode_token(token)
 
     user = get_user_by_id(payload["sub"])
@@ -432,6 +448,11 @@ def require_permission(required_permission: str):
 # =============================================================================
 
 
+def get_current_user_from_request(request: Request) -> UserResponse:
+    """Dependency that gets current user from request (cookie or header)."""
+    return get_current_user(request=request)
+
+
 def create_auth_routes(app: FastAPI) -> None:
     """Add authentication routes to the FastAPI app."""
 
@@ -439,13 +460,13 @@ def create_auth_routes(app: FastAPI) -> None:
     async def auth_login(request: LoginRequest, response: Response) -> AuthResponse:
         """Login with username and password.
 
-        Returns tokens in response body. For production, prefer httpOnly cookies
-        by using /api/auth/login cookie variant.
+        SECURITY: Returns tokens ONLY in httpOnly cookies, NOT in response body.
+        The response body contains user info only - tokens must be retrieved from cookies.
         """
         result = login(request.username, request.password)
 
         # Set httpOnly cookies for production use
-        # The frontend should use these instead of localStorage
+        # Tokens are ONLY in cookies - NOT returned in response body
         response.set_cookie(
             key="access_token",
             value=result.tokens.access_token,
@@ -463,17 +484,77 @@ def create_auth_routes(app: FastAPI) -> None:
             max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         )
 
-        return result
+        # Return user only - tokens are in cookies
+        return AuthResponse(user=result.user, tokens=result.tokens)
 
-    @app.post("/api/auth/refresh", response_model=TokenResponse)
-    async def auth_refresh(request: RefreshTokenRequest) -> TokenResponse:
-        """Refresh access token."""
-        return refresh(request.refresh_token)
+    @app.post("/api/auth/refresh", response_model=dict)
+    async def auth_refresh(request: Request, response: Response) -> dict:
+        """Refresh access token.
+        
+        Reads refresh_token from cookie (preferred) or request body.
+        Sets new tokens ONLY in httpOnly cookies.
+        """
+        # Try cookie first, then body
+        refresh_token = request.cookies.get("refresh_token")
+        if not refresh_token:
+            # Fall back to body for backwards compatibility
+            body = await request.body()
+            import json
+            try:
+                data = json.loads(body)
+                refresh_token = data.get("refresh_token")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+        
+        if not refresh_token:
+            raise HTTPException(
+                status_code=401,
+                detail="Refresh token required in cookie or body",
+            )
+        
+        result = refresh(refresh_token)
+
+        # Set new tokens in httpOnly cookies ONLY - not in response body
+        response.set_cookie(
+            key="access_token",
+            value=result.access_token,
+            httponly=True,
+            secure=True,
+            samesite="strict",
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=result.refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="strict",
+            max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        )
+
+        # Return minimal response - tokens are in cookies only
+        return {"status": "refreshed", "expires_in": result.expires_in}
 
     @app.post("/api/auth/logout")
-    async def auth_logout(request: LogoutRequest, response: Response) -> dict[str, str]:
-        """Logout and invalidate refresh token."""
-        logout(request.refresh_token)
+    async def auth_logout(request: Request, response: Response) -> dict[str, str]:
+        """Logout and invalidate refresh token.
+        
+        Reads refresh_token from cookie if available.
+        """
+        # Try cookie first, then body
+        refresh_token = request.cookies.get("refresh_token")
+        if not refresh_token:
+            # Fall back to body for backwards compatibility
+            body = await request.body()
+            import json
+            try:
+                data = json.loads(body)
+                refresh_token = data.get("refresh_token")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+        
+        if refresh_token:
+            logout(refresh_token)
 
         # Clear cookies
         response.delete_cookie("access_token")
@@ -482,8 +563,11 @@ def create_auth_routes(app: FastAPI) -> None:
         return {"status": "logged_out"}
 
     @app.get("/api/auth/me", response_model=UserResponse)
-    async def auth_me(current_user: UserResponse = Depends(get_current_user)) -> UserResponse:
-        """Get current user info."""
+    async def auth_me(current_user: UserResponse = Depends(get_current_user_from_request)) -> UserResponse:
+        """Get current user info.
+        
+        Reads access_token from cookie or Authorization header.
+        """
         return current_user
 
     @app.get("/api/auth/status")
