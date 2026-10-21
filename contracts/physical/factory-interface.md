@@ -359,3 +359,9 @@ SAFETY_HALT --[each local controller safely reset + observed IDLE]--> IDLE
 | Brackets, Combine | Defined | Planned coordination/monitoring tests | BLOCKED where physical sensing applies | Not applicable as independent actuator |
 
 This file itself establishes **L0 static design evidence only**. Any implementation must add versioned schemas, producer/consumer examples, malformed/duplicate/stale/offline safety tests, and applicable L1–L4 evidence.
+
+## References
+
+- **PR #238** (this document) — Physical Factory Module Interface Contract
+- **PR #239** — [`capability-matrix.md`](capability-matrix.md) — Typed I/O capability per module
+- **PR #240** — [`end-to-end-sequence.md`](end-to-end-sequence.md) — Canonical material flow through all 9 modules
