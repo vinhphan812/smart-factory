@@ -8,6 +8,8 @@
 **Repository:** vinhphan812/smart-factory
 **Evidence:** GitHub REST API via `gh` CLI v2.x, authenticated as vinhphan812
 
+**Related document:** the wave/priority/gate backlog audit for the open-issue set is [`docs/tracking/backlog-audit-2026-10.md`](backlog-audit-2026-10.md) (Issue #188; 2026-10-20 snapshot with a dated 2026-10-21 addendum).
+
 ---
 
 ## L0 — Static Count Summary

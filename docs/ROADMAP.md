@@ -18,3 +18,5 @@ P0 = integration/safety blocker. P1 = core feature. P2 = quality, evidence, trai
 [Master Issue #52](https://github.com/vinhphan812/smart-factory/issues/52) indexes the entire backlog. Verify dependencies, owner/claim and linked PR before starting; do not duplicate work already done. Comment `/claim` with plan and ETA and request manual assignment. Mark hardware/SDK dependency `BLOCKED: reason`. PR should link issue, tests and evidence before closing.
 
 A closed software Issue is not proof of hardware integration; test levels and real-device evidence are separate.
+
+Backlog triage snapshot: [`docs/tracking/backlog-audit-2026-10.md`](tracking/backlog-audit-2026-10.md) (Issue #188) — wave, priority and hardware-gate triage of the open-issue set, with a dated addendum for current counts.
