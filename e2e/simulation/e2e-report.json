@@ -1,9 +1,9 @@
 {
   "schema": "smart-factory/e2e-report/v1",
-  "generated_at": "2026-10-22T02:56:34Z",
+  "generated_at": "2026-10-22T03:18:18Z",
   "evidence_level": "L2 simulation",
   "hardware_required": false,
-  "target_sha": "8ee8a52161383c4ef31dac1f2d5f381450647aa1",
+  "target_sha": "0400e0de0ccd39d1dda858bf8b1e29a6a7cad82a",
   "compose_file": "e2e/simulation/docker-compose.e2e.yml",
   "endpoints": {
     "gateway_http": "http://localhost:8001",
@@ -14,81 +14,81 @@
   },
   "totals": {
     "tests": 8,
-    "passed": 0,
-    "failed": 8
+    "passed": 8,
+    "failed": 0
   },
   "results": [
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_happy_production_cycle",
-      "outcome": "failed",
-      "duration_s": 0.083,
+      "outcome": "passed",
+      "duration_s": 0.142,
       "scenario_id": "SCENARIO-01",
       "scenario_name": "happy_production_cycle",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:93: in test_happy_production_cycle\n    events = wait_until(\ne2e\\simulation\\scenarios\\conftest.py:226: in _wait\n    last = predicate()\n           ^^^^^^^^^^^\ne2e\\simulation\\scenarios\\test_scenarios.py:94: in <lambda>\n    lambda: [e for e in gateway_events(device_id=device) if e[\"event_type\"] != \"heartbeat\"],\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ne2e\\simulation\\scenarios\\conftest.py:172: in _events\n    assert status == 200, f\"GET {url} -> {status}: {body[:200]!r}\"\nE   AssertionError: GET http://localhost:8001/events?limit=500&device_id=e2e-happy-9264 -> 0: b'Remote end closed connection without response'\nE   assert 0 == 200"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_malformed_crc_is_rejected",
-      "outcome": "failed",
-      "duration_s": 0.044,
+      "outcome": "passed",
+      "duration_s": 0.066,
       "scenario_id": "SCENARIO-02",
       "scenario_name": "malformed_crc",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:138: in test_malformed_crc_is_rejected\n    wait_until(\ne2e\\simulation\\scenarios\\conftest.py:226: in _wait\n    last = predicate()\n           ^^^^^^^^^^^\ne2e\\simulation\\scenarios\\test_scenarios.py:139: in <lambda>\n    lambda: gateway_events(device_id=\"e2e-crc-probe\"),\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ne2e\\simulation\\scenarios\\conftest.py:172: in _events\n    assert status == 200, f\"GET {url} -> {status}: {body[:200]!r}\"\nE   AssertionError: GET http://localhost:8001/events?limit=500&device_id=e2e-crc-probe -> 0: b'[WinError 10053] An established connection was aborted by the software in your host machine'\nE   assert 0 == 200"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_duplicate_and_late_ack",
-      "outcome": "failed",
-      "duration_s": 0.03,
+      "outcome": "passed",
+      "duration_s": 0.052,
       "scenario_id": "SCENARIO-03",
       "scenario_name": "duplicate_late_ack",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:174: in test_duplicate_and_late_ack\n    events = wait_until(\ne2e\\simulation\\scenarios\\conftest.py:226: in _wait\n    last = predicate()\n           ^^^^^^^^^^^\ne2e\\simulation\\scenarios\\test_scenarios.py:175: in <lambda>\n    lambda: [e for e in gateway_events(device_id=device) if e[\"event_type\"] == \"command_ack\"],\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ne2e\\simulation\\scenarios\\conftest.py:172: in _events\n    assert status == 200, f\"GET {url} -> {status}: {body[:200]!r}\"\nE   AssertionError: GET http://localhost:8001/events?limit=500&device_id=e2e-dup-9264 -> 0: b'[WinError 10053] An established connection was aborted by the software in your host machine'\nE   assert 0 == 200"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_broker_outage_and_recovery",
-      "outcome": "failed",
-      "duration_s": 0.004,
+      "outcome": "passed",
+      "duration_s": 10.104,
       "scenario_id": "SCENARIO-04",
       "scenario_name": "broker_outage",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:202: in test_broker_outage_and_recovery\n    assert status == 200, \"gateway must be healthy before the outage\"\nE   AssertionError: gateway must be healthy before the outage\nE   assert 0 == 200"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_sqlite_lock_does_not_wedge_gateway",
-      "outcome": "failed",
-      "duration_s": 8.049,
+      "outcome": "passed",
+      "duration_s": 47.92,
       "scenario_id": "SCENARIO-05",
       "scenario_name": "sqlite_lock",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:268: in test_sqlite_lock_does_not_wedge_gateway\n    assert status == 200, f\"gateway unhealthy under DB lock: {status} {body[:200]!r}\"\nE   AssertionError: gateway unhealthy under DB lock: 0 b'[WinError 10053] An established connection was aborted by the software in your host machine'\nE   assert 0 == 200"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_ws_reconnect_resyncs_without_gap",
-      "outcome": "failed",
-      "duration_s": 0.049,
+      "outcome": "passed",
+      "duration_s": 0.41,
       "scenario_id": "SCENARIO-06",
       "scenario_name": "ws_reconnect",
       "tags": [],
-      "longrepr": "C:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\http11.py:241: in parse\n    status_line = yield from parse_line(read_line)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\http11.py:309: in parse_line\n    line = yield from read_line(MAX_LINE_LENGTH)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\streams.py:46: in read_line\n    raise EOFError(f\"stream ends after {p} bytes, before end of line\")\nE   EOFError: stream ends after 0 bytes, before end of line\n\nThe above exception was the direct cause of the following exception:\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\client.py:301: in parse\n    response = yield from Response.parse(\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\http11.py:243: in parse\n    raise EOFError(\"connection closed while reading HTTP status line\") from exc\nE   EOFError: connection closed while reading HTTP status line\n\nThe above exception was the direct cause of the following exception:\ne2e\\simulation\\scenarios\\test_scenarios.py:314: in test_ws_reconnect_resyncs_without_gap\n    first = asyncio.run(_run())\n            ^^^^^^^^^^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\tools\\python-3.14.7+20260901-win32-x64\\Lib\\asyncio\\runners.py:205: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\tools\\python-3.14.7+20260901-win32-x64\\Lib\\asyncio\\runners.py:128: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\tools\\python-3.14.7+20260901-win32-x64\\Lib\\asyncio\\base_events.py:720: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\ne2e\\simulation\\scenarios\\test_scenarios.py:310: in _run\n    async with websockets.connect(ws_url, open_timeout=10) as ws:\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\asyncio\\client.py:587: in __aenter__\n    return await self\n           ^^^^^^^^^^\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\asyncio\\client.py:543: in __await_impl__\n    await self.connection.handshake(\nC:\\Users\\Admin\\AppData\\Local\\hermes\\installs\\902a4fe5d10abbac\\environments\\fb2edb52a5f34ff5a061db65b8581518\\venv\\Lib\\site-packages\\websockets\\asyncio\\client.py:114: in handshake\n    raise self.protocol.handshake_exc\nE   websockets.exceptions.InvalidMessage: did not receive a valid HTTP response"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_authorization_denial",
-      "outcome": "failed",
-      "duration_s": 8.062,
+      "outcome": "passed",
+      "duration_s": 8.078,
       "scenario_id": "SCENARIO-07",
       "scenario_name": "authorization_denial",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:365: in test_authorization_denial\n    assert not gateway_events(device_id=device), \"read-only gateway user was able to publish\"\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ne2e\\simulation\\scenarios\\conftest.py:172: in _events\n    assert status == 200, f\"GET {url} -> {status}: {body[:200]!r}\"\nE   AssertionError: GET http://localhost:8001/events?limit=500&device_id=e2e-authz-probe -> 0: b'Remote end closed connection without response'\nE   assert 0 == 200"
+      "longrepr": null
     },
     {
       "nodeid": "e2e/simulation/scenarios/test_scenarios.py::test_yanshee_offline_does_not_break_core",
-      "outcome": "failed",
-      "duration_s": 0.004,
+      "outcome": "passed",
+      "duration_s": 20.91,
       "scenario_id": "SCENARIO-08",
       "scenario_name": "yanshee_offline",
       "tags": [],
-      "longrepr": "e2e\\simulation\\scenarios\\test_scenarios.py:374: in test_yanshee_offline_does_not_break_core\n    assert status == 200, body\nE   AssertionError: b'Remote end closed connection without response'\nE   assert 0 == 200"
+      "longrepr": null
     }
   ]
 }
