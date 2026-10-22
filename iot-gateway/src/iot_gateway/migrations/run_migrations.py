@@ -2,10 +2,12 @@
 
 Usage:
     python -m iot_gateway.migrations.run_migrations [--db PATH] [--verbose] [--dry-run]
+    python -m iot_gateway.migrations.run_migrations --status [--db PATH]
+    python -m iot_gateway.migrations.run_migrations --downgrade-to N [--db PATH]
 
 Exit codes:
-    0  migrations applied or already current
-    1  error
+    0  migrations applied (or already current) / status printed
+    1  error (including an unsupported schema version)
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ import asyncio
 import logging
 import sys
 import aiosqlite
+
+from iot_gateway.migrations import schema_version as sv
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger("run_migrations")
@@ -28,13 +32,7 @@ async def _apply_migration_001(conn: aiosqlite.Connection, *, dry_run: bool = Fa
     changed = False
 
     # 1. Add timing columns to events (if missing)
-    TIMING_COLUMNS = {
-        "event_timestamp_ms": "INTEGER NOT NULL DEFAULT 0",
-        "received_at":        "TEXT NOT NULL DEFAULT ''",
-        "latency_ms":         "INTEGER NOT NULL DEFAULT 0",
-        "stale":              "INTEGER NOT NULL DEFAULT 0",
-        "out_of_order":       "INTEGER NOT NULL DEFAULT 0",
-    }
+    TIMING_COLUMNS = dict(sv.TIMING_COLUMNS)
 
     # Check if events table exists
     cur = await conn.execute(
@@ -76,30 +74,62 @@ async def _apply_migration_001(conn: aiosqlite.Connection, *, dry_run: bool = Fa
     return changed
 
 
-async def run_migrations(db_url: str, *, dry_run: bool = False, verbose: bool = False) -> int:
-    """Apply all pending migrations to the database at db_url.
+def _normalise_db_path(db_url: str) -> str:
+    """Convert sqlite+aiosqlite:/// or sqlite:/// to a plain filesystem path."""
+    if db_url.startswith("sqlite"):
+        return db_url.split("///", 1)[-1]
+    return db_url
+
+
+async def run_migrations(
+    db_url: str,
+    *,
+    dry_run: bool = False,
+    verbose: bool = False,
+    downgrade_to: int | None = None,
+    status_only: bool = False,
+) -> int:
+    """Apply (or revert) migrations on the database at db_url.
 
     db_url may be an aiosqlite-compatible path (absolute or relative).
     """
     if verbose:
         log.setLevel(logging.DEBUG)
 
-    # Convert sqlite+aiosqlite:/// or sqlite:/// to plain path
-    if db_url.startswith("sqlite"):
-        db_url = db_url.split("///", 1)[-1]
+    db_path = _normalise_db_path(db_url)
 
-    log.info("Database: %s", db_url)
+    log.info("Database: %s", db_path)
     log.info("Mode:    %s", "DRY-RUN" if dry_run else "LIVE")
 
-    async with aiosqlite.connect(db_url, timeout=30) as conn:
-        changed = await _apply_migration_001(conn, dry_run=dry_run)
-        if not dry_run:
-            await conn.commit()
+    # isolation_level=None puts the driver in autocommit mode so the runner
+    # can issue explicit BEGIN IMMEDIATE transactions. Without it sqlite3
+    # implicitly opens a transaction before the first DML statement and the
+    # explicit BEGIN fails with "cannot start a transaction within a
+    # transaction".
+    async with aiosqlite.connect(db_path, timeout=30, isolation_level=None) as conn:
+        await sv.ensure_version_table(conn)
+        current = await sv.get_schema_version(conn)
+        await conn.commit()
 
-    if changed:
-        log.info("Migration 001 applied — timing columns added.")
+        if status_only:
+            print(f"schema version: {current}")
+            print(f"supported range: {sv.MIN_SUPPORTED_VERSION}..{sv.CURRENT_SCHEMA_VERSION}")
+            print(f"applied migrations: {await sv.applied_migrations(conn)}")
+            return 0
+
+        if downgrade_to is not None:
+            plan = await sv.downgrade_migrations(
+                conn, target=downgrade_to, dry_run=dry_run
+            )
+        else:
+            plan = await sv.apply_migrations(conn, dry_run=dry_run)
+
+        log.info("%s", plan.describe())
+
+    if plan.is_empty:
+        log.info("Already up-to-date (schema version %d).", current)
     else:
-        log.info("Already up-to-date (migration 001 already applied or events table absent).")
+        log.info("Schema version now %d.", plan.to_version)
 
     return 0
 
@@ -119,6 +149,21 @@ def main() -> int:
         help="Show statements without executing them.",
     )
     parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Print the current schema version and exit.",
+    )
+    parser.add_argument(
+        "--downgrade-to",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            f"Revert the schema down to version N "
+            f"(minimum supported: {sv.MIN_SUPPORTED_VERSION})."
+        ),
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable debug logging.",
@@ -126,7 +171,15 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        return asyncio.run(run_migrations(args.db, dry_run=args.dry_run, verbose=args.verbose))
+        return asyncio.run(
+            run_migrations(
+                args.db,
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+                downgrade_to=args.downgrade_to,
+                status_only=args.status,
+            )
+        )
     except Exception as exc:
         log.error("Migration failed: %s", exc)
         return 1

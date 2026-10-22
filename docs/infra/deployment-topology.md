@@ -10,12 +10,12 @@
 | Service | Language / Runtime | Port(s) | Role |
 |---|---|---|---|
 | **mqtt-broker** | eclipse-mosquitto:2 | 1883 (plain), 8883 (TLS) | Message bus — all southbound/northbound MQTT traffic |
-| **iot-gateway** | Python 3.11+ / FastAPI + websockets | 8000 (WS/HTTP) | MQTT ingestion → SQLite → WebSocket/HTTP broadcast |
-| **factory-control** | Python 3.10+ / asyncio | 8001 (HTTP) | Nine-module device adapters, production cycle scheduler |
+| **iot-gateway** | Python 3.12 / FastAPI + websockets | 8000 (WS), 8001 (REST) | MQTT ingestion → SQLite → WebSocket/HTTP broadcast |
+| **factory-control** | Python 3.12 / asyncio | 8001 (container) / 8002 (host) | Nine-module device adapters, production cycle scheduler |
 | **dashboard** | TypeScript / Vite + React | 5173 (dev) / 80 (prod) | Operator UI — telemetry charts, event timeline, incident ACK |
-| **edge-ai-robot** | Python 3.11+ / httpx + websockets | 8002 (HTTP) | MiniAlpha robot adapter, bounded skill definitions |
+| **edge-ai-robot** | Python 3.12 / httpx + websockets | 8002 (container) / 8003 (host) | MiniAlpha robot adapter, bounded skill definitions |
 | **fiware-orion-ld** | Orion-LD 1.5.0 | 1026 (NGSI-LD) | FIWARE context broker — entity registry, subscriptions |
-| **fiware-mongodb** | MongoDB 7.0 | 27017 | Orion-LD persistence |
+| **fiware-mongodb** | MongoDB 5.0 | 27017 | Orion-LD persistence |
 | **fiware-json-ld-ctx** | nginx:alpine | 3000 | Custom NGSI-LD @context documents |
 
 ---
@@ -25,7 +25,7 @@
 ```
 Internet / Operator Browser
         │
-        ├──► dashboard (:5173 / :80) ──HTTP/WS──► iot-gateway (:8000)
+        ├──► dashboard (:5173 / :80) ──HTTP/WS──► iot-gateway (:8000 WS, :8001 REST)
         │                                               │
         │                                               ├──► mqtt-broker (:1883) ──Southbound──► ESP32 Bridges
         │                                               │
@@ -35,9 +35,9 @@ Internet / Operator Browser
         │                                               │
         │                                               └──► fiware-json-ld-ctx (:3000)
         │
-        ├──► factory-control (:8001)
+        ├──► factory-control (:8002 host)
         │
-        └──► edge-ai-robot (:8002)
+        └──► edge-ai-robot (:8003 host)
                    │
                    └──► mqtt-broker (:1883)
 ```
@@ -64,25 +64,33 @@ dashboard  (depends on iot-gateway)
 
 | Service | Endpoint | Expected Response |
 |---|---|---|
-| mqtt-broker | `localhost:1883` | mosquitto starts; TCP open |
-| iot-gateway | `GET http://localhost:8000/health` | `200 {"status":"ok","version":"..."}` |
-| factory-control | `GET http://localhost:8001/health` | `200 {"status":"ok"}` |
-| edge-ai-robot | `GET http://localhost:8002/health` | `200 {"status":"ok"}` |
-| fiware-orion-ld | `GET http://localhost:1026/health` | `200 {"orionld version":"..."}` |
-| fiware-mongodb | `mongosh --eval "db.adminCommand('ping')"` | `{ok:1}` |
+| mqtt-broker | `mosquitto_pub` probe (authenticated) | publish accepted on `smart-factory/healthcheck` |
+| iot-gateway | `GET http://localhost:8001/health` | `200 {"status":"ok","event_count":N,"high_watermark":N}` |
+| factory-control | `GET http://localhost:8002/health` | `200 {"status":"ok"}` |
+| edge-ai-robot | `GET http://localhost:8003/health` | `200 {"status":"ok"}` |
+| fiware-orion-ld | `GET http://localhost:1026/version` | `200 {"orionld version":"1.5.0",...}` |
+| fiware-mongodb | `mongo --eval "db.adminCommand('ping')"` | `{ok:1}` |
 | fiware-json-ld-ctx | `GET http://localhost:3000/health` | `200` (nginx) |
-| dashboard | `GET http://localhost/health` (prod) / Vite dev server | `200` |
+| dashboard | `GET http://localhost:5173/` | `200` (Vite dev server) |
+
+> **Port notes.** The gateway serves its WebSocket transport on `8000` and its
+> REST API on `8001`. Only `8001` exposes `/health`. The compose file maps
+> `factory-control` to host port `8002` and `edge-ai-robot` to host port `8003`
+> (the container-internal ports are `8001` and `8002` respectively).
+
+> **Orion-LD has no `/health` route.** `GET /health` answers HTTP 400
+> (`service not found`). Use `GET /version`, which answers HTTP 200. Any probe
+> must use `curl -f` as well: without it `curl` exits 0 on an HTTP 400 and the
+> container is reported healthy while the broker is unusable.
 
 ### Gateway health payload
 
 ```json
 {
   "status": "ok",
-  "version": "0.1.0",
-  "mqtt_connected": true,
-  "store_event_count": 42,
-  "store_high_watermark": 42,
-  "uptime_seconds": 3600
+  "event_count": 42,
+  "high_watermark": 42,
+  "queue_dropped_count": 0
 }
 ```
 
@@ -92,258 +100,58 @@ dashboard  (depends on iot-gateway)
 
 File: `docker-compose.full.yml` (lives at repo root)
 
-```yaml
-# docker-compose.full.yml
-# Full-stack Smart Factory — all services except hardware-in-the-loop.
-# No ESP32, no physical uKit motors. Mock MQTT publisher drives the simulation.
-#
-# Usage:
-#   docker compose -f docker-compose.full.yml up -d
-#   docker compose -f docker-compose.full.yml ps
-#   docker compose -f docker-compose.full.yml logs -f iot-gateway
-#
-# Teardown:
-#   docker compose -f docker-compose.full.yml down -v
+File: `docker-compose.full.yml` (lives at repo root). It is the **source of
+truth** — this document does not duplicate its contents, so the two cannot
+drift.
 
-services:
-  # ── Infrastructure ────────────────────────────────────────────────────────
+```bash
+docker compose -f docker-compose.full.yml up -d
+docker compose -f docker-compose.full.yml ps
+docker compose -f docker-compose.full.yml logs -f iot-gateway
+```
 
-  mqtt:
-    image: eclipse-mosquitto:2
-    container_name: sf-mqtt
-    restart: unless-stopped
-    ports:
-      - "${MQTT_PORT:-1883}:1883"
-    volumes:
-      - mqtt-data:/mosquitto/data
-      - mqtt-conf:/mosquitto/config
-      - ./infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
-    env_file:
-      - .env
-    entrypoint: ["sh", "/docker-entrypoint.d/init.sh"]
-    healthcheck:
-      test: ["CMD", "mosquitto_pub", "-t", "test", "-m", "ping", "-h", "localhost", "-p", "1883"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      - sf-net
+### Pinned images and why
 
-  # ── FIWARE Context Broker ─────────────────────────────────────────────────
+| Image | Reason (each was a real failure before it was fixed) |
+|---|---|
+| `mongo:5.0` | Orion-LD 1.5.0 uses the deprecated MongoDB C++ **legacy driver**, which cannot speak to MongoDB >= 6.0. With `mongo:7.0` the broker logs `Unsupported OP_QUERY command: listDatabases` + `mongo::MsgAssertionException` and never becomes ready. |
+| `mongo:5.0` (shell) | `mongo:5.0` ships the legacy `mongo` shell; `mongosh` only exists from `mongo:6.0` onwards, so the health probe must call `mongo`. |
+| `quay.io/fiware/orion-ld:1.5.0` | The deployed FIWARE version. Reads `ORIONLD_MONGO_HOST` / `ORIONLD_MONGO_DB` — `ORION_LD_MONGO_HOST` is silently ignored and the broker then tries `localhost:27017` inside its own container. |
+| `python:3.12-slim` | Gateway/factory-control/robot runtime. It has **neither `curl` nor `wget`**, so every health probe for a Python service uses the interpreter's own `urllib`. |
+| `eclipse-mosquitto:2` | Broker. Runs with `allow_anonymous false`, so the health probe must authenticate. |
 
-  mongodb:
-    image: mongo:7.0
-    container_name: sf-mongodb
-    restart: unless-stopped
-    ports:
-      - "${MONGODB_PORT:-27017}:27017"
-    volumes:
-      - mongodb-data:/data/db
-      - mongodb-config:/data/configdb
-    env_file:
-      - fiware/mongodb.env
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - sf-net
+### Deployment profiles (#182 SPEC-2)
 
-  orion-ld:
-    image: quay.io/fiware/orion-ld:1.5.0
-    container_name: sf-orion-ld
-    restart: unless-stopped
-    ports:
-      - "${ORION_LD_PORT:-1026}:1026"
-    environment:
-      ORION_LD_HOST: 0.0.0.0
-      ORION_LD_PORT: 1026
-      ORION_LD_MONGO_HOST: mongodb
-      ORION_LD_MONGO_DB: ${MONGODB_DB:-orion}
-      ORION_LD_LOG_LEVEL: info
-      ORION_LD_USE_NGSI_LD_API: "true"
-      ORION_LD_INFORMATION_MODEL: ngsi-ld
-      ORION_LD_CORS_ORIGINS: "*"
-      ORION_LD_MAX_LIFETIME: 0
-      ORION_LD_ENTITY_ID_REGEX: ".*"
-    env_file:
-      - fiware/orion-ld.env
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-s", "http://localhost:1026/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    networks:
-      - sf-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+Selected with `COMPOSE_PROFILES` (comma separated). Services without a
+`profiles:` key belong to every profile.
 
-  json-ld-context:
-    image: nginx:alpine
-    container_name: sf-json-ld-ctx
-    restart: unless-stopped
-    ports:
-      - "${JSON_LD_PORT:-3000}:80"
-    volumes:
-      - ./fiware/contexts:/usr/share/nginx/html:ro
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-    networks:
-      - sf-net
+| Profile | Selected by | Contents | Actuation |
+|---|---|---|---|
+| `LOCAL_SIM` | default | broker, mongo, orion-ld, json-ld-context, iot-gateway, factory-control, edge-ai-robot, dashboard | permitted (software only) |
+| `LAB_HIL` | `COMPOSE_PROFILES=LAB_HIL` | everything above **plus** `mock-hil-bridge` (a software device simulator) | permitted (software only) |
+| `PRODUCTION_READONLY` | `COMPOSE_PROFILES=PRODUCTION_READONLY` | observation plane; `factory-control-readonly` is deployed **instead of** the actuating `factory-control` | **not available** — no actuation code path exists in this profile |
 
-  # ── Core Services ────────────────────────────────────────────────────────
+```bash
+# Read-only deployment: observation only, no command path to a device
+COMPOSE_PROFILES=PRODUCTION_READONLY docker compose -f docker-compose.full.yml up -d
+```
 
-  iot-gateway:
-    image: python:3.12-slim
-    container_name: sf-iot-gateway
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "pip install -e .[dev] &&
-             uvicorn iot_gateway.api:app --host 0.0.0.0 --port 8000"
-    ports:
-      - "${GW_PORT:-8000}:8000"
-    volumes:
-      - ./iot-gateway:/app
-      - gw-data:/app/data
-    env_file:
-      - .env
-    environment:
-      MQTT_BROKER: mqtt
-      MQTT_PORT: "1883"
-      MQTT_USERNAME: "${MQTT_GW_USERNAME:-gateway}"
-      MQTT_PASSWORD: "${MQTT_GW_PASSWORD:-changeme}"
-      DATABASE_URL: "sqlite+aiosqlite:///data/gateway.db"
-      WS_HOST: "0.0.0.0"
-      WS_PORT: "8000"
-      MAX_EVENTS: "10000"
-      SAFETY_OPERATOR_TOKEN: "${SAFETY_OPERATOR_TOKEN:-}"
-    depends_on:
-      mqtt:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-s", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    networks:
-      - sf-net
+**Physical command unlock requires separately audited approval** and is *not*
+granted by any of these profiles. `PRODUCTION_READONLY` additionally runs
+without `SAFETY_OPERATOR_TOKEN`, so the operator override path is closed as
+well.
 
-  factory-control:
-    image: python:3.12-slim
-    container_name: sf-factory-control
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "pip install -e . &&
-             uvicorn factory_control.api:app --host 0.0.0.0 --port 8001"
-    ports:
-      - "${FC_PORT:-8001}:8001"
-    volumes:
-      - ./factory-control:/app
-    environment:
-      MQTT_BROKER: mqtt
-      MQTT_PORT: "1883"
-      MQTT_GATEWAY_URL: "http://iot-gateway:8000"
-    depends_on:
-      mqtt:
-        condition: service_healthy
-      iot-gateway:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-s", "http://localhost:8001/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    networks:
-      - sf-net
+> Evidence produced with `LAB_HIL` is **L2 simulation**. The `mock-hil-bridge`
+> service is a software simulator; running it does **not** produce HIL (L3/L4)
+> or integrated (L5) evidence.
 
-  edge-ai-robot:
-    image: python:3.12-slim
-    container_name: sf-edge-ai-robot
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "pip install -e . &&
-             uvicorn edge_ai_robot.api.app:app --host 0.0.0.0 --port 8002"
-    ports:
-      - "${ROBOT_PORT:-8002}:8002"
-    volumes:
-      - ./edge-ai-robot:/app
-    environment:
-      MQTT_BROKER: mqtt
-      MQTT_PORT: "1883"
-      GATEWAY_URL: "http://iot-gateway:8000"
-    depends_on:
-      mqtt:
-        condition: service_healthy
-      iot-gateway:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-s", "http://localhost:8002/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    networks:
-      - sf-net
+### Verified topology test
 
-  # ── Dashboard ─────────────────────────────────────────────────────────────
+`e2e/simulation/test_full_topology.py` starts the advertised full topology and
+asserts that **every** required service reaches the `healthy` state:
 
-  dashboard:
-    image: node:20-alpine
-    container_name: sf-dashboard
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "npm install &&
-             npm run dev -- --host 0.0.0.0"
-    ports:
-      - "${DASH_PORT:-5173}:5173"
-    volumes:
-      - ./dashboard:/app
-      - /app/node_modules
-    environment:
-      VITE_GATEWAY_WS_URL: "ws://iot-gateway:8000/ws"
-      VITE_GATEWAY_HTTP_URL: "http://iot-gateway:8000"
-    depends_on:
-      iot-gateway:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    networks:
-      - sf-net
-
-# ── Volumes & Networks ───────────────────────────────────────────────────
-
-volumes:
-  mqtt-data:
-  mqtt-conf:
-  mongodb-data:
-  mongodb-config:
-  gw-data:
-
-networks:
-  sf-net:
-    driver: bridge
-    name: sf-net
+```bash
+python -m pytest e2e/simulation/test_full_topology.py -v
 ```
 
 ---
@@ -369,34 +177,80 @@ sleep 5
 docker compose -f docker-compose.full.yml logs iot-gateway | grep -i "connected\|reconnect"
 
 # 5. Verify no events lost (check high watermark)
-curl -s http://localhost:8000/health | jq .store_high_watermark
+curl -s http://localhost:8001/health | jq .high_watermark
 ```
 
 **Recovery SLA:** Gateway reconnects within 10 s; zero event loss.
 
-### Drill 2 — Gateway DB Corruption
+### Drill 2 — Gateway DB Corruption (safe DR drill)
 
 **Scenario:** `gateway.db` becomes unreadable.
 
+> ⚠️ **Never copy a live SQLite database file.** The gateway database runs in
+> WAL mode. A raw `cp` of a live `gateway.db` can capture a torn file that is
+> missing committed transactions still resident in the `-wal` sidecar, and it
+> can race a writer mid-page. Always use the canonical
+> `python -m iot_gateway.migrations.backup_restore` tool, which uses SQLite's
+> online backup API, verifies integrity, and restores atomically. The full
+> contract is documented in
+> [`iot-gateway/migrations/README.md`](../../iot-gateway/migrations/README.md).
+
 ```bash
-# 1. Backup current DB
-cp data/gateway.db data/gateway.db.backup
-
-# 2. Corrupt DB (simulate)
-echo "corrupt" > data/gateway.db
-
-# 3. Restart gateway — it should reinitialise an empty DB
-docker compose -f docker-compose.full.yml restart iot-gateway
-
-# 4. Restore from backup
+# ── 1. BACKUP (safe against a running gateway) ────────────────────────────
+# The online backup API takes a transactionally consistent snapshot even
+# while the gateway is writing, and verifies it before publishing it.
 docker compose -f docker-compose.full.yml exec iot-gateway \
-  cp /app/data/gateway.db.backup /app/data/gateway.db
+  python -m iot_gateway.migrations.backup_restore --backup --db /app/data/gateway.db
 
-# 5. Restart to load restored DB
-docker compose -f docker-compose.full.yml restart iot-gateway
+# ── 2. VERIFY the backup before relying on it ─────────────────────────────
+docker compose -f docker-compose.full.yml exec iot-gateway \
+  python -m iot_gateway.migrations.backup_restore --verify \
+    --backup-path /app/data/gateway.db.<timestamp>.bak
+
+# ── 3. QUIESCENCE: stop every process that touches the database ──────────
+docker compose -f docker-compose.full.yml stop iot-gateway
+
+# ── 4. CORRUPT the live database (simulate the incident) ──────────────────
+docker compose -f docker-compose.full.yml run --rm --no-deps \
+  --entrypoint sh iot-gateway -c 'echo "corrupt" > /app/data/gateway.db'
+
+# ── 5. RESTORE atomically from the verified backup ───────────────────────
+# --offline is the operator attestation that the gateway is stopped.
+# --confirm is required because the live database is replaced.
+# The pre-restore snapshot is retained automatically for rollback.
+docker compose -f docker-compose.full.yml run --rm --no-deps \
+  --entrypoint sh iot-gateway -c \
+  'python -m iot_gateway.migrations.backup_restore --restore \
+     --db /app/data/gateway.db \
+     --backup-path /app/data/gateway.db.<timestamp>.bak \
+     --confirm --offline'
+
+# ── 6. POST-RESTORE VALIDATION ───────────────────────────────────────────
+# The restore tool already re-opens and integrity-checks the restored file.
+# Re-verify it independently, then restart the gateway and confirm the
+# event count and high watermark match the backup.
+docker compose -f docker-compose.full.yml exec iot-gateway \
+  python -m iot_gateway.migrations.backup_restore --verify \
+    --backup-path /app/data/gateway.db.<timestamp>.bak
+
+docker compose -f docker-compose.full.yml up -d iot-gateway
+curl -s http://localhost:8001/health | jq '{event_count, high_watermark}'
 ```
 
-**Recovery SLA:** < 60 s RTO; backup script tested monthly.
+**Interrupted restore recovery.** If a restore is killed mid-flight, a journal
+(`.<db>.restore-journal.json`) is left behind. Resolve it deterministically:
+
+```python
+from iot_gateway.migrations.backup_restore import recover_interrupted_restore
+from pathlib import Path
+
+outcome = recover_interrupted_restore(Path("/app/data/gateway.db"))
+# outcome.action in {"completed", "aborted", "rolled_back", "manual"}
+```
+
+**Recovery SLA:** < 60 s RTO; the backup/restore path is covered by
+`iot-gateway/tests/test_backup_restore.py` and by the L2 compose drill
+`e2e/simulation/backup_restore_drill.py`.
 
 ### Drill 3 — FIWARE Orion-LD Unavailable
 
@@ -412,8 +266,8 @@ docker compose -f docker-compose.full.yml logs iot-gateway | grep -i "forward\|o
 # 3. Restart Orion-LD
 docker compose -f docker-compose.full.yml up -d orion-ld
 
-# 4. Health check
-curl -s http://localhost:1026/health | jq .version
+# 4. Health check (Orion-LD has no /health route — use /version)
+curl -sf http://localhost:1026/version | jq '."orionld version"'
 ```
 
 **Recovery SLA:** Gateway buffers locally; Orion-LD restores within 30 s.
@@ -428,20 +282,42 @@ docker compose -f docker-compose.full.yml down
 docker compose -f docker-compose.full.yml up -d
 
 # Wait for all health checks
-for svc in mqtt iot-gateway factory-control edge-ai-robot dashboard; do
-  echo "Waiting for $svc..."
-  docker compose -f docker-compose.full.yml wait "$svc" 120
-done
-
-# Verify all healthy
 docker compose -f docker-compose.full.yml ps
 ```
+
+**Durable restart evidence.** The gateway persists events and the sequence
+high-watermark in SQLite, so a restart preserves them. Verify:
+
+```bash
+# Before restart
+curl -s http://localhost:8001/health | jq '{event_count, high_watermark}'
+
+docker compose -f docker-compose.full.yml restart iot-gateway
+
+# After restart — event_count and high_watermark must be >= the values above
+curl -s http://localhost:8001/health | jq '{event_count, high_watermark}'
+```
+
+The automated equivalent is `e2e/simulation/scenarios/test_restart_durability.py`
+(L2 simulation).
 
 ---
 
 ## 6. Backup & Restore
 
-See [`iot-gateway/migrations/README.md`](https://github.com/vinhphan812/smart-factory/blob/feat/issue-182-deployment-e2e/iot-gateway/migrations/README.md) for the executable backup/restore tool and regression test.
+The canonical tool is `python -m iot_gateway.migrations.backup_restore`:
+
+| Command | Purpose |
+|---|---|
+| `--backup [--db PATH]` | Online, WAL-safe, integrity-verified snapshot (safe against a running gateway) |
+| `--verify --backup-path PATH` | Integrity-check a backup before relying on it |
+| `--list [--db PATH]` | List available backups |
+| `--restore --backup-path PATH --confirm --offline` | Atomic, verified restore; retains a pre-restore snapshot for rollback |
+
+**Never copy a live SQLite database file.** See
+[`iot-gateway/migrations/README.md`](../../iot-gateway/migrations/README.md) for
+the full safety model, the interrupted-restore recovery procedure, and the
+regression suite.
 
 ---
 
@@ -455,9 +331,11 @@ See [`iot-gateway/migrations/README.md`](https://github.com/vinhphan812/smart-fa
 | `MQTT_ADMIN_PASSWORD` | `changeme` | Broker admin password |
 | `MQTT_GW_USERNAME` | `gateway` | Gateway MQTT credential |
 | `MQTT_GW_PASSWORD` | `changeme` | Gateway MQTT password |
-| `GW_PORT` | `8000` | Gateway HTTP/WS port |
-| `FC_PORT` | `8001` | Factory-control port |
-| `ROBOT_PORT` | `8002` | Edge-AI robot port |
+| `GW_WS_PORT` | `8000` | Gateway WebSocket transport port (host) |
+| `GW_HTTP_PORT` | `8001` | Gateway REST API port (host) — serves `/health` |
+| `FC_PORT` | `8002` | Factory-control port (host) |
+| `FC_RO_PORT` | `8004` | Read-only factory-control port (host, `PRODUCTION_READONLY` profile) |
+| `ROBOT_PORT` | `8003` | Edge-AI robot port (host) |
 | `DASH_PORT` | `5173` | Dashboard dev port |
 | `ORION_LD_PORT` | `1026` | FIWARE Orion-LD port |
 | `MONGODB_PORT` | `27017` | MongoDB port |
@@ -466,3 +344,5 @@ See [`iot-gateway/migrations/README.md`](https://github.com/vinhphan812/smart-fa
 | `DATABASE_URL` | `sqlite+aiosqlite:///gateway.db` | Gateway DB URL |
 | `MAX_EVENTS` | `10000` | Gateway event retention limit |
 | `SAFETY_OPERATOR_TOKEN` | `""` | Operator auth token for gateway |
+| `DEPLOYMENT_PROFILE` | `LOCAL_SIM` | Active deployment profile (`LOCAL_SIM`, `LAB_HIL`, `PRODUCTION_READONLY`) |
+| `COMPOSE_PROFILES` | *(unset)* | Compose profile selector — see §4 |
