@@ -53,42 +53,61 @@ CREATE TABLE gateway_metadata (
 
 ## Running Migrations Manually
 
+The migration runner is located at `iot_gateway.migrations.run_migrations`. It supports inspection (`--status`), dry-runs, upgrades, and audited downgrades.
+
 ```bash
 # Run against default DB (gateway.db in current directory)
 python -m iot_gateway.migrations.run_migrations
 
-# Run against a specific DB path
-python -m iot_gateway.migrations.run_migrations --db /path/to/gateway.db
+# Check current schema version and applied migrations
+python -m iot_gateway.migrations.run_migrations --status
+# Output:
+#   schema version: 2
+#   supported range: 1..2
+#   applied migrations: [1, 2]
 
-# Verbose output
-python -m iot_gateway.migrations.run_migrations --verbose
+# Dry-run (show upgrade/migration steps without executing them)
+python -m iot_gateway.migrations.run_migrations --dry-run --verbose
 
-# Dry-run (show what would be executed, no changes)
-python -m iot_gateway.migrations.run_migrations --dry-run
+# Revert schema down to version 1 (downgrade)
+python -m iot_gateway.migrations.run_migrations --downgrade-to 1
 ```
 
 Exit codes:
-- `0` — migrations applied (or already current)
-- `1` — error
+- `0` — migrations applied (or already current) / status printed
+- `1` — error (including an unsupported schema version or failure)
 
 ---
 
 ## Backup & Restore
 
 ```bash
-# Backup (creates timestamped .bak file next to the DB)
+# Backup (creates timestamped .bak file next to the DB and verifies it)
 python -m iot_gateway.migrations.backup_restore --backup
 python -m iot_gateway.migrations.backup_restore --backup --db /path/to/gateway.db
-
-# Restore (requires --confirm flag to prevent accidental restores)
-python -m iot_gateway.migrations.backup_restore --restore --backup-path /path/to/gateway.db.20260101_120000.bak
-python -m iot_gateway.migrations.backup_restore --restore --backup-path /path/to/gateway.db.20260101_120000.bak --confirm
+# Output:
+#   Backup created and verified: /app/data/gateway.db.20261022_040123_381631.bak
 
 # List available backups
 python -m iot_gateway.migrations.backup_restore --list
+# Output:
+#   Backups for gateway.db in /app/data:
+#     gateway.db.20261022_040123_381631.bak  4596 KB  2026-10-22 04:01:23 UTC
 
-# Verify a backup (reads DB, prints summary, no changes)
-python -m iot_gateway.migrations.backup_restore --verify --backup-path /path/to/gateway.db.20260101_120000.bak
+# Verify a backup (reads DB, integrity checks, prints summary, no changes)
+python -m iot_gateway.migrations.backup_restore --verify --backup-path /path/to/gateway.db.20261022_040123_381631.bak
+# Output:
+#   PASSED — database is valid: /app/data/gateway.db.20261022_040123_381631.bak
+
+# Restore (requires both --confirm and --offline attestations)
+python -m iot_gateway.migrations.backup_restore --restore \
+  --db /path/to/gateway.db \
+  --backup-path /path/to/gateway.db.20261022_040123_381631.bak \
+  --confirm --offline
+# Output:
+#   Restore completed; the restored database passed integrity and reopen validation.
+#   Restored: /app/data/gateway.db <- /app/data/gateway.db.20261022_040123_381631.bak
+#   Retained pre-restore live backup: /app/data/gateway.db.pre-restore.20261022_040507_150589.bak
 ```
 
 ---

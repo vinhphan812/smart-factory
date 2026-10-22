@@ -98,9 +98,23 @@ docker compose -f e2e/simulation/docker-compose.e2e.yml ps  # all running
 | Test | Command |
 |---|---|
 | Gateway health | `curl -sf http://localhost:8001/health` |
-| Orion-LD health | `curl -sf http://localhost:1026/health` |
-| Factory-control health | `curl -sf http://localhost:8001/health` |
-| MQTT broker | `docker compose -f e2e/simulation/docker-compose.e2e.yml exec mqtt sh -c "timeout 5 mosquitto_sub -t 'test' -C 1"` |
+| Orion-LD version | `curl -sf http://localhost:1026/version` |
+| Factory-control health | `curl -sf http://localhost:8002/health` |
+| Edge-AI robot health | `curl -sf http://localhost:8003/health` |
+| Dashboard | `curl -sf http://localhost:5173/` |
+| MQTT broker | `docker compose -f e2e/simulation/docker-compose.e2e.yml exec mqtt sh -c "timeout 5 mosquitto_pub -h localhost -p 1883 -u \"\$MQTT_ADMIN_USERNAME\" -P \"\$MQTT_ADMIN_PASSWORD\" -t 'smart-factory/healthcheck' -m 'ping' -q 1"` |
+
+> **Orion-LD has no `/health` route.** Orion-LD 1.5.0 answers `GET /health` with
+> HTTP 400 (`service not found`), so it can never be a liveness probe — the
+> probe used by `docker-compose.e2e.yml` and `docker-compose.full.yml` is
+> `GET /version`, which answers HTTP 200. Any manual probe must use
+> `curl -f` as well: without it `curl` exits 0 on an HTTP 400 and the check
+> looks like it passed while the broker is unusable.
+
+> The MQTT broker runs with `allow_anonymous false`, so a probe must
+> authenticate. `mosquitto_sub -t 'test'` without credentials is rejected by
+> the broker ACL; use the same authenticated `mosquitto_pub` probe the
+> compose healthcheck uses.
 
 ### L1 — Gateway ingests mock events
 
