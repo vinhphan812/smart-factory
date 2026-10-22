@@ -246,10 +246,23 @@ git diff 87e2e383a4beb7819624a269180001b27adeae7f 7072fb328a2223238dd6e85273dd13
 
 That empty diff is why the `87e2e38` figures in sections 3 and 4 are also the current PR-head
 figures for those two modules. The commits after `87e2e38` in this branch touch only
-`docs/quality/` and `.gitignore`.
+`docs/quality/` and `.gitignore`:
 
-### Verified run on PR head `7072fb328a2223238dd6e85273dd13192fde8aa7`
+```bash
+git diff 87e2e383a4beb7819624a269180001b27adeae7f <pr-head> --name-only
+# .gitignore
+# docs/quality/coverage-audit-2026-10.md
+# docs/quality/evidence/coverage-audit-2026-10-87e2e38-factory-control.txt
+# docs/quality/evidence/coverage-audit-2026-10-87e2e38-iot-gateway.txt
+# docs/quality/evidence/coverage-audit-2026-10-prhead-edge-ai-robot-collect.txt
+# docs/quality/evidence/coverage-audit-2026-10-prhead-factory-control.txt
+# docs/quality/evidence/coverage-audit-2026-10-prhead-iot-gateway.txt
+```
 
+### Verified run
+
+- **Verified revision:** `7072fb328a2223238dd6e85273dd13192fde8aa7` (the commit whose captures are
+  versioned below; every later commit in this branch changes only `docs/quality/`)
 - **Environment:** Windows 11; Python 3.14.7; pytest 8.4.2; pytest-cov 7.1.0; coverage 7.16.2;
   aiohttp 3.14.3
 - **Captured:** 2026-10-22T01:23Z
@@ -260,9 +273,7 @@ figures for those two modules. The commits after `87e2e38` in this branch touch 
 | `cd factory-control && python -m pytest --cov=src --cov-report=term-missing tests/` | **98 passed; 69% total coverage** | [`coverage-audit-2026-10-prhead-factory-control.txt`](evidence/coverage-audit-2026-10-prhead-factory-control.txt) |
 | `cd edge-ai-robot && python -m pytest tests/ --collect-only -q` | **no tests collected; 3 `ModuleNotFoundError: edge_ai_robot` errors [uncollectable]** | [`coverage-audit-2026-10-prhead-edge-ai-robot-collect.txt`](evidence/coverage-audit-2026-10-prhead-edge-ai-robot-collect.txt) |
 
-The commit that follows this one only appends this section; it does not change any measured code
-path, so the recorded results remain valid for the PR head. Any later code, dependency, or CI
-change invalidates them and requires a rerun.
+Any later code, dependency, or CI change invalidates these results and requires a rerun.
 
 ### CI evidence
 
