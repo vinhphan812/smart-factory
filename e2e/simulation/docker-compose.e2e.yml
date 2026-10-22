@@ -93,6 +93,11 @@ services:
     depends_on:
       mqtt:
         condition: service_healthy
+      # The publisher emits continuously, but must not send its first event
+      # before the gateway has connected and subscribed to MQTT. This also
+      # makes its startup deterministic for clean, targeted Compose runs.
+      iot-gateway:
+        condition: service_healthy
     networks:
       - e2e-net
 
@@ -342,6 +347,11 @@ services:
         condition: service_healthy
       mqtt:
         condition: service_healthy
+      # Compose starts only the explicit target and its dependency closure.
+      # Without this edge a clean CI runner never creates the publisher, so
+      # all gateway ingestion and WebSocket assertions wait for absent data.
+      mock-mqtt-publisher:
+        condition: service_started
     networks:
       - e2e-net
     # Run smoke tests once and exit (do not restart)
