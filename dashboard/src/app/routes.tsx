@@ -79,8 +79,8 @@ export function AppRoutes(): React.JSX.Element {
           <ReservedPage
             title="Module Commands & Actuation"
             icon="🎮"
-            statusNote="Hardware command dispatch requires an authenticated operator session and server-side safety verification (issues #152 and #154)."
-            safetyNotice="The browser operator dashboard is strictly read-only. Web clients cannot directly publish actuator or PLC commands to physical hardware."
+            statusNote="Hardware command dispatch requires an authenticated operator session and backend safety gates (issues #152 and #154)."
+            safetyNotice="The browser operator dashboard is strictly read-only and has no actuation endpoints. Physical hardware actuation requires an authenticated operator session and backend safety gates (issues #152 and #154). Web clients cannot directly dispatch actuator or PLC commands."
           />
         }
       />

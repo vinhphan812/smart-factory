@@ -32,7 +32,7 @@ Renders one of the six canonical visual states with a distinct color dot, border
 ```tsx
 import { ModuleStatusBadge } from '../design-system';
 
-<ModuleStatusBadge state="RUNNING" timestamp="2026-10-22T10:00:00Z" />
+<ModuleStatusBadge visualState="RUNNING" lastSeen="2026-10-22T10:00:00Z" />
 ```
 
 ### 2. `ModuleCard` (SPEC-3, SPEC-6)

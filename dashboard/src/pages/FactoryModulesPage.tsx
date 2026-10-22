@@ -8,7 +8,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MODULE_DEFINITIONS, deriveModuleState, type VisualState } from '../contracts/modules';
 import { ModuleCard } from '../design-system';
-import { useGatewayStore } from '../store/gatewayStore';
+import { useGatewayStore, useOperationalMode } from '../store/gatewayStore';
 
 type StateFilter = 'ALL' | VisualState;
 type DensityMode = 'compact' | 'normal' | 'spacious';
@@ -38,6 +38,9 @@ export function FactoryModulesPage() {
     const timer = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Operational mode (live vs demo/simulated)
+  const operationalMode = useOperationalMode();
 
   // Get live devices from gateway store
   const devicesMap = useGatewayStore((state) => state.devices);
@@ -152,9 +155,21 @@ export function FactoryModulesPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-            Factory Modules Matrix
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+              Factory Modules Matrix
+            </h1>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                operationalMode === 'live'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${operationalMode === 'live' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              {operationalMode === 'live' ? 'LIVE GATEWAY (L2 Telemetry)' : 'OFFLINE SIMULATION / DEMO (L0/L2 Mock)'}
+            </span>
+          </div>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
             Real-time monitoring and control of all 9 physical mini-factory modules
           </p>

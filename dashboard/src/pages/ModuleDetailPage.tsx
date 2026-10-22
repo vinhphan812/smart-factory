@@ -12,11 +12,14 @@ import React, { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { findModule, deriveModuleState, type VisualState } from '../contracts/modules';
 import { ModuleStatusBadge } from '../design-system/ModuleStatusBadge';
-import { useGatewayStore } from '../store/gatewayStore';
+import { useGatewayStore, useOperationalMode } from '../store/gatewayStore';
 
 export function ModuleDetailPage(): React.JSX.Element {
   const { moduleId } = useParams<{ moduleId: string }>();
   const module = findModule(moduleId);
+
+  // Operational mode (live vs demo/simulated)
+  const operationalMode = useOperationalMode();
 
   // Get live devices and incidents from gateway store
   const devicesMap = useGatewayStore((state) => state.devices);
@@ -110,7 +113,7 @@ export function ModuleDetailPage(): React.JSX.Element {
       </header>
 
       {/* Specs / Status Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
           <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider block">Controller Source</span>
           <span className="text-sm font-semibold text-[var(--color-text-primary)] mt-1 block">
@@ -129,6 +132,16 @@ export function ModuleDetailPage(): React.JSX.Element {
           <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider block">Observed Connectivity</span>
           <span className="text-sm font-semibold text-[var(--color-text-primary)] mt-1 block capitalize">
             {deviceStatus?.status || 'offline'}
+          </span>
+        </div>
+
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+          <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider block">Data Provenance</span>
+          <span className={`text-sm font-semibold mt-1 block ${operationalMode === 'live' ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {operationalMode === 'live' ? 'Live Ingestion' : 'Simulated (Demo Mode)'}
+          </span>
+          <span className="text-[10px] text-[var(--color-text-muted)] block mt-0.5 font-mono truncate" title="contracts/physical/factory-interface.md §1.1">
+            contracts/physical/factory-interface.md §1.1
           </span>
         </div>
 

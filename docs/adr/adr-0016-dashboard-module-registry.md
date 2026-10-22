@@ -1,8 +1,8 @@
 # ADR-0016: Dashboard Nine-Module Registry and Derived Visual State Machine
 
-- **Status:** Accepted
+- **Status:** Proposed
 - **Date:** 2026-10-22
-- **Deciders:** Smart Factory Architecture Team
+- **Deciders:** Smart Factory Architecture Team (Proposed during PR #260 review; pending formal merge approval)
 - **Related issues:** #149, #148
 
 ## Context

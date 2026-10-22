@@ -1,6 +1,7 @@
 # ==============================================================================
 # Routing truth table (path → workflow):
 #   adr/**, docs/**, .github/workflows/**          → adr-lint.yml  (this file)
+#   dashboard/**, .github/workflows/dashboard-ci.yml → dashboard-ci.yml
 #   esp32-ukit-bridge/**                          → bridge-ci.yml
 #   factory-control/**                            → factory-control-ci.yml
 #   iot-gateway/**                                → gateway-ci.yml
