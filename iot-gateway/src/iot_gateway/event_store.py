@@ -235,6 +235,28 @@ class EventStore:
             await session.commit()
             return 1
 
+    async def seed_sequence_from_high_watermark(self, normalizer: Any) -> None:
+        """Align the normalizer's sequence counter with the stored state.
+
+        The normalizer owns the sequence number assigned to every event, but
+        its counter lives in memory only. After a restart it would restart at
+        1, producing sequence numbers that sort *below* the ones already in
+        the store. The retention pruner deletes the lowest sequences first,
+        so those freshly written events are purged immediately and the
+        reported high-watermark freezes — the gateway silently loses every
+        event written after a restart.
+
+        Seeding the counter from the persisted high-watermark (and from the
+        persisted counter, when present) keeps the sequence space strictly
+        monotonic across restarts.
+        """
+        high = await self.high_watermark()
+        persisted = await self._load_sequence()
+        seed = max(high, persisted)
+        if seed:
+            normalizer.seed_sequence(seed)
+            logger.info("Seeded event sequence from persisted high-watermark: %d", seed)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------

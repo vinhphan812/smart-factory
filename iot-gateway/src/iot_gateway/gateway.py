@@ -148,6 +148,10 @@ class Gateway:
         self._loop = asyncio.get_running_loop()
 
         await self._store.init()
+        # Continue the sequence space from the persisted high-watermark so a
+        # restarted gateway never reuses sequence numbers that are already
+        # stored (which the retention pruner would delete straight away).
+        await self._store.seed_sequence_from_high_watermark(self._normalizer)
         logger.info("Starting IoT Gateway...")
 
         # Start WebSocket server first so it's ready before MQTT messages arrive
