@@ -1,9 +1,9 @@
 PR-head verification capture (factory-control)
-Captured UTC: 2026-10-22T01:22:24Z
+Captured UTC: 2026-10-22T01:24:12Z
 Repository: vinhphan812/smart-factory
 PR: #234  Branch: feat/issue-187-ci-coverage-audit
 Verified revision:
-7a994ce934c7a8088865438c90bef95ab4423aa6
+7072fb328a2223238dd6e85273dd13192fde8aa7
 
 $ python --version
 Python 3.14.7
@@ -35,4 +35,4 @@ src\simulator.py                             115     34    70%   65, 80, 84, 102
 src\state_machine.py                         120      7    94%   264, 277-278, 283-287, 344
 ------------------------------------------------------------------------
 TOTAL                                       1075    333    69%
-======================== 98 passed, 1 warning in 1.04s ========================
+======================== 98 passed, 1 warning in 0.63s ========================

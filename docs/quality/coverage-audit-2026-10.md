@@ -232,6 +232,37 @@ dated evidence.
 
 ## 8. PR-head verification record
 
-This section is reserved for commands rerun after this documentation update is committed. It must
-record the PR-head SHA, environment, full command output/artifact, and result; it does not reuse
-historical `87e2e38` output.
+The documented commands were re-run on the PR branch after this report was corrected. The PR-head
+runtime tree is unchanged since the audited revision, which is verified, not assumed:
+
+```bash
+git diff 87e2e383a4beb7819624a269180001b27adeae7f 7072fb328a2223238dd6e85273dd13192fde8aa7 -- iot-gateway factory-control
+# (no output: iot-gateway/ and factory-control/ are byte-identical to 87e2e38)
+```
+
+That empty diff is why the `87e2e38` figures in sections 3 and 4 are also the current PR-head
+figures for those two modules. The commits after `87e2e38` in this branch touch only
+`docs/quality/` and `.gitignore`.
+
+### Verified run on PR head `7072fb328a2223238dd6e85273dd13192fde8aa7`
+
+- **Environment:** Windows 11; Python 3.14.7; pytest 8.4.2; pytest-cov 7.1.0; coverage 7.16.2;
+  aiohttp 3.14.3
+- **Captured:** 2026-10-22T01:23Z
+
+| Command | Result | Capture |
+|---|---|---|
+| `cd iot-gateway && python -m pytest --cov=src --cov-report=term-missing tests/` | **246 passed; 79% total coverage** | [`coverage-audit-2026-10-prhead-iot-gateway.txt`](evidence/coverage-audit-2026-10-prhead-iot-gateway.txt) |
+| `cd factory-control && python -m pytest --cov=src --cov-report=term-missing tests/` | **98 passed; 69% total coverage** | [`coverage-audit-2026-10-prhead-factory-control.txt`](evidence/coverage-audit-2026-10-prhead-factory-control.txt) |
+| `cd edge-ai-robot && python -m pytest tests/ --collect-only -q` | **no tests collected; 3 `ModuleNotFoundError: edge_ai_robot` errors [uncollectable]** | [`coverage-audit-2026-10-prhead-edge-ai-robot-collect.txt`](evidence/coverage-audit-2026-10-prhead-edge-ai-robot-collect.txt) |
+
+The commit that follows this one only appends this section; it does not change any measured code
+path, so the recorded results remain valid for the PR head. Any later code, dependency, or CI
+change invalidates them and requires a rerun.
+
+### CI evidence
+
+The PR's only required check is `ADR Lint & Architecture Governance Gate`. Its run URLs and
+outcomes for each pushed head are quoted in the PR conversation. ADR-lint success is an ADR
+compliance signal only; it is **not** a test, coverage, or regression signal, and is not used as
+evidence anywhere in this report.

@@ -1,9 +1,9 @@
 PR-head verification capture
-Captured UTC: 2026-10-22T01:20:00Z
+Captured UTC: 2026-10-22T01:23:01Z
 Repository: vinhphan812/smart-factory
 PR: #234  Branch: feat/issue-187-ci-coverage-audit
 Verified revision:
-7a994ce934c7a8088865438c90bef95ab4423aa6
+7072fb328a2223238dd6e85273dd13192fde8aa7
 
 $ python --version
 Python 3.14.7
@@ -44,4 +44,4 @@ src\iot_gateway\safety_gate.py           143      6     24      3    95%   133, 
 src\iot_gateway\time_sync.py              82     12     32      1    85%   162-163, 210, 226-234
 ----------------------------------------------------------------------------------
 TOTAL                                   1417    272    314     29    79%
-================ 246 passed, 632 warnings in 127.08s (0:02:07) ================
+================ 246 passed, 632 warnings in 61.33s (0:01:01) =================

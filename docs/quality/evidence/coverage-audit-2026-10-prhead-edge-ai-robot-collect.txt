@@ -1,7 +1,9 @@
 PR-head verification capture (edge-ai-robot collection)
-Captured UTC: 2026-10-22T01:22:28Z
+Captured UTC: 2026-10-22T01:24:14Z
+Repository: vinhphan812/smart-factory
+PR: #234  Branch: feat/issue-187-ci-coverage-audit
 Verified revision:
-7a994ce934c7a8088865438c90bef95ab4423aa6
+7072fb328a2223238dd6e85273dd13192fde8aa7
 
 $ cd edge-ai-robot && python -m pytest tests/ --collect-only -q
 C:\Users\Admin\AppData\Local\hermes\tools\python-3.14.7+20260901-win32-x64\Lib\importlib\__init__.py:88: in import_module
@@ -15,4 +17,4 @@ ERROR tests/test_adapter.py
 ERROR tests/test_detection.py
 ERROR tests/test_skills.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!
-no tests collected, 3 errors in 0.40s
+no tests collected, 3 errors in 0.24s
