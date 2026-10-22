@@ -1,0 +1,21 @@
+PR-head verification capture (edge-ai-robot collection)
+Captured UTC: 2026-10-22T01:24:14Z
+Redaction: absolute local paths replaced with <PYTHON_SITE_PACKAGES>, <PYTHON_STDLIB>, <REPO_ROOT> placeholders. No other content changed.
+Repository: vinhphan812/smart-factory
+PR: #234  Branch: feat/issue-187-ci-coverage-audit
+Verified revision:
+7072fb328a2223238dd6e85273dd13192fde8aa7
+
+$ cd edge-ai-robot && python -m pytest tests/ --collect-only -q
+<PYTHON_STDLIB>\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_skills.py:5: in <module>
+    from edge_ai_robot.skills import (
+E   ModuleNotFoundError: No module named 'edge_ai_robot'
+=========================== short test summary info ===========================
+ERROR tests/test_adapter.py
+ERROR tests/test_detection.py
+ERROR tests/test_skills.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!
+no tests collected, 3 errors in 0.24s

@@ -62,3 +62,8 @@ Thumbs.db
 .vs/
 .vscode/settings.json
 *.code-workspace
+
+# Coverage artifacts
+.coverage
+htmlcov/
+.coverage.*

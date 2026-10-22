@@ -1,0 +1,203 @@
+Coverage-audit evidence capture
+Captured UTC: 2026-10-22T01:11:12Z
+Redaction: absolute local paths replaced with <PYTHON_SITE_PACKAGES>, <PYTHON_STDLIB>, <REPO_ROOT> placeholders. No other content changed.
+Repository: vinhphan812/smart-factory
+Revision:
+87e2e383a4beb7819624a269180001b27adeae7f
+
+$ python --version
+Python 3.14.7
+$ python -m pytest --version
+pytest 8.4.2
+$ python -m pip show pytest pytest-cov coverage aiohttp
+Name: pytest
+Version: 8.4.2
+Summary: pytest: simple powerful testing with Python
+Home-page: https://docs.pytest.org/en/latest/
+Author: Holger Krekel, Bruno Oliveira, Ronny Pfannschmidt, Floris Bruynooghe, Brianna Laugher, Florian Bruhin, Others (See AUTHORS)
+Author-email: 
+License: MIT
+Location: <PYTHON_SITE_PACKAGES>
+Requires: colorama, iniconfig, packaging, pluggy, pygments
+Required-by: pytest-asyncio, pytest-cov
+---
+Name: pytest-cov
+Version: 7.1.0
+Summary: Pytest plugin for measuring coverage.
+Home-page: 
+Author: 
+Author-email: Marc Schlaich <marc.schlaich@gmail.com>
+License-Expression: MIT
+Location: <PYTHON_SITE_PACKAGES>
+Requires: coverage, pluggy, pytest
+Required-by: 
+---
+Name: coverage
+Version: 7.16.2
+Summary: Code coverage measurement for Python
+Home-page: https://github.com/coveragepy/coveragepy
+Author: Ned Batchelder and 269 others
+Author-email: ned@nedbatchelder.com
+License: Apache-2.0
+Location: <PYTHON_SITE_PACKAGES>
+Requires: 
+Required-by: pytest-cov
+---
+Name: aiohttp
+Version: 3.14.3
+Summary: Async http client/server framework (asyncio)
+Home-page: https://github.com/aio-libs/aiohttp
+Author: 
+Author-email: 
+License: Apache-2.0 AND MIT
+Location: <PYTHON_SITE_PACKAGES>
+Requires: aiohappyeyeballs, aiosignal, attrs, frozenlist, multidict, propcache, yarl
+Required-by: aioresponses, firecrawl-py, iot-gateway
+
+$ cd iot-gateway && python -m pytest --cov=src --cov-report=term-missing tests/
+============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-8.4.2, pluggy-1.7.0
+rootdir: <REPO_ROOT>/iot-gateway
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-0.26.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 246 items
+
+tests\test_alerts.py .....................................               [ 15%]
+tests\test_api.py .............                                          [ 20%]
+tests\test_dashboard_safety.py ......................................... [ 36%]
+..                                                                       [ 37%]
+tests\test_gateway.py ........                                           [ 41%]
+tests\test_models.py ....                                                [ 42%]
+tests\test_normalizer.py ...............                                 [ 48%]
+tests\test_orion_ld.py .........................                         [ 58%]
+tests\test_safety_gate.py ..................................             [ 72%]
+tests\test_ssrf.py .............                                         [ 78%]
+tests\test_store.py .........                                            [ 81%]
+tests\test_time_sync.py .............................................    [100%]
+
+============================== warnings summary ===============================
+tests/test_alerts.py::TestAlertEvent::test_default_values
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy()
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:874: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    _restore_event_loop_policy(asyncio.get_event_loop_policy()),
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:772: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    old_loop_policy = asyncio.get_event_loop_policy()
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:777: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(policy)
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:1183: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:889: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:794: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(old_loop_policy)
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:942: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:966: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(previous_policy)
+
+tests/test_alerts.py: 19 warnings
+tests/test_api.py: 2 warnings
+tests/test_gateway.py: 8 warnings
+tests/test_orion_ld.py: 11 warnings
+tests/test_ssrf.py: 13 warnings
+tests/test_store.py: 9 warnings
+tests/test_time_sync.py: 8 warnings
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:978: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/test_time_sync.py::test_snapshot_returns_sorted_by_sequence
+  <PYTHON_ENV>\pydantic\_internal\_generate_schema.py:362: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000203FB485030>
+    def __init__(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.14.7-final-0 _______________
+
+Name                                   Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------------
+src\iot_gateway\__init__.py                1      0      0      0   100%
+src\iot_gateway\adapters\__init__.py       2      0      0      0   100%
+src\iot_gateway\adapters\orion_ld.py     261     51     86     12    78%   116, 135-150, 209-212, 241, 270-271, 284->exit, 322->exit, 349->354, 381->exit, 419-423, 428-457, 493->500, 520-529, 546-547, 557->556, 576
+src\iot_gateway\alerts.py                212     14     38      2    94%   246, 254-261, 294-295, 432-434, 473-474, 526-533
+src\iot_gateway\api.py                   176     25     34      4    83%   116-119, 165->exit, 272->277, 331, 343-346, 376, 417-423, 428-431, 440-444, 453-457
+src\iot_gateway\cli.py                    29     29      2      0     0%   3-47
+src\iot_gateway\config.py                  9      2      0      0    78%   21-22
+src\iot_gateway\event_normalizer.py       73      2     22      1    97%   100-101, 150->153
+src\iot_gateway\event_store.py           143     15     28      4    88%   110->114, 149, 188-195, 199-202, 249, 327
+src\iot_gateway\gateway.py               100     33     12      2    65%   72-73, 92-93, 112-117, 140, 148-192, 196-207
+src\iot_gateway\incidents.py             105     46     26      0    47%   40, 71, 162-175, 179-180, 186-216, 222-251
+src\iot_gateway\models.py                 32      0      0      0   100%
+src\iot_gateway\mqtt_client.py            49     37     10      0    20%   28-36, 41-44, 49-55, 60-61, 64-76, 79-83
+src\iot_gateway\safety_gate.py           143      6     24      3    95%   133, 143, 155, 167, 197, 394
+src\iot_gateway\time_sync.py              82     12     32      1    85%   162-163, 210, 226-234
+----------------------------------------------------------------------------------
+TOTAL                                   1417    272    314     29    79%
+================ 246 passed, 632 warnings in 70.07s (0:01:10) =================
