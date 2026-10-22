@@ -1,0 +1,38 @@
+PR-head verification capture (factory-control)
+Captured UTC: 2026-10-22T01:22:24Z
+Repository: vinhphan812/smart-factory
+PR: #234  Branch: feat/issue-187-ci-coverage-audit
+Verified revision:
+7a994ce934c7a8088865438c90bef95ab4423aa6
+
+$ python --version
+Python 3.14.7
+$ python -m pytest --version
+pytest 8.4.2
+
+$ cd factory-control && python -m pytest --cov=src --cov-report=term-missing tests/
+    return asyncio.get_event_loop_policy()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.14.7-final-0 _______________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+src\__init__.py                                1      1     0%   14
+src\adapters\__init__.py                     103      4    96%   88, 117, 127, 146
+src\adapters\adapters.py                       2      2     0%   3-12
+src\adapters\base.py                          66     12    82%   59-60, 67-68, 96-97, 130-131, 145, 150, 155, 160
+src\adapters\conveyor.py                     142      7    95%   101, 162, 172, 182, 256, 312, 314
+src\adapters\sorting.py                      183     34    81%   69, 84-85, 90-95, 114-115, 118, 127, 155, 157, 163, 196, 205, 279-305, 314-316, 347, 351
+src\factory_control\__init__.py                3      3     0%   3-11
+src\factory_control\adapters\__init__.py       3      3     0%   3-6
+src\factory_control\adapters\base.py          57     57     0%   3-115
+src\factory_control\adapters\conveyor.py     119    119     0%   3-337
+src\factory_control\models.py                 45     45     0%   3-70
+src\models.py                                116      5    96%   133, 141, 143, 145, 147
+src\simulator.py                             115     34    70%   65, 80, 84, 102, 117-118, 140-169, 190-193, 199-202, 211-212
+src\state_machine.py                         120      7    94%   264, 277-278, 283-287, 344
+------------------------------------------------------------------------
+TOTAL                                       1075    333    69%
+======================== 98 passed, 1 warning in 1.04s ========================

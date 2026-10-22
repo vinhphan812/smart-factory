@@ -1,0 +1,18 @@
+PR-head verification capture (edge-ai-robot collection)
+Captured UTC: 2026-10-22T01:22:28Z
+Verified revision:
+7a994ce934c7a8088865438c90bef95ab4423aa6
+
+$ cd edge-ai-robot && python -m pytest tests/ --collect-only -q
+C:\Users\Admin\AppData\Local\hermes\tools\python-3.14.7+20260901-win32-x64\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_skills.py:5: in <module>
+    from edge_ai_robot.skills import (
+E   ModuleNotFoundError: No module named 'edge_ai_robot'
+=========================== short test summary info ===========================
+ERROR tests/test_adapter.py
+ERROR tests/test_detection.py
+ERROR tests/test_skills.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!
+no tests collected, 3 errors in 0.40s
