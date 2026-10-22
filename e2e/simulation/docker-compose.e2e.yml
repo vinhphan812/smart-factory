@@ -379,6 +379,11 @@ services:
     depends_on:
       iot-gateway:
         condition: service_healthy
+      # The drill backs up a *live* gateway database, so the gateway must be
+      # ingesting events while the drill runs. Without this edge a clean CI
+      # runner never creates the publisher and the drill has no live data.
+      mock-mqtt-publisher:
+        condition: service_started
     networks:
       - e2e-net
     restart: "no"

@@ -67,6 +67,20 @@ SCRATCH = Path(os.environ.get("DRILL_SCRATCH_DIR", "/tmp/backup-restore-drill"))
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _clean_scratch():
+    """Start every test from an empty scratch directory.
+
+    The drill runs inside a container whose writable layer survives between
+    runs. Artefacts left behind by an earlier run (for example a pre-existing
+    ``source-e.bak``) would otherwise leak into the next run and fail a test
+    for a reason unrelated to the behaviour under test.
+    """
+    shutil.rmtree(SCRATCH, ignore_errors=True)
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    yield
+
+
 def wait_for_gateway_events(min_count: int = 1, timeout: int = 60) -> int:
     """Wait until the live gateway has ingested at least ``min_count`` events."""
     deadline = time.time() + timeout
@@ -90,6 +104,27 @@ def _count_events(path: Path) -> int:
         return conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
     finally:
         conn.close()
+
+
+def _snapshot_live_db(target: Path) -> Path:
+    """Copy the live gateway database into ``target`` as a consistent snapshot.
+
+    The live database runs in WAL mode, so a plain file copy of the main
+    database file is **not** a copy of the database: committed rows may still
+    live only in the ``-wal`` sidecar. Copying the main file alone therefore
+    yields a database without the ``events`` table (or with stale contents)
+    whenever the gateway has not checkpointed since it started.
+
+    The SQLite online backup API reads the database *and* its WAL atomically
+    and produces a single self-contained file, which is exactly what the
+    scratch copies in this drill require.
+    """
+    if target.exists():
+        target.unlink()
+    for suffix in ("-wal", "-shm"):
+        Path(f"{target}{suffix}").unlink(missing_ok=True)
+    backup_database(LIVE_DB, target)
+    return target
 
 
 def _scratch(name: str) -> Path:
@@ -170,7 +205,7 @@ def test_b_backup_with_active_wal_and_inflight_write_is_consistent():
 def test_c_corrupt_backup_is_rejected_and_live_db_untouched():
     """C. A corrupt source is refused before anything is replaced."""
     live_copy = _scratch("live-copy.db")
-    shutil.copyfile(LIVE_DB, live_copy)
+    _snapshot_live_db(live_copy)
     before = _count_events(live_copy)
 
     corrupt = _scratch("corrupt.bak")
@@ -189,7 +224,7 @@ def test_c_corrupt_backup_is_rejected_and_live_db_untouched():
 def test_d_restore_without_offline_attestation_is_refused():
     """D. The tool never implies it stopped the deployed gateway."""
     live_copy = _scratch("live-copy-d.db")
-    shutil.copyfile(LIVE_DB, live_copy)
+    _snapshot_live_db(live_copy)
     before = _count_events(live_copy)
 
     backup = backup_database(live_copy)
@@ -206,7 +241,7 @@ def test_d_restore_without_offline_attestation_is_refused():
 def test_e_failure_after_swap_rolls_back_to_retained_snapshot(monkeypatch):
     """E. A post-swap failure restores the retained pre-restore snapshot."""
     live_copy = _scratch("live-copy-e.db")
-    shutil.copyfile(LIVE_DB, live_copy)
+    _snapshot_live_db(live_copy)
     before = _count_events(live_copy)
 
     source = _scratch("source-e.bak")
@@ -238,7 +273,7 @@ def test_e_failure_after_swap_rolls_back_to_retained_snapshot(monkeypatch):
 def test_f_interrupted_restore_is_deterministically_recoverable(monkeypatch):
     """F. A killed restore leaves a journal; recovery resolves it."""
     live_copy = _scratch("live-copy-f.db")
-    shutil.copyfile(LIVE_DB, live_copy)
+    _snapshot_live_db(live_copy)
     before = _count_events(live_copy)
 
     source = _scratch("source-f.bak")
@@ -262,12 +297,49 @@ def test_f_interrupted_restore_is_deterministically_recoverable(monkeypatch):
     log.info("interrupted restore recovered with action=%s", outcome.action)
 
 
+# ── H: WAL-safe snapshot of the live database ─────────────────────────────────
+
+def test_h_snapshot_of_live_database_is_wal_safe():
+    """H. The live-database copy used by this drill is WAL-safe.
+
+    Regression guard: the live gateway database runs in WAL mode, so a plain
+    file copy of the main database file is not a copy of the database. When
+    the gateway has not checkpointed (which is the normal case for a freshly
+    started gateway), the copy has no ``events`` table at all and the drill
+    fails with "no such table: events".
+
+    This test proves the snapshot helper reads the database *and* its WAL.
+    """
+    hot = _scratch("hot-wal.db")
+    for suffix in ("", "-wal", "-shm"):
+        Path(f"{hot}{suffix}").unlink(missing_ok=True)
+
+    writer = sqlite3.connect(hot, isolation_level=None)
+    try:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE events (event_id TEXT PRIMARY KEY)")
+        writer.execute("INSERT INTO events(event_id) VALUES ('e1')")
+        writer.execute("INSERT INTO events(event_id) VALUES ('e2')")
+        # The WAL stays hot: no checkpoint, connection still open, exactly like
+        # a gateway that is running and ingesting events.
+        assert Path(f"{hot}-wal").exists(), "WAL is not active"
+
+        snapshot = _scratch("hot-wal-snapshot.db")
+        backup_database(hot, snapshot)
+        assert _count_events(snapshot) == 2, "snapshot lost committed WAL rows"
+    finally:
+        writer.close()
+
+    log.info("WAL-safe snapshot preserved committed rows from a hot WAL")
+
+
 # ── G: restart / open validation of the restored database ─────────────────────
 
 def test_g_restored_database_reopens_and_answers_queries():
     """G. The restored file opens cleanly and serves queries (restart check)."""
     live_copy = _scratch("live-copy-g.db")
-    shutil.copyfile(LIVE_DB, live_copy)
+    _snapshot_live_db(live_copy)
     before = _count_events(live_copy)
 
     backup = backup_database(live_copy)
