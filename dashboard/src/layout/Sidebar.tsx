@@ -17,6 +17,7 @@ const mainNavItems = [
   { path: '/', label: 'Overview', icon: '🏠' },
   { path: '/telemetry', label: 'Telemetry', icon: '📊' },
   { path: '/events', label: 'Events', icon: '📋' },
+  { path: '/incidents', label: 'Incidents', icon: '🚨' },
 ];
 
 // Group modules by category
