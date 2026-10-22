@@ -1,0 +1,66 @@
+# ==============================================================================
+# Routing truth table (path → workflow):
+#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
+#   dashboard/**                                    → dashboard-ci.yml  (this file)
+#   esp32-ukit-bridge/**                          → bridge-ci.yml
+#   factory-control/**                            → factory-control-ci.yml
+#   iot-gateway/**                                → gateway-ci.yml
+#
+# Module ownership:
+#   dashboard/             : React + Vite operator dashboard (TypeScript)
+#
+# Node version: eslint@10 requires node ^20.19.0 || ^22.13.0 || >=24;
+# npm lockfileVersion 3 requires npm 7+ (bundled with node 20+).
+# Node 22 is therefore the lowest-common-denominator major that satisfies
+# every dependency engine constraint declared in dashboard/package-lock.json.
+# ==============================================================================
+
+name: Dashboard CI
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - dashboard/**
+      - .github/workflows/dashboard-ci.yml
+  pull_request:
+    paths:
+      - dashboard/**
+      - .github/workflows/dashboard-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    name: Dashboard typecheck / lint / test / build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies (npm ci, lockfile authoritative)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build

@@ -97,6 +97,29 @@ See `evidence/adr-evidence.md` for the full prerequisite gate audit.
 | README index synchronization | L0 | PASS | `python scripts/check_adrs.py` |
 | ADR lint CI workflow | L0 | PASS | `.github/workflows/adr-lint.yml` |
 
+### Dashboard CI (L0–L2)
+
+| Check | Evidence level | Status | Command |
+|-------|---------------|--------|---------|
+| Dashboard CI workflow (typecheck / lint / test / build) | L0 | ADDED — lint step currently red on 9 pre-existing violations (tracked in #156) | `.github/workflows/dashboard-ci.yml` |
+| Dashboard typecheck | L1 | PASS once merge-conflict markers are resolved | `cd dashboard && npm run typecheck` |
+| Dashboard unit tests | L1 | PASS — 12 tests | `cd dashboard && npm run test` |
+| Dashboard production build | L2 | PASS once merge-conflict markers are resolved | `cd dashboard && npm run build` |
+
+**CI routing truth table (path → workflow):**
+
+| Path | Workflow |
+|------|----------|
+| `adr/**`, `docs/**`, `.github/workflows/**` | `adr-lint.yml` |
+| `dashboard/**` | `dashboard-ci.yml` |
+| `esp32-ukit-bridge/**` | `bridge-ci.yml` |
+| `factory-control/**` | `factory-control-ci.yml` |
+| `iot-gateway/**` | `gateway-ci.yml` |
+
+The same routing table is repeated in the comment header of each of the five
+workflow files under `.github/workflows/`, so the table and the actual
+path filters cannot drift apart silently.
+
 ---
 
 ## Hardware-blocked items (no evidence at this version)
