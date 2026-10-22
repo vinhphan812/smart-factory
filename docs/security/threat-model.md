@@ -243,8 +243,8 @@
 | Surface | Vector | Severity | Control |
 |---------|--------|----------|---------|
 | Browser XSS via WebSocket messages | Malicious event payload rendered in UI | Medium | ⚠️ React escapes by default; must verify no `dangerouslySetInnerHTML` |
-| Session token stored in localStorage | XSS theft | Medium | ⚠️ PR #242 introduces localStorage access/refresh token persistence in the dashboard. [Concurrent implementation; not production-approved. Risk: XSS → token theft. No TLS on MQTT still applies.] |
-| Dashboard → Gateway REST calls | CSRF if cookies used | Medium | ⚠️ No CSRF protection if cookie-based auth added |
+| Browser session cookies | XSS-triggered authenticated requests | Medium | ✅ PR #242 uses `Secure`, `httpOnly`, `SameSite=Strict` access/refresh cookies; login response contains user data only and dashboard source stores no token material in `localStorage`/`sessionStorage`. ⚠️ Cookie authentication makes CSRF a remaining risk if cross-site cookie delivery/CORS or `SameSite` settings are relaxed; no end-to-end browser deployment verification is recorded. |
+| Dashboard → Gateway REST calls | CSRF with browser cookies | Medium | ⚠️ `SameSite=Strict` reduces cross-site sends in PR #242, but no dedicated CSRF token or Origin/Referer validation is present in the inspected auth routes; production cookie/CORS deployment remains unverified. |
 | Dashboard → MQTT commands | Command injection | **Critical** | Commands go through broker ACL + ESP32 validation; dashboard not privileged |
 
 ---

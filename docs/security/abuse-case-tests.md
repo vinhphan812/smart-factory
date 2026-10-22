@@ -809,13 +809,13 @@ pip install pytest pytest-asyncio httpx websockets aioresponses
 
 ```bash
 # Run security abuse tests
-pytest iot-gateway/tests/test_security_abuse.py -v
+pytest tests/test_security_abuse.py -v
 
 # Run existing SSRF regression tests
-pytest iot-gateway/tests/test_ssrf.py -v
+pytest tests/test_ssrf.py -v
 
 # Run full gateway test suite (regression check)
-pytest iot-gateway/tests/ -v --ignore=iot-gateway/tests/test_fiware_*.py
+pytest tests/ -v --ignore=tests/test_fiware_*.py
 ```
 
 ### 11.3 Expected Results
