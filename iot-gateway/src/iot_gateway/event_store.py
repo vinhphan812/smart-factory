@@ -114,6 +114,14 @@ class EventStore:
         self._engine = create_async_engine(
             database_url, echo=False, connect_args=connect_args
         )
+        if database_url.startswith("sqlite"):
+            from sqlalchemy import event
+            @event.listens_for(self._engine.sync_engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
         self._session_maker = async_sessionmaker(
             self._engine, class_=AsyncSession, expire_on_commit=False
         )

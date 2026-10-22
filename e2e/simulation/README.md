@@ -23,7 +23,7 @@ mock-mqtt-publisher ──► mqtt-broker (:1883)
         │         (:5173)             │
         │                             mongodb (:27017)
         │
-        └── ws-sim (:9000) ──► simulates WebSocket pushes to test clients
+        └──► iot-gateway WebSocket (:8000) ──► broadcasts events to dashboard and test clients
 ```
 
 ---
@@ -138,7 +138,7 @@ docker compose -f e2e/simulation/docker-compose.e2e.yml exec iot-gateway \
 
 ## Configuration
 
-Environment variables can be set in `e2e/simulation/.env` (copy from `.env.example`).
+Environment variables can be set in `e2e/simulation/.env` (copy from repo root `.env.example`).
 
 Key variables:
 

@@ -14,14 +14,21 @@
 # These are not stylistic choices. Each one broke the stack before it was
 # fixed, and each was reproduced with a real `docker compose up` run.
 #
-#   * mongo:5.0    Orion-LD 1.5.0 uses the deprecated MongoDB C++ *legacy*
-#                  driver, which cannot speak to MongoDB >= 6.0. With
-#                  mongo:7.0 the broker logs
-#                  "Unsupported OP_QUERY command: listDatabases" followed by
-#                  "mongo::MsgAssertionException" and never becomes ready.
-#                  mongo:5.0 is the tested pairing.
-#   * mongo:5.0    ships the legacy `mongo` shell; `mongosh` only exists from
+#   * mongo:4.4    Orion-LD 1.5.0 uses the deprecated MongoDB C++ *legacy*
+#                  driver, which speaks the legacy OP_QUERY wire protocol.
+#                  MongoDB 5.0 REMOVED the legacy opcodes, so with mongo:5.0
+#                  the broker logs "Unsupported OP_QUERY command:
+#                  listDatabases" followed by "mongo::MsgAssertionException"
+#                  and never becomes ready; with mongo:7.0 it fails the same
+#                  way. mongo:4.4 is the newest server that still answers the
+#                  legacy driver and is the tested pairing.
+#   * mongo:4.4    ships the legacy `mongo` shell; `mongosh` only exists from
 #                  mongo:6.0 onwards, so the health probe must call `mongo`.
+#   * mongodb      data volume must be created by a 4.x server. A volume
+#                  previously initialised by 7.0 carries
+#                  featureCompatibilityVersion 7.0 and makes 4.4 refuse to
+#                  start ("Wrong mongod version ... expected '4.4' or '4.9' or
+#                  '5.0'"). Recreate the volume when downgrading.
 #   * orion-ld     1.5.0 reads ORIONLD_MONGO_HOST / ORIONLD_MONGO_DB.
 #                  ORION_LD_MONGO_HOST is silently ignored and the broker then
 #                  tries to reach localhost:27017 inside its own container.
@@ -91,7 +98,7 @@ services:
   # ── FIWARE Context Broker ─────────────────────────────────────────────────
 
   mongodb:
-    image: mongo:5.0
+    image: mongo:4.4
     container_name: sf-mongodb
     restart: unless-stopped
     ports:
@@ -103,7 +110,7 @@ services:
       - path: ./fiware/mongodb.env
         required: false
     healthcheck:
-      # mongo:5.0 ships the legacy `mongo` shell (mongosh only exists from
+      # mongo:4.4 ships the legacy `mongo` shell (mongosh only exists from
       # mongo:6.0 onwards), so the probe must use `mongo`.
       test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
       interval: 10s

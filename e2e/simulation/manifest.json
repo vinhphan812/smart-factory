@@ -1,0 +1,49 @@
+{
+  "simulation_suite": "Smart Factory L2 E2E Simulation Harness",
+  "issue": "#180",
+  "stable_seed": 424242,
+  "evidence_level": "L2 simulation",
+  "hardware_required": false,
+  "scenarios": [
+    {
+      "id": "SCENARIO-01",
+      "name": "happy_production_cycle",
+      "description": "Mock devices publish telemetry, status, heartbeats, and command ACKs; gateway ingests and broadcasts over WebSocket."
+    },
+    {
+      "id": "SCENARIO-02",
+      "name": "malformed_crc",
+      "description": "Frames with invalid CRC-16/CCITT-FALSE are rejected and discarded by receivers per AMLP-v1 spec."
+    },
+    {
+      "id": "SCENARIO-03",
+      "name": "duplicate_late_ack",
+      "description": "Duplicate command ACKs and out-of-order sequence arrivals are detected and handled without double persistence."
+    },
+    {
+      "id": "SCENARIO-04",
+      "name": "broker_outage",
+      "description": "MQTT broker restart triggers automatic gateway reconnection and zero event loss."
+    },
+    {
+      "id": "SCENARIO-05",
+      "name": "sqlite_lock",
+      "description": "Concurrent async writers and migration runners handle WAL locks with 30s timeout without database corruption."
+    },
+    {
+      "id": "SCENARIO-06",
+      "name": "ws_reconnect",
+      "description": "WebSocket clients reconnect and resume sequence consumption after connection drop."
+    },
+    {
+      "id": "SCENARIO-07",
+      "name": "authorization_denial",
+      "description": "Unauthenticated or unauthorized MQTT publish/subscribe attempts are rejected by Mosquitto ACLs."
+    },
+    {
+      "id": "SCENARIO-08",
+      "name": "yanshee_offline",
+      "description": "Edge AI robot / Yanshee container offline state is gracefully handled without crashing core gateway or control plane."
+    }
+  ]
+}
