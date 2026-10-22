@@ -1,5 +1,6 @@
 Coverage-audit evidence capture
 Captured UTC: 2026-10-22T01:13:36Z
+Redaction: absolute local paths replaced with <PYTHON_SITE_PACKAGES>, <PYTHON_STDLIB>, <REPO_ROOT> placeholders. No other content changed.
 Repository: vinhphan812/smart-factory
 Revision:
 87e2e383a4beb7819624a269180001b27adeae7f
@@ -16,7 +17,7 @@ Home-page: https://docs.pytest.org/en/latest/
 Author: Holger Krekel, Bruno Oliveira, Ronny Pfannschmidt, Floris Bruynooghe, Brianna Laugher, Florian Bruhin, Others (See AUTHORS)
 Author-email: 
 License: MIT
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: colorama, iniconfig, packaging, pluggy, pygments
 Required-by: pytest-asyncio, pytest-cov
 ---
@@ -27,7 +28,7 @@ Home-page:
 Author: 
 Author-email: Marc Schlaich <marc.schlaich@gmail.com>
 License-Expression: MIT
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: coverage, pluggy, pytest
 Required-by: 
 ---
@@ -38,14 +39,14 @@ Home-page: https://github.com/coveragepy/coveragepy
 Author: Ned Batchelder and 269 others
 Author-email: ned@nedbatchelder.com
 License: Apache-2.0
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: 
 Required-by: pytest-cov
 
 $ cd factory-control && python -m pytest --cov=src --cov-report=term-missing tests/
 ============================= test session starts =============================
 platform win32 -- Python 3.14.7, pytest-8.4.2, pluggy-1.7.0
-rootdir: D:\tmp\sf-audit-87e2e38\factory-control
+rootdir: <REPO_ROOT>/factory-control
 configfile: pyproject.toml
 plugins: anyio-4.14.2, asyncio-0.26.0, cov-7.1.0
 asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -59,7 +60,7 @@ tests\test_state_machine.py ..........................                   [100%]
 
 ============================== warnings summary ===============================
 tests/test_adapters.py::TestCommand::test_command_with_command_id
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     return asyncio.get_event_loop_policy()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

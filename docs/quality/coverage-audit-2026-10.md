@@ -30,6 +30,10 @@ not retained: they were not captured by a reproducible command.
 A percentage without a tag is a target, not a result. `0% [uncollectable]` is never a measured
 coverage value.
 
+The versioned captures in `docs/quality/evidence/` are raw terminal output with absolute local
+paths replaced by `<PYTHON_SITE_PACKAGES>`, `<PYTHON_STDLIB>` and `<REPO_ROOT>` placeholders. No
+other content was altered; each capture states the redaction and the captured UTC timestamp.
+
 ---
 
 ## 2. Bounded module summary

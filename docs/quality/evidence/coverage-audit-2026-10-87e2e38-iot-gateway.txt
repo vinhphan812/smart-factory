@@ -1,5 +1,6 @@
 Coverage-audit evidence capture
 Captured UTC: 2026-10-22T01:11:12Z
+Redaction: absolute local paths replaced with <PYTHON_SITE_PACKAGES>, <PYTHON_STDLIB>, <REPO_ROOT> placeholders. No other content changed.
 Repository: vinhphan812/smart-factory
 Revision:
 87e2e383a4beb7819624a269180001b27adeae7f
@@ -16,7 +17,7 @@ Home-page: https://docs.pytest.org/en/latest/
 Author: Holger Krekel, Bruno Oliveira, Ronny Pfannschmidt, Floris Bruynooghe, Brianna Laugher, Florian Bruhin, Others (See AUTHORS)
 Author-email: 
 License: MIT
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: colorama, iniconfig, packaging, pluggy, pygments
 Required-by: pytest-asyncio, pytest-cov
 ---
@@ -27,7 +28,7 @@ Home-page:
 Author: 
 Author-email: Marc Schlaich <marc.schlaich@gmail.com>
 License-Expression: MIT
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: coverage, pluggy, pytest
 Required-by: 
 ---
@@ -38,7 +39,7 @@ Home-page: https://github.com/coveragepy/coveragepy
 Author: Ned Batchelder and 269 others
 Author-email: ned@nedbatchelder.com
 License: Apache-2.0
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: 
 Required-by: pytest-cov
 ---
@@ -49,14 +50,14 @@ Home-page: https://github.com/aio-libs/aiohttp
 Author: 
 Author-email: 
 License: Apache-2.0 AND MIT
-Location: C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages
+Location: <PYTHON_SITE_PACKAGES>
 Requires: aiohappyeyeballs, aiosignal, attrs, frozenlist, multidict, propcache, yarl
 Required-by: aioresponses, firecrawl-py, iot-gateway
 
 $ cd iot-gateway && python -m pytest --cov=src --cov-report=term-missing tests/
 ============================= test session starts =============================
 platform win32 -- Python 3.14.7, pytest-8.4.2, pluggy-1.7.0
-rootdir: D:\tmp\sf-audit-87e2e38\iot-gateway
+rootdir: <REPO_ROOT>/iot-gateway
 configfile: pyproject.toml
 plugins: anyio-4.14.2, asyncio-0.26.0, cov-7.1.0
 asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -77,7 +78,7 @@ tests\test_time_sync.py .............................................    [100%]
 
 ============================== warnings summary ===============================
 tests/test_alerts.py::TestAlertEvent::test_default_values
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     return asyncio.get_event_loop_policy()
 
 tests/test_alerts.py: 19 warnings
@@ -87,7 +88,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:874: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:874: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     _restore_event_loop_policy(asyncio.get_event_loop_policy()),
 
 tests/test_alerts.py: 19 warnings
@@ -97,7 +98,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:772: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:772: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     old_loop_policy = asyncio.get_event_loop_policy()
 
 tests/test_alerts.py: 19 warnings
@@ -107,7 +108,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:777: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:777: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
     asyncio.set_event_loop_policy(policy)
 
 tests/test_alerts.py: 19 warnings
@@ -117,7 +118,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:1183: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:1183: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     loop = asyncio.get_event_loop_policy().new_event_loop()
 
 tests/test_alerts.py: 19 warnings
@@ -127,7 +128,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:889: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:889: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     policy = asyncio.get_event_loop_policy()
 
 tests/test_alerts.py: 19 warnings
@@ -137,7 +138,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:794: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:794: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
     asyncio.set_event_loop_policy(old_loop_policy)
 
 tests/test_alerts.py: 19 warnings
@@ -147,7 +148,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:942: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:942: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     policy = asyncio.get_event_loop_policy()
 
 tests/test_alerts.py: 19 warnings
@@ -157,7 +158,7 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:966: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:966: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
     asyncio.set_event_loop_policy(previous_policy)
 
 tests/test_alerts.py: 19 warnings
@@ -167,11 +168,11 @@ tests/test_orion_ld.py: 11 warnings
 tests/test_ssrf.py: 13 warnings
 tests/test_store.py: 9 warnings
 tests/test_time_sync.py: 8 warnings
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pytest_asyncio\plugin.py:978: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:978: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
     policy = asyncio.get_event_loop_policy()
 
 tests/test_time_sync.py::test_snapshot_returns_sorted_by_sequence
-  C:\Users\Admin\AppData\Local\hermes\installs\902a4fe5d10abbac\environments\fb2edb52a5f34ff5a061db65b8581518\venv\Lib\site-packages\pydantic\_internal\_generate_schema.py:362: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000203FB485030>
+  <PYTHON_ENV>\pydantic\_internal\_generate_schema.py:362: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000203FB485030>
     def __init__(
   Enable tracemalloc to get traceback where the object was allocated.
   See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
