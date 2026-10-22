@@ -10,4 +10,5 @@ export * from './tokens';
 // Components
 export { Button } from './Button';
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './Card';
-export { ModuleCard, StatusIndicator } from './ModuleCard';
+export { ModuleCard } from './ModuleCard';
+export { ModuleStatusBadge, type ModuleStatusBadgeProps } from './ModuleStatusBadge';

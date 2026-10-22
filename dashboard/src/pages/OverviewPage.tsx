@@ -2,34 +2,72 @@
  * OverviewPage - Factory module overview with status cards
  */
 
-import React, { useState } from 'react';
-import { ModuleCard, factoryModules, type FactoryModule } from '../design-system';
+import React, { useState, useMemo } from 'react';
+import { MODULE_DEFINITIONS, deriveModuleState, type VisualState } from '../contracts/modules';
+import { ModuleCard } from '../design-system';
+import { useGatewayStore } from '../store/gatewayStore';
 
-type CategoryFilter = 'all' | FactoryModule['category'];
+type CategoryFilter = 'all' | 'production' | 'logistics' | 'control';
+type StateFilter = 'all' | VisualState;
 
-export function OverviewPage() {
+export function OverviewPage(): React.JSX.Element {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<FactoryModule['status'] | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<StateFilter>('all');
+
+  // Get live devices from gateway store
+  const devicesMap = useGatewayStore((state) => state.devices);
+  const statuses = useMemo(() => {
+    return Array.from(devicesMap.values()).map((d) => ({
+      device_id: d.deviceId,
+      status: d.status,
+      last_heartbeat_at: d.lastSeen ?? undefined,
+    }));
+  }, [devicesMap]);
+
+  // Derive visual state for each canonical module
+  const modulesWithState = useMemo(() => {
+    return MODULE_DEFINITIONS.map((module) => {
+      const derived = deriveModuleState(module, statuses);
+      return {
+        module,
+        visualState: (derived?.visualState || 'UNKNOWN') as VisualState,
+        lastSeen: derived?.lastSeen,
+      };
+    });
+  }, [statuses]);
 
   // Filter modules based on selected filters
-  const filteredModules = factoryModules.filter((module) => {
-    if (categoryFilter !== 'all' && module.category !== categoryFilter) {
-      return false;
-    }
-    if (statusFilter !== 'all' && module.status !== statusFilter) {
-      return false;
-    }
-    return true;
-  });
+  const filteredModules = useMemo(() => {
+    return modulesWithState.filter(({ module, visualState }) => {
+      if (categoryFilter !== 'all' && module.category !== categoryFilter) {
+        return false;
+      }
+      if (statusFilter !== 'all' && visualState !== statusFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [modulesWithState, categoryFilter, statusFilter]);
 
-  // Calculate summary stats
-  const stats = {
-    total: factoryModules.length,
-    online: factoryModules.filter((m) => m.status === 'online').length,
-    offline: factoryModules.filter((m) => m.status === 'offline').length,
-    warning: factoryModules.filter((m) => m.status === 'warning').length,
-    error: factoryModules.filter((m) => m.status === 'error').length,
-  };
+  // Calculate summary stats across 6 visual states (SPEC-7)
+  const stats = useMemo(() => {
+    const counts = {
+      total: MODULE_DEFINITIONS.length,
+      running: 0,
+      simulated: 0,
+      stale: 0,
+      offline: 0,
+      fault: 0,
+      unknown: 0,
+    };
+    for (const item of modulesWithState) {
+      const s = item.visualState.toLowerCase() as keyof typeof counts;
+      if (s in counts) {
+        counts[s]++;
+      }
+    }
+    return counts;
+  }, [modulesWithState]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -45,37 +83,43 @@ export function OverviewPage() {
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* Summary Stats - 6 canonical visual states (SPEC-7) */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <StatCard
-          label="Total Modules"
-          value={stats.total}
-          icon="📦"
-          colorClass="text-[var(--color-text-primary)]"
+          label="Running"
+          value={stats.running}
+          icon="🟢"
+          colorClass="text-emerald-400"
         />
         <StatCard
-          label="Online"
-          value={stats.online}
-          icon="✅"
-          colorClass="text-[var(--color-success)]"
+          label="Simulated"
+          value={stats.simulated}
+          icon="🔵"
+          colorClass="text-blue-400"
+        />
+        <StatCard
+          label="Stale"
+          value={stats.stale}
+          icon="🟡"
+          colorClass="text-amber-400"
         />
         <StatCard
           label="Offline"
           value={stats.offline}
-          icon="⭕"
-          colorClass="text-[var(--color-module-offline)]"
+          icon="⚪"
+          colorClass="text-gray-400"
         />
         <StatCard
-          label="Warning"
-          value={stats.warning}
-          icon="⚠️"
-          colorClass="text-[var(--color-warning)]"
+          label="Fault"
+          value={stats.fault}
+          icon="🔴"
+          colorClass="text-red-400"
         />
         <StatCard
-          label="Error"
-          value={stats.error}
-          icon="❌"
-          colorClass="text-[var(--color-error)]"
+          label="Unknown / N/A"
+          value={stats.unknown}
+          icon="🟣"
+          colorClass="text-purple-400"
         />
       </div>
 
@@ -112,7 +156,7 @@ export function OverviewPage() {
             <select
               id="status-filter"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as FactoryModule['status'] | 'all')}
+              onChange={(e) => setStatusFilter(e.target.value as StateFilter)}
               className="
                 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]
                 rounded-lg px-3 py-1.5 text-sm text-[var(--color-text-primary)]
@@ -147,12 +191,17 @@ export function OverviewPage() {
 
       {/* Module Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredModules.map((module) => (
+        {filteredModules.map(({ module, visualState, lastSeen }) => (
           <ModuleCard
-            key={module.id}
+            key={module.moduleId}
             module={module}
+            visualState={visualState}
+            lastSeen={lastSeen}
             showStats={true}
-            stats={getModuleStats(module)}
+            stats={[
+              { label: 'Role', value: module.role },
+              { label: 'Unit', value: module.unit || 'N/A' },
+            ]}
           />
         ))}
       </div>
@@ -162,10 +211,10 @@ export function OverviewPage() {
         <div className="text-center py-12">
           <div className="text-4xl mb-4">🔍</div>
           <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-            No modules found
+            No modules match the selected filter
           </h3>
           <p className="text-sm text-[var(--color-text-muted)]">
-            Try adjusting your filters to see more modules.
+            Try adjusting your category or status filters.
           </p>
         </div>
       )}
@@ -182,69 +231,16 @@ interface StatCardProps {
 
 function StatCard({ label, value, icon, colorClass }: StatCardProps) {
   return (
-    <div className="bg-[var(--color-bg-secondary)] p-4 rounded-xl border border-[var(--color-border)]">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-[var(--color-text-muted)]">{label}</span>
-        <span className="text-lg" role="img" aria-label={label}>
+    <div className="bg-[var(--color-bg-secondary)] p-3 rounded-xl border border-[var(--color-border)]">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-[var(--color-text-muted)] truncate">{label}</span>
+        <span className="text-sm" role="img" aria-label={label}>
           {icon}
         </span>
       </div>
-      <div className={`text-3xl font-bold ${colorClass}`}>{value}</div>
+      <div className={`text-2xl font-bold ${colorClass}`}>{value}</div>
     </div>
   );
-}
-
-// Generate mock stats for each module type
-function getModuleStats(module: FactoryModule): { label: string; value: string | number }[] {
-  switch (module.id) {
-    case 'conveyor':
-      return [
-        { label: 'Speed', value: '24 m/min' },
-        { label: 'Items/hr', value: 180 },
-      ];
-    case 'robotic-arm':
-      return [
-        { label: 'Cycles', value: 142 },
-        { label: 'Accuracy', value: '99.8%' },
-      ];
-    case 'cnc-mill':
-      return [
-        { label: 'Spindle', value: '12k RPM' },
-        { label: 'Feed', value: '800 mm/m' },
-      ];
-    case 'quality-control':
-      return [
-        { label: 'Passed', value: 234 },
-        { label: 'Failed', value: 3 },
-      ];
-    case 'storage':
-      return [
-        { label: 'Items', value: 1247 },
-        { label: 'Capacity', value: '87%' },
-      ];
-    case 'packaging':
-      return [
-        { label: 'Packages', value: 89 },
-        { label: 'Rate', value: '45/hr' },
-      ];
-    case 'sorting':
-      return [
-        { label: 'Sorted', value: 312 },
-        { label: 'Grade A', value: '78%' },
-      ];
-    case 'agv':
-      return [
-        { label: 'Active', value: 3 },
-        { label: 'Tasks', value: 12 },
-      ];
-    case 'control':
-      return [
-        { label: 'Nodes', value: 24 },
-        { label: 'Uptime', value: '99.9%' },
-      ];
-    default:
-      return [];
-  }
 }
 
 export default OverviewPage;

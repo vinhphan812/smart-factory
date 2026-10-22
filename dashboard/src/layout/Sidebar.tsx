@@ -1,10 +1,10 @@
 /**
- * Sidebar - Main navigation sidebar with 9-module overview
+ * Sidebar - Main navigation sidebar with 9-module overview (SPEC-2, SPEC-4)
  */
 
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { factoryModules, type FactoryModule } from '../design-system/tokens';
+import { MODULE_DEFINITIONS, type ModuleDefinition } from '../contracts/modules';
 
 interface SidebarProps {
   className?: string;
@@ -12,22 +12,42 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-// Navigation items for main routes
-const mainNavItems = [
+// Navigation items for all 10 SPEC-2 routes (+ Events)
+const mainNavItems: { path: string; label: string; icon: string; badge?: string }[] = [
   { path: '/', label: 'Overview', icon: '🏠' },
+  { path: '/modules', label: 'Factory Modules', icon: '🏭' },
+  { path: '/production', label: 'Production', icon: '📈' },
   { path: '/telemetry', label: 'Telemetry', icon: '📊' },
   { path: '/events', label: 'Events', icon: '📋' },
   { path: '/incidents', label: 'Incidents', icon: '🚨' },
+  { path: '/commands', label: 'Commands', icon: '🎮', badge: 'Gated' },
+  { path: '/devices', label: 'Devices', icon: '📱' },
+  { path: '/health', label: 'System Health', icon: '💚' },
+  { path: '/reports', label: 'Reports', icon: '📄' },
+  { path: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
-// Group modules by category
-const groupedModules = factoryModules.reduce((acc, module) => {
-  if (!acc[module.category]) {
-    acc[module.category] = [];
+const moduleIcons: Record<string, string> = {
+  'conveyor-01': '⚙️',
+  'sorting-01': '🔀',
+  'tower-crane-01': '🏗️',
+  'parking-01': '🅿️',
+  'forklift-01': '🚜',
+  'dump-truck-01': '🚚',
+  'packaging-01': '📦',
+  'brackets-01': '🔩',
+  'combine-01': '🎛️',
+};
+
+// Group canonical modules by category
+const groupedModules = MODULE_DEFINITIONS.reduce((acc, module) => {
+  const cat = module.category || 'production';
+  if (!acc[cat]) {
+    acc[cat] = [];
   }
-  acc[module.category].push(module);
+  acc[cat].push(module);
   return acc;
-}, {} as Record<string, FactoryModule[]>);
+}, {} as Record<string, ModuleDefinition[]>);
 
 const categoryLabels: Record<string, string> = {
   production: 'Production',
@@ -55,26 +75,33 @@ export function Sidebar({ className = '', collapsed = false }: SidebarProps) {
       `}
     >
       {/* Main Navigation */}
-      <nav className="p-4 border-b border-[var(--color-border)]" aria-label="Main navigation">
-        <div className="space-y-1">
+      <nav className="p-3 border-b border-[var(--color-border)] overflow-y-auto max-h-[50%]" aria-label="Main navigation">
+        <div className="space-y-0.5">
           {mainNavItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === '/'}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                   isActive
                     ? 'bg-[var(--color-primary)] text-white'
                     : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-white'
                 }`
               }
             >
-              <span className="text-lg flex-shrink-0" aria-hidden="true">
+              <span className="text-base flex-shrink-0" aria-hidden="true">
                 {item.icon}
               </span>
               {!collapsed && (
-                <span className="font-medium text-sm">{item.label}</span>
+                <div className="flex items-center justify-between flex-1 min-w-0">
+                  <span className="font-medium text-xs truncate">{item.label}</span>
+                  {item.badge && (
+                    <span className="text-[10px] uppercase font-semibold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
               )}
             </NavLink>
           ))}
@@ -84,13 +111,13 @@ export function Sidebar({ className = '', collapsed = false }: SidebarProps) {
       {/* Modules Section */}
       {!collapsed && (
         <div className="flex-1 overflow-y-auto">
-          <div className="p-4">
+          <div className="p-3">
             <button
               onClick={() => setModulesExpanded(!modulesExpanded)}
-              className="w-full flex items-center justify-between px-2 py-2 text-xs font-semibold uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
+              className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
               aria-expanded={modulesExpanded}
             >
-              <span>Factory Modules</span>
+              <span>Nine Physical Modules</span>
               <svg
                 className={`w-4 h-4 transition-transform ${modulesExpanded ? 'rotate-180' : ''}`}
                 fill="none"
@@ -102,16 +129,16 @@ export function Sidebar({ className = '', collapsed = false }: SidebarProps) {
             </button>
 
             {modulesExpanded && (
-              <div className="mt-2 space-y-4">
+              <div className="mt-1 space-y-3">
                 {Object.entries(groupedModules).map(([category, modules]) => (
                   <div key={category}>
-                    <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-[var(--color-text-muted)]">
+                    <div className="flex items-center gap-2 px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-muted)]">
                       <span>{categoryIcons[category]}</span>
                       <span>{categoryLabels[category]}</span>
                     </div>
-                    <div className="mt-1 space-y-0.5">
+                    <div className="mt-0.5 space-y-0.5">
                       {modules.map((module) => (
-                        <ModuleNavItem key={module.id} module={module} />
+                        <ModuleNavItem key={module.moduleId} module={module} />
                       ))}
                     </div>
                   </div>
@@ -124,9 +151,9 @@ export function Sidebar({ className = '', collapsed = false }: SidebarProps) {
 
       {/* Footer */}
       {!collapsed && (
-        <div className="p-4 border-t border-[var(--color-border)]">
-          <div className="text-xs text-[var(--color-text-muted)] text-center">
-            Smart Factory v0.1.0
+        <div className="p-3 border-t border-[var(--color-border)]">
+          <div className="text-[11px] text-[var(--color-text-muted)] text-center">
+            Smart Factory v0.1.0 • L0–L2
           </div>
         </div>
       )}
@@ -135,23 +162,17 @@ export function Sidebar({ className = '', collapsed = false }: SidebarProps) {
 }
 
 interface ModuleNavItemProps {
-  module: FactoryModule;
+  module: ModuleDefinition;
 }
 
 function ModuleNavItem({ module }: ModuleNavItemProps) {
-  const statusColors: Record<string, string> = {
-    online: 'bg-[var(--color-success)]',
-    offline: 'bg-[var(--color-module-offline)]',
-    warning: 'bg-[var(--color-warning)]',
-    error: 'bg-[var(--color-error)]',
-  };
-  const statusColor = statusColors[module.status || 'unknown'] || 'bg-gray-500';
+  const icon = moduleIcons[module.moduleId] || '🏭';
 
   return (
     <NavLink
-      to={module.path}
+      to={`/modules/${module.moduleId}`}
       className={({ isActive }) =>
-        `flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm ${
+        `flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors text-xs ${
           isActive
             ? 'bg-[var(--color-primary-alpha)] text-[var(--color-primary-light)] border-l-2 border-[var(--color-primary)]'
             : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-white'
@@ -159,10 +180,10 @@ function ModuleNavItem({ module }: ModuleNavItemProps) {
       }
     >
       <span className="flex-shrink-0" aria-hidden="true">
-        {module.icon}
+        {icon}
       </span>
-      <span className="flex-1 truncate">{module.shortName}</span>
-      <span className={`w-1.5 h-1.5 rounded-full ${statusColor} flex-shrink-0`} />
+      <span className="flex-1 truncate">{module.name}</span>
+      <span className="text-[10px] font-mono text-[var(--color-text-muted)]">{module.moduleId}</span>
     </NavLink>
   );
 }
