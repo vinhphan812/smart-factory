@@ -1,379 +1,237 @@
-# Coverage Audit — October 2026 (Evidence-Bounded Snapshot)
+# Coverage Audit — October 2026 (Reproducible Bounded Snapshot)
 
-> **⚠️ DATED AUDIT — NOT CI COMPLIANCE CERTIFICATION**  
-> This document is an evidence-bounded snapshot taken on a specific commit with a specific
-> environment. It does **not** represent current CI status, does **not** certify clean regression,
-> and does **not** imply all tests pass everywhere. Figures marked stale are superseded by
-> open PRs (#242, #244, #245). A re-audit is required after those PRs merge.
+> **⚠️ DATED AUDIT — NOT A CI COMPLIANCE CERTIFICATION**  
+> This is a point-in-time L1 local result, not a current-master quality gate, hardware evidence,
+> or a claim that all environments pass. Results below apply only to the named revision, command,
+> and tool versions. Re-run the documented commands after source, dependency, or CI changes.
 
 **Issue:** #187  
-**Audited:** 2026-10-20  
-**Last re-verified:** 2026-10-21 (ADR lint re-validation; test count re-check)  
+**Audit evidence captured:** 2026-10-22  
 **Auditor:** dev-qa  
-**Branch:** `feat/issue-187-ci-coverage-audit` → master  
-**PR Head:** `08ac8d5`  
-**Scope:** `iot-gateway/`, `factory-control/`, `dashboard/`, `edge-ai-robot/`, `integration-tests/`
+**PR:** #234, `feat/issue-187-ci-coverage-audit` → `master`  
+**Historical source revision:** `87e2e383a4beb7819624a269180001b27adeae7f`  
+**Evidence artifacts:**
+- [`coverage-audit-2026-10-87e2e38-iot-gateway.txt`](evidence/coverage-audit-2026-10-87e2e38-iot-gateway.txt)
+- [`coverage-audit-2026-10-87e2e38-factory-control.txt`](evidence/coverage-audit-2026-10-87e2e38-factory-control.txt)
 
-### How to Read This Document
+## 1. Evidence rules and provenance
 
-Each percentage figure carries a provenance tag in brackets:
+A coverage number is retained only where a local run completed and the full terminal capture is
+versioned above. Counts such as source LOC and test LOC from the prior draft are intentionally
+not retained: they were not captured by a reproducible command.
 
 | Tag | Meaning |
-|-----|---------|
-| `[measured]` | Collected via `pytest --cov` or equivalent; coverage tool ran to completion |
-| `[uncollectable]` | Tests exist but fail at import before any code executes; no coverage produced |
-| `[not measured]` | No test run was executed for this module; no coverage data available |
-| `[unavailable]` | Tooling or environment not set up to run tests for this module |
+|---|---|
+| **[measured]** | The exact coverage command completed; its SHA, environment, and capture are linked. |
+| **[uncollectable]** | Test collection was attempted and failed before tests ran; it is **not** coverage. |
+| **[not measured]** | Files/workflows were inspected but no coverage command was run. |
+| **[not audited]** | Outside this bounded local audit. |
 
-A `0%` figure with `[measured]` means coverage was collected and the result was zero.
-A `0%` figure with `[uncollectable]` means no coverage was collected at all.
-
-### ADR Lint Status
-
-| Check | Result | Detail |
-|-------|--------|--------|
-| `ADR Lint & Architecture Governance Gate` | ✅ PASS | 4 consecutive runs 2026-10-20 13:31–13:38 (push + PR × 2) on SHA `08ac8d57` |
+A percentage without a tag is a target, not a result. `0% [uncollectable]` is never a measured
+coverage value.
 
 ---
 
-## 1. Module Summary
+## 2. Bounded module summary
 
-> **Staleness notice:** PRs #242 (dashboard auth), #244 (deployment/E2E), #245 (threat model v2, 69 security abuse tests)
-> are open and **not yet merged** as of 2026-10-21. Their merge will alter iot-gateway test counts
-> and runtime behavior. The iot-gateway coverage figure (50%) was measured before PR #245 merged;
-> re-audit required post-merge. See Section 8 for confirmed staleness evidence.
+All observed figures in this table are at `87e2e38`; the command and environment are detailed in
+sections 3–6. They do not describe later commits or open PR heads.
 
-| Module | Language | Source LOC | Test LOC | Test Files | CI Workflow | Coverage Provenance | Status |
-|--------|----------|-----------|----------|------------|-------------|---------------------|--------|
-| `iot-gateway/` | Python | 3,641 | 4,675 | 12 | `gateway-ci.yml` | **50% [measured]** | ⚠️ PARTIAL |
-| `factory-control/` | Python | 2,709 | 1,554 | 5 | `factory-control-ci.yml` | **69% [measured]** | ⚠️ PARTIAL |
-| `dashboard/` | TypeScript/React | 5,496 | ~300 | 2 | **MISSING** | **unknown [not measured]** | 🔴 NO CI |
-| `edge-ai-robot/` | Python | 927 | 504 | 3 | **MISSING** | **0% [uncollectable]** | 🔴 NO CI |
-| `integration-tests/` | Python | — | — | 0 | **MISSING** | N/A | 🔴 NOT STARTED |
-| `esp32-ukit-bridge/` | C / Python | — | 196 | 1 | `bridge-ci.yml` | N/A (native) | 🟢 CI OK |
-| `digital-twin/` | — | — | — | — | **MISSING** | N/A [unavailable] | ⚪ UNCLEAR |
+| Module | Test/coverage observation | CI workflow at `87e2e38` | Status |
+|---|---|---|---|
+| `iot-gateway/` | **246 passed; 79% [measured]** | `gateway-ci.yml` | L1 local evidence; CI coverage is non-blocking |
+| `factory-control/` | **98 passed; 69% [measured]** | `factory-control-ci.yml` | L1 local evidence; workflow has no coverage step |
+| `dashboard/` | 2 test files; **coverage unknown [not measured]** | no dashboard workflow found | Not a coverage result |
+| `edge-ai-robot/` | 3 collection errors; **coverage unknown [uncollectable]** | no edge/robot workflow found | Import path/dependency setup must be verified |
+| `integration-tests/` | `README.md` only; **not measured** | no workflow found | Harness not audited as executable |
+| `esp32-ukit-bridge/` | **not audited** | `bridge-ci.yml` found | Outside scope of local coverage runs |
+| `digital-twin/` | **not audited** | no workflow found | Outside scope of local coverage runs |
 
 ---
 
-## 2. `iot-gateway/` — Detailed Coverage
+## 3. `iot-gateway/` — reproducible coverage evidence
 
-> **⚠️ STALE — 2026-10-21 re-check shows 246 tests collected (vs 168 at audit time).**
-> PR #245 adds 69 security abuse tests. The 161/7 figure below was measured before PR #245 merged.
-> Coverage % is expected to increase post-merge. See Section 8 for evidence.
+### Run identity
 
-**Original Run (2026-10-20):**
-- **Command:** `pytest --cov=src --cov-report=term-missing tests/` (from `iot-gateway/` directory)
-- **Environment:** Python 3.14.7, pytest 7.4.4, pytest-cov 4.1.0, coverage 7.2.7, aiohttp 3.8.6
-- **OS:** Windows 11 (git-bash/MSYS)
-- **Result:** 161 pass / 7 fail (SSRF tests requiring `aiohttp`); 50% line coverage
-- **Commit measured:** `87e2e38` (master at audit time)
-- **CI:** `gateway-ci.yml` — Python 3.11/3.12, installs `iot-gateway[dev]`, `continue-on-error: true` on coverage step
+- **SHA:** `87e2e383a4beb7819624a269180001b27adeae7f`
+- **Working directory:** `iot-gateway/` in a detached worktree at that SHA
+- **Command:** `python -m pytest --cov=src --cov-report=term-missing tests/`
+- **OS/interpreter:** Windows 11; Python 3.14.7
+- **Test tooling:** pytest 8.4.2; pytest-cov 7.1.0; coverage 7.16.2
+- **Relevant installed dependency:** aiohttp 3.14.3
+- **Result:** **246 passed, 632 warnings; total line coverage 79%**
+- **Full output:** [`coverage-audit-2026-10-87e2e38-iot-gateway.txt`](evidence/coverage-audit-2026-10-87e2e38-iot-gateway.txt)
 
-**7 SSRF failures:** `ModuleNotFoundError: No module named 'aiohttp'` in local venv. These 7 tests
-pass in CI where `iot-gateway[dev]` is installed (which includes `aiohttp`). This is an environment
-issue, not a test logic failure.
+The prior `161 pass / 7 fail / 50%` assertion is **unverified and withdrawn**. It is not used as a
+baseline, does not establish a historical regression, and must not be attributed to `87e2e38`.
+Likewise, this revision already contains `tests/test_gateway.py` and `tests/test_orion_ld.py`;
+recommendations below therefore expand these files rather than claiming they need creation.
 
-### Per-Module Coverage
+`iot-gateway/pyproject.toml` at this SHA requires `aiohttp>=3.9.0`. The reproducible environment
+had aiohttp installed. No claim is retained that the same environment both listed aiohttp and
+failed because it was absent.
 
-| File | Statements | Missing | Coverage | Missing Test Categories |
-|------|-----------|---------|----------|------------------------|
-| `src/iot_gateway/gateway.py` | 100 | 100 | **0% [measured]** | HAPPY_PATH, ERROR_PATH, MQTT reconnect, timeout |
-| `src/iot_gateway/mqtt_client.py` | 49 | 49 | **0% [measured]** | CONNECT, DISCONNECT, RECONNECT, QoS, TLS |
-| `src/iot_gateway/adapters/orion_ld.py` | 264 | 264 | **0% [measured]** | QUERY, SUBSCRIBE, ERROR_PATH, NGSI-LD entities |
-| `src/iot_gateway/time_sync.py` | 82 | 64 | **16% [measured]** | HAPPY_PATH (NTP-like sync), skew detection |
-| `src/iot_gateway/incidents.py` | 105 | 46 | **47% [measured]** | INCIDENT_ACK, CONCURRENCY, timeout |
-| `src/iot_gateway/event_store.py` | 143 | 38 | **71% [measured]** | CONCURRENCY, RECOVERY, TTL expiry |
-| `src/iot_gateway/api.py` | 176 | 42 | **73% [measured]** | AUTH, CONCURRENCY, timeout, 4xx/5xx |
-| `src/iot_gateway/alerts.py` | 212 | 24 | **89% [measured]** | CONCURRENCY (webhook handler) |
-| `src/iot_gateway/safety_gate.py` | 143 | 6 | **95% [measured]** | CONCURRENCY (async) |
-| `src/iot_gateway/event_normalizer.py` | 73 | 3 | **95% [measured]** | All major paths covered |
-| `src/iot_gateway/models.py` | 32 | 1 | **97% [measured]** | All paths covered |
+### Per-module coverage from the captured output
 
-### Missing Test Categories (iot-gateway)
+| File | Statements | Missing | Coverage | Evidence-based gap note |
+|---|---:|---:|---:|---|
+| `src/iot_gateway/adapters/orion_ld.py` | 261 | 51 | **78% [measured]** | Error and branch paths remain in capture |
+| `src/iot_gateway/alerts.py` | 212 | 14 | **94% [measured]** | Capture identifies remaining lines |
+| `src/iot_gateway/api.py` | 176 | 25 | **83% [measured]** | Capture identifies remaining lines/branches |
+| `src/iot_gateway/cli.py` | 29 | 29 | **0% [measured]** | CLI path was not executed |
+| `src/iot_gateway/config.py` | 9 | 2 | **78% [measured]** | Two lines not executed |
+| `src/iot_gateway/event_normalizer.py` | 73 | 2 | **97% [measured]** | Narrow residual gap |
+| `src/iot_gateway/event_store.py` | 143 | 15 | **88% [measured]** | Recovery/branch lines remain |
+| `src/iot_gateway/gateway.py` | 100 | 33 | **65% [measured]** | Remaining gateway paths listed in capture |
+| `src/iot_gateway/incidents.py` | 105 | 46 | **47% [measured]** | Lowest non-CLI measured module |
+| `src/iot_gateway/models.py` | 32 | 0 | **100% [measured]** | All listed statements executed |
+| `src/iot_gateway/mqtt_client.py` | 49 | 37 | **20% [measured]** | Connection/retry paths are a priority |
+| `src/iot_gateway/safety_gate.py` | 143 | 6 | **95% [measured]** | Small residual gap |
+| `src/iot_gateway/time_sync.py` | 82 | 12 | **85% [measured]** | Snapshot/synchronization paths remain |
+| **TOTAL** | **1,417** | **272** | **79% [measured]** | 314 branches, 29 partial branches |
 
-| Category | Covered? | Key Gap | Owner |
-|----------|----------|---------|-------|
-| Happy path — MQTT connect/publish | ❌ No | `gateway.py`, `mqtt_client.py` at 0% | backend-a |
-| Error path — broker disconnect | ❌ No | No reconnect/disconnect tests | backend-a |
-| Error path — malformed payloads | ⚠️ Partial | `event_normalizer.py` covered; `models.py` minimal | backend-a |
-| Auth / RBAC | ❌ No | No auth tests in `api.py` | backend-a |
-| Concurrency — concurrent events | ⚠️ Partial | `safety_gate.py` async covered; `api.py` concurrent WS not | backend-a |
-| Timeout / retry | ❌ No | No timeout/retry scenarios | backend-a |
-| Orion LD NGSI-LD | ❌ No | `adapters/orion_ld.py` at 0% | backend-a |
-| SSRF prevention | 🟢 Yes | `test_ssrf.py` 7 tests (pass in CI) | security |
+The capture also reports package initializers at 100%; they are omitted above because they are not
+separate remediation priorities. Percentages include branch-aware coverage output but the reported
+`Cover` column is the tool's aggregate percentage.
 
-> **Owner key:** `backend-a` = iot-gateway implementer; `security` = security reviewer; `qa` = dev-qa.
+### Test-to-module mapping at `87e2e38`
 
----
+The runner collected these executable test modules: `test_alerts.py`, `test_api.py`,
+`test_dashboard_safety.py`, `test_gateway.py`, `test_models.py`, `test_normalizer.py`,
+`test_orion_ld.py`, `test_safety_gate.py`, `test_ssrf.py`, `test_store.py`, and
+`test_time_sync.py`. `conftest.py`, `run_safety_gate_tests.py`, and
+`test_safety_gate_conftest.py` also exist in the test tree but are not listed as collected test
+modules by the run output. The mapping below is based on names and observed collection only; it is
+not a proof of one-to-one coverage ownership.
 
-## 3. `factory-control/` — Detailed Coverage
+| Source area | Relevant existing test module(s) | Follow-up owner | Gate |
+|---|---|---|---|
+| Gateway orchestration | `test_gateway.py` | backend-a | Raise `gateway.py` from 65% with targeted failure/retry tests |
+| MQTT client | no dedicated `test_mqtt_client.py` | backend-a | Exercise connect, disconnect, retry, QoS and TLS failure paths |
+| Orion-LD adapter | `test_orion_ld.py` | backend-a | Add error/redirect/subscription negative paths; retain ≥78% |
+| Incidents | no dedicated `test_incidents.py` | backend-a | Exercise acknowledgement, timeout, and concurrent updates |
+| Event store | `test_store.py` | backend-a | Add recovery/concurrent-write scenarios |
+| Time synchronization | `test_time_sync.py` | backend-a | Add snapshot ordering/skew/recovery cases |
+| API and dashboard safety | `test_api.py`, `test_dashboard_safety.py` | backend-a | Add auth/error/concurrent WebSocket cases where contract requires them |
+| SSRF protections | `test_ssrf.py` | security | Preserve passing negative/security paths |
 
-**Run:** `pytest --cov=src --cov-report=term-missing tests/` (from `factory-control/` directory)  
-**Environment:** Python 3.14.7, pytest 7.4.4, pytest-cov 4.1.0, coverage 7.2.7  
-**OS:** Windows 11 (git-bash/MSYS)  
-**Result:** 98 pass; 69% line coverage (339 of 1,092 statements not covered)  
-**Commit measured:** `87e2e38` (same run as iot-gateway)  
-**CI:** `factory-control-ci.yml` — Python 3.11/3.12, installs `pydantic pytest pytest-asyncio`
+### Bounded finding
 
-### Per-Module Coverage
-
-| File | Statements | Missing | Coverage | Notes |
-|------|-----------|---------|----------|-------|
-| `src/factory_control/` (old pkg, unused) | ~230 | ~230 | **0% [measured]** | Deprecated dual-package layout |
-| `src/adapters/adapters.py` (stub) | 2 | 2 | **0% [measured]** | Re-export stub, not used |
-| `src/adapters/sorting.py` | 183 | 34 | **81% [measured]** | TC1–TC8 covered; reject/sensor fault paths missing |
-| `src/adapters/base.py` | 66 | 12 | **82% [measured]** | Abstract base, partially exercised |
-| `src/simulator.py` | 115 | 34 | **70% [measured]** | Tick loop; integration with adapters not covered |
-| `src/state_machine.py` | 124 | 7 | **94% [measured]** | All transitions; history/telemetry paths missing |
-| `src/adapters/conveyor.py` | 142 | 7 | **95% [measured]** | Speed, direction, sensor integration covered |
-| `src/models.py` | 122 | 5 | **96% [measured]** | Edge cases for serialization |
-
-### Missing Test Categories (factory-control)
-
-| Category | Covered? | Key Gap | Owner |
-|----------|----------|---------|-------|
-| Happy path — sorting module | 🟢 Yes | TC1–TC8 implemented | factory-a |
-| Error path — sensor fault | ⚠️ Partial | TC5 covered; other fault modes not | factory-a |
-| Error path — E-stop from running | 🟢 Yes | TC6 covered | factory-a |
-| Error path — duplicate item | 🟢 Yes | TC3 covered | factory-a |
-| Concurrency — multi-module | ❌ No | No concurrent state machine tests | factory-a |
-| Simulator — tick integration | ⚠️ Partial | `test_simulator.py` exists; adapter integration missing | factory-a |
-| Idempotency | 🟢 Yes | TC7 covered | factory-a |
-| Telemetry compliance | 🟢 Yes | TC8 covered | factory-a |
-
-> **Owner key:** `factory-a` = factory-control implementer.
+This run is evidence of L1 behavior only. It does not verify live MQTT, broker reconnect behavior,
+TLS credentials, physical interlocks, or HIL safety. Those need suitable L2–L4 environments under
+`docs/testing-and-acceptance.md`.
 
 ---
 
-## 4. `dashboard/` — Not Measured
+## 4. `factory-control/` — reproducible coverage evidence
 
-> **`unknown [not measured]`** means no pytest/coverage run was executed. Two test files exist
-> but no coverage tool was invoked and no CI workflow exists. This is **not** the same as "0% coverage".
+### Run identity
 
-**Run:** `find dashboard -name "*.test.*"` (find test files; no coverage collected)  
-**Environment:** Node 26.7.0, npm 12.0.2  
-**OS:** Windows 11  
-**Result:** 2 test files found; no `npm test` coverage run recorded in audit  
-**CI Status:** 🔴 **MISSING** — no `.github/workflows/dashboard-ci.yml`  
-**Coverage:** **unknown [not measured]** — no CI workflow means no automated measurement
+- **SHA:** `87e2e383a4beb7819624a269180001b27adeae7f`
+- **Working directory:** `factory-control/` in a detached worktree at that SHA
+- **Command:** `python -m pytest --cov=src --cov-report=term-missing tests/`
+- **OS/interpreter:** Windows 11; Python 3.14.7
+- **Test tooling:** pytest 8.4.2; pytest-cov 7.1.0; coverage 7.16.2
+- **Result:** **98 passed, 1 warning; total line coverage 69%**
+- **Full output:** [`coverage-audit-2026-10-87e2e38-factory-control.txt`](evidence/coverage-audit-2026-10-87e2e38-factory-control.txt)
 
-### Existing Tests
+### Per-module coverage from the captured output
 
-| File | Type | Coverage |
-|---|---|---|
-| `src/tests/gatewayWs.test.ts` | Vitest unit | Minimal |
-| `src/tests/TelemetryChart.test.tsx` | Vitest + React Testing Library | Minimal |
+| File | Statements | Missing | Coverage |
+|---|---:|---:|---:|
+| `src/__init__.py` | 1 | 1 | **0% [measured]** |
+| `src/adapters/__init__.py` | 103 | 4 | **96% [measured]** |
+| `src/adapters/adapters.py` | 2 | 2 | **0% [measured]** |
+| `src/adapters/base.py` | 66 | 12 | **82% [measured]** |
+| `src/adapters/conveyor.py` | 142 | 7 | **95% [measured]** |
+| `src/adapters/sorting.py` | 183 | 34 | **81% [measured]** |
+| `src/factory_control/__init__.py` | 3 | 3 | **0% [measured]** |
+| `src/factory_control/adapters/__init__.py` | 3 | 3 | **0% [measured]** |
+| `src/factory_control/adapters/base.py` | 57 | 57 | **0% [measured]** |
+| `src/factory_control/adapters/conveyor.py` | 119 | 119 | **0% [measured]** |
+| `src/factory_control/models.py` | 45 | 45 | **0% [measured]** |
+| `src/models.py` | 116 | 5 | **96% [measured]** |
+| `src/simulator.py` | 115 | 34 | **70% [measured]** |
+| `src/state_machine.py` | 120 | 7 | **94% [measured]** |
+| **TOTAL** | **1,075** | **333** | **69% [measured]** |
 
-### Source Files Without Tests
+### Follow-up priorities
 
-- `src/api/gateway.ts` — API client for all gateway operations
-- `src/api/websocket.ts` — WebSocket event consumer
-- `src/components/incident/*` — Incident UI components (AcknowledgeButton, IncidentCard, IncidentTimeline)
-- `src/hooks/incidents/*` — Incident state management hooks
-- `src/hooks/useGatewayEvents.ts` — Gateway event processing
-- `src/features/telemetry/*` — Telemetry charts (TelemetryChart covered; hook not)
-- `src/contracts/gateway.ts` — Contract types (Pydantic-equivalent)
-
-### Missing Test Categories (dashboard)
-
-| Category | Covered? | Key Gap | Owner |
-|----------|----------|---------|-------|
-| Happy path — incident list | ❌ No | No incident component tests | dashboard-a |
-| Happy path — telemetry chart | ⚠️ Partial | `TelemetryChart.test.tsx` exists; hook not | dashboard-a |
-| Error path — WebSocket disconnect | ⚠️ Partial | `gatewayWs.test.ts` covers disconnect; no reconnect | dashboard-a |
-| Auth / RBAC | ❌ No | No auth/rbac tests | dashboard-a |
-| WebSocket event routing | ❌ No | No tests for `useGatewayEvents` | dashboard-a |
-| Incident acknowledge workflow | ❌ No | No `AcknowledgeButton` tests | dashboard-a |
-| Contract validation | ❌ No | No tests for `contracts/gateway.ts` | dashboard-a |
-
-> **Owner key:** `dashboard-a` = dashboard implementer.
-> **Remediation gate:** `dashboard-ci.yml` must exist and collect coverage before any module
-> coverage target applies.
+| Priority | Action | Owner | Gate |
+|---:|---|---|---|
+| 1 | Add simulator/adaptor integration tests | factory-a | `simulator.py` coverage exceeds the current 70% measurement |
+| 2 | Cover sorting fault and rejection paths | factory-a | `sorting.py` coverage exceeds the current 81% measurement |
+| 3 | Resolve or document the parallel `src/factory_control/` package | factory-a | Explicit ownership/exclusion decision with test evidence |
+| 4 | Add CI coverage collection | factory-a | Artifact or terminal report produced by CI (not merely a test pass) |
 
 ---
 
-## 5. `edge-ai-robot/` — Tests Uncollectable
+## 5. Bounded file and workflow inspection (not coverage)
 
-> **`0% [uncollectable]`** means coverage was not measured. All 3 test files fail at import
-> (`ModuleNotFoundError: No module named 'edge_ai_robot'`). This is **not** "measured zero coverage."
-> The source code exists; the package is not installed in the local environment.
+The following outputs were inspected at `87e2e38` and are deliberately not represented as
+percentages:
 
-**Run:** `pytest tests/` (from `edge-ai-robot/` directory)  
-**Environment:** Python 3.14.7, pytest 7.4.4, httpx 0.24.1 (local venv)  
-**OS:** Windows 11 (git-bash/MSYS)  
-**Result:** 3 ERROR — all tests fail with `ModuleNotFoundError: No module named 'edge_ai_robot'`  
-**CI Status:** 🔴 **MISSING** — no workflow file  
-**Coverage:** **0% [uncollectable]** — tests cannot collect; coverage tool never ran
+| Scope | Command | Environment | Result | Interpretation |
+|---|---|---|---|---|
+| Dashboard test files | `find dashboard -name '*.test.*' -printf '%P\n' \| sort` | Node 26.7.0; npm 12.0.2; Windows 11 | `src/tests/gatewayWs.test.ts`; `src/tests/TelemetryChart.test.tsx` | Two files exist; no coverage was run |
+| Edge robot collection | `cd edge-ai-robot && python -m pytest tests/ --collect-only -q` | Python 3.14.7; pytest 8.4.2; Windows 11 | no tests collected; 3 `ModuleNotFoundError: edge_ai_robot` errors | **[uncollectable]**, not 0% coverage |
+| Workflows | `find .github/workflows -maxdepth 1 -type f -name '*.yml' -printf '%f\n' \| sort` | Windows 11; SHA `87e2e38` | `adr-lint.yml`, `bridge-ci.yml`, `factory-control-ci.yml`, `gateway-ci.yml` | No dashboard, edge-robot, or integration workflow found |
+| Integration harness | `find integration-tests -maxdepth 2 -type f -printf '%P\n' \| sort` | Windows 11; SHA `87e2e38` | `README.md` | No executable test claim is made |
 
-**Root Cause:** Tests import `edge_ai_robot.*` which transitively imports `structlog`, `httpx`,
-`websockets`, and `pydantic`. The package is declared in `pyproject.toml` but not installed in the
-local environment. CI would install `-e "edge-ai-robot[dev]"` which pulls all runtime deps.  
-**Additional note:** `httpx>=0.27` required by the current `pyproject.toml` is not available for
-Python 3.14 (`pip install -e .` fails with "No matching distribution found for httpx>=0.27").
-The CI uses Python 3.11/3.12 where this is not an issue.
+### CI configuration observations at `87e2e38`
 
-### Source Files Without Tests
-
-- `src/edge_ai_robot/adapter/__init__.py` (156 statements) — Robot adapter, 0% covered
-- `src/edge_ai_robot/detection/__init__.py` (90 statements) — Anomaly detection, 0% covered
-- `src/edge_ai_robot/skills/__init__.py` (40 statements) — Skill definitions, 0% covered
-
-### Missing Test Categories (edge-ai-robot)
-
-All categories missing — tests cannot collect at all.
-
-| Category | Status | Owner |
-|----------|--------|-------|
-| Happy path — robot connect/command | ❌ Tests uncollectable | robot-a |
-| Error path — connection failure | ❌ Tests uncollectable | robot-a |
-| Detection — anomaly scoring | ❌ Tests uncollectable | robot-a |
-| Skills — invocation and response | ❌ Tests uncollectable | robot-a |
-| Auth / RBAC | ❌ Tests uncollectable | robot-a |
-| Concurrency | ❌ Tests uncollectable | robot-a |
-
-> **Owner key:** `robot-a` = edge-ai-robot implementer.
-> **Remediation gate:** CI workflow must confirm test collection before coverage targets apply.
-> Python 3.11/3.12 in CI should resolve the `httpx>=0.27` dependency issue that blocks local installation.
+- `gateway-ci.yml` installs `iot-gateway[dev]`, tests Python 3.11/3.12, and invokes a coverage
+  command, but its coverage step has `continue-on-error: true`; a successful test job is not
+  evidence that the coverage command passed.
+- `factory-control-ci.yml` tests Python 3.11/3.12 but has no coverage command.
+- The absence of the named workflow files is a file-inspection result, not evidence that a module
+  has zero tests or zero coverage.
 
 ---
 
-## 6. CI Gaps
+## 6. Remediation matrix
 
-> **Staleness:** PRs #242, #244, #245 are open and unmerged. Their merge will change iot-gateway
-> test counts and potentially factory-control/dashboard state. A post-merge re-audit is required.
+| Priority | Action | Owner | Verifiable gate |
+|---:|---|---|---|
+| 1 | Add a dedicated MQTT-client test module | backend-a | New run raises `mqtt_client.py` above 20% and includes negative reconnect/timeout cases |
+| 2 | Expand existing `tests/test_gateway.py` | backend-a | New run raises `gateway.py` above 65% with failure/retry tests |
+| 3 | Expand existing `tests/test_orion_ld.py` | backend-a | New run covers error/subscription paths and retains/improves 78% |
+| 4 | Add incident lifecycle tests | backend-a | New run raises `incidents.py` above 47%; includes concurrent/timeout case |
+| 5 | Remove or cover CLI blind spot | backend-a | New run raises `cli.py` above 0%, or a reviewed explicit exclusion exists |
+| 6 | Add dashboard CI and coverage capture | dashboard-a | CI uploads/reports coverage and has a passing/error/loading test set |
+| 7 | Make edge robot collection reproducible | robot-a | CI installation and `--collect-only` output demonstrate collection before setting any target |
+| 8 | Add an integration harness only at an appropriate declared level | qa | At least one L2+ scenario has a command, declared simulator/hardware mix, and CI evidence |
 
-| Module | CI Workflow | Trigger | Tests Run | Coverage | Notes |
-|--------|-----------|---------|-----------|----------|-------|
-| `iot-gateway/` | `gateway-ci.yml` | push + PR, paths filter | ✅ Yes | ✅ (XML) | `continue-on-error: true` on coverage step; failures silent |
-| `factory-control/` | `factory-control-ci.yml` | push + PR, paths filter | ✅ Yes | ❌ No | No coverage step; no trend tracking |
-| `dashboard/` | **MISSING** | — | — | — | Needs `dashboard-ci.yml` |
-| `edge-ai-robot/` | **MISSING** | — | — | — | Needs `edge-ai-robot-ci.yml` |
-| `integration-tests/` | **MISSING** | — | — | — | Status: PLANNED |
-| `esp32-ukit-bridge/` | `bridge-ci.yml` | push + PR, paths filter | ✅ Python + PlatformIO | ✅ Native | Python tests + native firmware |
-| `digital-twin/` | **MISSING** | — | — | — | No workflow; scope unclear |
-
-### CI Quality Issues
-
-1. **`gateway-ci.yml`** — coverage step has `continue-on-error: true`; coverage failures are silently ignored; coverage figure (50%) does not gate merge
-2. **`factory-control-ci.yml`** — no coverage collection; cannot track coverage trends over time
-3. **`adr-lint.yml`** — only checks ADR compliance, not test quality or coverage thresholds
+The numeric thresholds in the gates are intentionally comparisons to this snapshot, not release
+thresholds. They must be revisited when dependencies or source change.
 
 ---
 
-## 7. Recommendations
+## 7. Reproduction procedure
 
-> **Path convention:** All CI workflow recommendations below use root-relative `.github/workflows/` paths (e.g. `.github/workflows/dashboard-ci.yml`). GitHub Actions only executes workflows placed at this location.
+Use a clean detached worktree at the source SHA and the same interpreter/dependency environment
+when comparing to the evidence artifacts:
 
-### Priority 1 — Add Missing CI Workflows
+```bash
+git worktree add --detach <clean-worktree> 87e2e383a4beb7819624a269180001b27adeae7f
+cd <clean-worktree>
+git rev-parse HEAD
+python --version
+python -m pytest --version
+python -m pip show pytest pytest-cov coverage aiohttp
+cd iot-gateway && python -m pytest --cov=src --cov-report=term-missing tests/
+cd ../factory-control && python -m pytest --cov=src --cov-report=term-missing tests/
+```
 
-| # | Action | Owner | Gate |
-|---|--------|-------|------|
-| 1 | Create `.github/workflows/dashboard-ci.yml` | dashboard-a | Workflow file exists, `npm test` collects tests, coverage XML uploaded |
-| 2 | Create `.github/workflows/edge-ai-robot-ci.yml` | robot-a | Workflow file exists, `pytest tests/` collects ≥3 tests, coverage XML uploaded |
-
-### Priority 2 — Fix Test Collectibility (edge-ai-robot)
-
-| # | Action | Owner | Gate |
-|---|--------|-------|------|
-| 3 | Confirm `pytest tests/` collects ≥3 tests in CI (Python 3.11/3.12) after `pip install -e "edge-ai-robot[dev]"` | robot-a, qa | Test collection confirmed in CI run |
-| 4 | Verify `httpx>=0.27` resolves on Python 3.11/3.12 CI runner (may need `pyproject.toml` constraint) | robot-a | CI pip install step succeeds |
-
-### Priority 3 — Increase iot-gateway Coverage (50% → target 80%)
-
-> **Staleness gate:** Re-audit coverage % after PR #245 merges; 69 new tests may shift baseline.
-
-| # | Action | Owner | Gate |
-|---|--------|-------|------|
-| 5 | Add `tests/test_gateway.py` — MQTT connect/publish happy path | backend-a | `gateway.py` coverage > 30% |
-| 6 | Add `tests/test_mqtt_client.py` — CONNECT, DISCONNECT, RECONNECT | backend-a | `mqtt_client.py` coverage > 30% |
-| 7 | Add `tests/test_orion_ld_adapter.py` — QUERY, SUBSCRIBE, ERROR_PATH | backend-a | `orion_ld.py` coverage > 30% |
-| 8 | Expand `tests/test_time_sync.py` — `sync_and_offset()`, skew detection | backend-a | `time_sync.py` coverage > 40% |
-| 9 | Expand `tests/test_incidents.py` — acknowledge workflow, CONCURRENCY | backend-a | `incidents.py` coverage > 60% |
-| 10 | Add `tests/test_event_store_concurrency.py` — concurrent write scenarios | backend-a | `event_store.py` coverage > 80% |
-
-### Priority 4 — Increase factory-control Coverage (69% → target 85%)
-
-| # | Action | Owner | Gate |
-|---|--------|-------|------|
-| 11 | Add `tests/test_simulator_integration.py` — tick loop with adapter calls | factory-a | `simulator.py` coverage > 85% |
-| 12 | Add `tests/test_sorting_fault_modes.py` — sensor fault, multi-item jams | factory-a | `sorting.py` coverage > 90% |
-| 13 | Add `tests/test_state_machine_concurrency.py` — concurrent transitions | factory-a | `state_machine.py` coverage > 95% |
-| 14 | Remove or document `src/factory_control/` stub package | factory-a | Stub package either removed or explicitly marked skip-covered |
-
-### Priority 5 — Dashboard Tests
-
-| # | Action | Owner | Gate |
-|---|--------|-------|------|
-| 15 | Add `src/hooks/incidents/__tests__/` — `useIncidentActions`, `useIncidents` | dashboard-a | CI collects and runs these tests |
-| 16 | Add `src/components/incident/__tests__/` — `AcknowledgeButton`, `IncidentCard` | dashboard-a | CI collects and runs these tests |
-| 17 | Add `src/api/__tests__/` — `gateway.ts` and `websocket.ts` contract tests | dashboard-a | CI collects and runs these tests |
-| 18 | Add `src/contracts/__tests__/` — `contracts/gateway.ts` type validation | dashboard-a | CI collects and runs these tests |
-
-> **Note:** PR #242 (dashboard auth/RBAC) is open. The auth test gap (#17, owner: dashboard-a)
-> should be coordinated with PR #242 implementer to avoid merge conflicts.
-
-### Priority 6 — Integration Tests
-
-| # | Action | Owner | Gate |
-|---|--------|-------|------|
-| 19 | Implement `integration-tests/` scaffold per `docs/testing-and-acceptance.md` L3–L5 | qa | At least 1 happy-path E2E scenario collects and passes in CI |
+Expected under the captured environment: iot-gateway **246 passed / 79%** and factory-control
+**98 passed / 69%**. Different dependency versions, Python versions, platforms, or working-tree
+content can produce different results and must be recorded rather than treated as failures of this
+dated evidence.
 
 ---
 
-## 8. Evidence
+## 8. PR-head verification record
 
-All runs below are dated. Source commit `87e2e38` (master at audit time, 2026-10-20).
-
-### Re-verified 2026-10-21 (qa re-check)
-
-| Check | Command | Environment | Result |
-|-------|---------|-------------|--------|
-| iot-gateway pytest | `cd iot-gateway && pytest tests/ -q` | Python 3.14.7, pytest 7.4.4, Windows 11, commit `87e2e38` | **246 passed** (⚠️ see staleness below) |
-| factory-control pytest | `cd factory-control && pytest tests/ -q` | Python 3.14.7, pytest 7.4.4, Windows 11, commit `87e2e38` | **98 passed** |
-| edge-ai-robot test collection | `cd edge-ai-robot && pytest tests/ --collect-only -q` | Python 3.14.7, pytest 7.4.4, Windows 11, commit `87e2e38` | **3 ERROR — ModuleNotFoundError: No module named 'edge_ai_robot'** (tests uncollectable) |
-| dashboard test files | `find dashboard -name "*.test.*"` | Node 26.7.0, npm 12.0.2, Windows 11, commit `87e2e38` | 2 files: `gatewayWs.test.ts`, `TelemetryChart.test.tsx` |
-
-**⚠️ Staleness — iot-gateway test count change:**
-The original audit (2026-10-20) recorded 161 pass / 7 fail = 168 tests.
-The 2026-10-21 re-check at the same commit `87e2e38` shows 246 tests — an increase of 78.
-This is attributed to PR #245 (`feat/issue-179-threat-model-v2`, SHA `fd3097ea`) which adds
-69 security abuse tests (`iot-gateway/tests/test_security_abuse.py`). The 7 SSRF failures
-(attributed to missing `aiohttp` in the local venv) are now resolved in the current state.
-The 50% coverage figure is stale; re-audit required after PR #245 merges.
-
-### Original 2026-10-20 Audit (with coverage)
-
-| Check | Command | Environment | Result |
-|-------|---------|-------------|--------|
-| iot-gateway coverage | `cd iot-gateway && pytest --cov=src --cov-report=term-missing tests/` | Python 3.14.7, pytest 7.4.4, pytest-cov 4.1.0, coverage 7.2.7, Windows 11, commit `87e2e38` | **161 pass / 7 fail; 50% line coverage** |
-| factory-control coverage | `cd factory-control && pytest --cov=src --cov-report=term-missing tests/` | Python 3.14.7, pytest 7.4.4, pytest-cov 4.1.0, coverage 7.2.7, Windows 11, commit `87e2e38` | **98 pass; 69% line coverage** |
-
-### CI Workflow Audit (2026-10-20)
-
-| Check | Command | Result |
-|-------|---------|--------|
-| CI workflows | `find .github/workflows -name "*.yml"` | 4 workflows: `gateway-ci.yml`, `factory-control-ci.yml`, `bridge-ci.yml`, `adr-lint.yml` |
-| dashboard CI | `find .github/workflows -name "*dashboard*"` | **NOT FOUND** |
-| edge-ai-robot CI | `find .github/workflows -name "*edge*" -o -name "*robot*"` | **NOT FOUND** |
-| integration-tests | `ls integration-tests/` | README.md only; harness not implemented |
-
-### ADR Lint Re-validation (2026-10-21)
-
-| Check | Run | Result |
-|-------|-----|--------|
-| ADR Lint | `gh run list --repo VinhPhan812/Smart-Factory --branch feat/issue-187-ci-coverage-audit` | 4 consecutive ✅ PASS (push + PR × 2) at 2026-10-20 13:31–13:38 UTC |
-| PR Head SHA | `git rev-parse feat/issue-187-ci-coverage-audit` | `08ac8d57119eb9551ffad69bb3b25927eff008e4` |
-
-### Staleness — Impact of Open PRs
-
-| PR | Title | Status | Impact on This Audit | Action Required |
-|----|-------|--------|---------------------|-----------------|
-| #242 | Dashboard auth/RBAC + job/material lineage | Open, not merged | May add dashboard auth tests; dashboard-a coordination needed | Re-audit dashboard coverage post-merge |
-| #244 | Deployment topology, DB migrations, E2E simulation | Open, not merged | May add integration tests; `integration-tests/` scope may be affected | Re-audit integration-tests status post-merge |
-| #245 | Threat model v2 + 69 security abuse tests | Open, not merged | **Confirmed stale.** iot-gateway: 168 → 246 tests. SSRF failures resolved. Coverage % will change. | **Re-audit required before merge or close.** |
-
----
-
-*Audit performed on `master` @ commit `87e2e38` via worktree `feat/issue-187-ci-coverage-audit`.*
-*Evidence re-verified 2026-10-21 at SHA `87e2e383a4beb7819624a269180001b27adeae7f`.*
-*ADR lint re-validated on PR branch HEAD `08ac8d57119eb9551ffad69bb3b25927eff008e4`.*
+This section is reserved for commands rerun after this documentation update is committed. It must
+record the PR-head SHA, environment, full command output/artifact, and result; it does not reuse
+historical `87e2e38` output.
