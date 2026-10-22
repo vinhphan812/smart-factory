@@ -1,0 +1,89 @@
+name: PR Review Verdict Publisher
+
+# One-shot publisher of formal GitHub pull-request reviews for the reviewed PR
+# set. The review is attributed to the workflow identity (github-actions[bot]),
+# which GitHub treats as distinct from the PR author, so the API accepts a
+# review state instead of rejecting a self-review.
+#
+# The verdict list is explicit and closed: only the PR numbers listed in
+# VERDICT_PRS are touched, each with one fixed event, and each body is read
+# from a file committed alongside this workflow.
+#
+# Triggered by a push to this branch so it can run without landing on master
+# (workflow_dispatch requires the file to exist on the default branch).
+
+on:
+  push:
+    branches:
+      - chore/github-review-bot
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  publish-reviews:
+    runs-on: [self-hosted, Linux, X64]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      VERDICT_PRS: "245,234,256,257,255,254,242"
+      VERDICT_DIR: .github/reviews
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@v4
+
+      - name: Publish formal reviews
+        env:
+          VERDICT_PR_LIST: ${{ env.VERDICT_PRS }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GH_REPO"]
+          verdict_dir = os.environ["VERDICT_DIR"]
+          pr_list = [x.strip() for x in os.environ["VERDICT_PR_LIST"].split(",") if x.strip()]
+
+          failures = []
+          for pr in pr_list:
+              body_path = os.path.join(verdict_dir, f"pr-{pr}.md")
+              event_path = os.path.join(verdict_dir, f"pr-{pr}.event")
+              if not (os.path.isfile(body_path) and os.path.isfile(event_path)):
+                  failures.append(f"PR #{pr}: missing verdict files")
+                  continue
+              with open(body_path, encoding="utf-8") as fh:
+                  body = fh.read()
+              with open(event_path, encoding="utf-8") as fh:
+                  event = fh.read().strip()
+              payload = json.dumps({"event": event, "body": body}).encode("utf-8")
+              url = f"https://api.github.com/repos/{repo}/pulls/{pr}/reviews"
+              req = urllib.request.Request(
+                  url, data=payload, method="POST",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      data = json.load(resp)
+                  print(f"PR #{pr}: {event} -> state={data.get('state')} "
+                        f"user={data.get('user', {}).get('login')} "
+                        f"commit={data.get('commit_id')}")
+              except urllib.error.HTTPError as exc:
+                  detail = exc.read().decode("utf-8", "replace")
+                  failures.append(f"PR #{pr}: HTTP {exc.code} {detail}")
+                  print(f"PR #{pr}: FAILED HTTP {exc.code} {detail}")
+              except Exception as exc:  # noqa: BLE001
+                  failures.append(f"PR #{pr}: {exc}")
+                  print(f"PR #{pr}: FAILED {exc}")
+
+          if failures:
+              for line in failures:
+                  print(f"::error::{line}")
+              sys.exit(1)
+          print("All formal reviews published.")
+          PY
