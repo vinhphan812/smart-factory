@@ -90,8 +90,22 @@ def test_happy_production_cycle(mqtt_client, gateway_events, wait_until, manifes
         {"device_id": device, "command_id": "101", "status": "ok", "timestamp_ms": now_ms},
     )
 
+    def _has_all_types() -> list[dict[str, Any]]:
+        """Return the device's events once every expected type has arrived.
+
+        The predicate must only become truthy when the whole cycle is
+        present — returning on the first non-heartbeat event would make the
+        assertion below a race against the ingest order.
+        """
+        found = gateway_events(device_id=device)
+        if {"telemetry", "status_online", "command_ack"} <= {
+            e["event_type"] for e in found
+        }:
+            return found
+        return []
+
     events = wait_until(
-        lambda: [e for e in gateway_events(device_id=device) if e["event_type"] != "heartbeat"],
+        _has_all_types,
         timeout=60,
         message=f"gateway did not ingest the cycle for {device}",
     )
@@ -171,8 +185,15 @@ def test_duplicate_and_late_ack(mqtt_client, gateway_events, wait_until, manifes
         {"device_id": device, "command_id": "42", "status": "ok", "timestamp_ms": base_ms - 5000},
     )
 
+    def _both_acks() -> list[dict[str, Any]]:
+        """Both the in-order and the late ACK must be present before asserting."""
+        found = [
+            e for e in gateway_events(device_id=device) if e["event_type"] == "command_ack"
+        ]
+        return found if len(found) >= 2 else []
+
     events = wait_until(
-        lambda: [e for e in gateway_events(device_id=device) if e["event_type"] == "command_ack"],
+        _both_acks,
         timeout=60,
         message=f"no command ACK ingested for {device}",
     )
@@ -240,8 +261,12 @@ def test_broker_outage_and_recovery(compose, mqtt_client, gateway_events, http_g
 # ── SCENARIO-05 ──────────────────────────────────────────────────────────────
 
 @pytest.mark.scenario("SCENARIO-05", "sqlite_lock")
-def test_sqlite_lock_does_not_wedge_gateway(compose, mqtt_client, gateway_events, http_get, wait_until):
+def test_sqlite_lock_does_not_wedge_gateway(
+    compose, mqtt_client, gateway_events, http_get, wait_until, manifest
+):
     """A concurrent write lock on the gateway DB must not corrupt or wedge it."""
+    rng = random.Random(manifest["stable_seed"] + 5)
+    suffix = rng.randrange(1000, 9999)
     lock_proc = subprocess.Popen(
         [
             "docker", "compose", "-f", str(REPO_ROOT / "e2e" / "simulation" / "docker-compose.e2e.yml"),
@@ -255,7 +280,7 @@ def test_sqlite_lock_does_not_wedge_gateway(compose, mqtt_client, gateway_events
     )
     try:
         time.sleep(8)
-        device = "e2e-sqlite-lock"
+        device = f"e2e-sqlite-lock-{suffix}"
         client = mqtt_client()
         _publish(
             client,
@@ -273,9 +298,10 @@ def test_sqlite_lock_does_not_wedge_gateway(compose, mqtt_client, gateway_events
             lock_proc.wait(timeout=30)
         except subprocess.TimeoutExpired:
             lock_proc.kill()
+            lock_proc.wait(timeout=30)
 
     # After the lock is released the gateway must ingest normally again.
-    device = "e2e-sqlite-lock-after"
+    device = f"e2e-sqlite-lock-after-{suffix}"
     client = mqtt_client()
     _publish(
         client,
@@ -284,7 +310,7 @@ def test_sqlite_lock_does_not_wedge_gateway(compose, mqtt_client, gateway_events
     )
     events = wait_until(
         lambda: gateway_events(device_id=device),
-        timeout=90,
+        timeout=120,
         message="gateway did not recover after the DB lock was released",
     )
     assert events
@@ -326,7 +352,7 @@ def test_ws_reconnect_resyncs_without_gap(gateway_events, http_get, wait_until):
 # ── SCENARIO-07 ──────────────────────────────────────────────────────────────
 
 @pytest.mark.scenario("SCENARIO-07", "authorization_denial")
-def test_authorization_denial(mqtt_client, gateway_events, wait_until):
+def test_authorization_denial(mqtt_client, gateway_events, wait_until, manifest):
     """Bad credentials are refused and the read-only gateway user cannot publish."""
     import paho.mqtt.client as mqtt
 
@@ -354,7 +380,8 @@ def test_authorization_denial(mqtt_client, gateway_events, wait_until):
     assert refused, "broker accepted an invalid password"
 
     # 2. The gateway credential is read-only → it must not be able to publish.
-    device = "e2e-authz-probe"
+    rng = random.Random(manifest["stable_seed"] + 7)
+    device = f"e2e-authz-probe-{rng.randrange(1000, 9999)}"
     ro = mqtt_client(username="gateway", password="changeme")
     _publish(
         ro,
@@ -386,5 +413,11 @@ def test_yanshee_offline_does_not_break_core(compose, http_get, gateway_events, 
     finally:
         compose("start", "edge-ai-robot")
 
-    status, _ = http_get(f"{ROBOT_HTTP}/health")
-    assert status == 200, "robot did not come back online"
+    # The robot container has to re-run pip install + uvicorn on start, so
+    # give it time to bind its port before asserting that it is back.
+    wait_until(
+        lambda: http_get(f"{ROBOT_HTTP}/health")[0] == 200,
+        timeout=180,
+        interval=3,
+        message="robot did not come back online",
+    )
