@@ -1,0 +1,47 @@
+PR-head verification capture
+Captured UTC: 2026-10-22T01:23:01Z
+Repository: vinhphan812/smart-factory
+PR: #234  Branch: feat/issue-187-ci-coverage-audit
+Verified revision:
+7072fb328a2223238dd6e85273dd13192fde8aa7
+
+$ python --version
+Python 3.14.7
+$ python -m pytest --version
+pytest 8.4.2
+$ python -m pip show pytest pytest-cov coverage aiohttp
+Name: pytest
+Version: 8.4.2
+Name: pytest-cov
+Version: 7.1.0
+Name: coverage
+Version: 7.16.2
+Name: aiohttp
+Version: 3.14.3
+
+$ cd iot-gateway && python -m pytest --cov=src --cov-report=term-missing tests/
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.14.7-final-0 _______________
+
+Name                                   Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------------
+src\iot_gateway\__init__.py                1      0      0      0   100%
+src\iot_gateway\adapters\__init__.py       2      0      0      0   100%
+src\iot_gateway\adapters\orion_ld.py     261     51     86     12    78%   116, 135-150, 209-212, 241, 270-271, 284->exit, 322->exit, 349->354, 381->exit, 419-423, 428-457, 493->500, 520-529, 546-547, 557->556, 576
+src\iot_gateway\alerts.py                212     14     38      2    94%   246, 254-261, 294-295, 432-434, 473-474, 526-533
+src\iot_gateway\api.py                   176     25     34      4    83%   116-119, 165->exit, 272->277, 331, 343-346, 376, 417-423, 428-431, 440-444, 453-457
+src\iot_gateway\cli.py                    29     29      2      0     0%   3-47
+src\iot_gateway\config.py                  9      2      0      0    78%   21-22
+src\iot_gateway\event_normalizer.py       73      2     22      1    97%   100-101, 150->153
+src\iot_gateway\event_store.py           143     15     28      4    88%   110->114, 149, 188-195, 199-202, 249, 327
+src\iot_gateway\gateway.py               100     33     12      2    65%   72-73, 92-93, 112-117, 140, 148-192, 196-207
+src\iot_gateway\incidents.py             105     46     26      0    47%   40, 71, 162-175, 179-180, 186-216, 222-251
+src\iot_gateway\models.py                 32      0      0      0   100%
+src\iot_gateway\mqtt_client.py            49     37     10      0    20%   28-36, 41-44, 49-55, 60-61, 64-76, 79-83
+src\iot_gateway\safety_gate.py           143      6     24      3    95%   133, 143, 155, 167, 197, 394
+src\iot_gateway\time_sync.py              82     12     32      1    85%   162-163, 210, 226-234
+----------------------------------------------------------------------------------
+TOTAL                                   1417    272    314     29    79%
+================ 246 passed, 632 warnings in 61.33s (0:01:01) =================

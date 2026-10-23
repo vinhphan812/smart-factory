@@ -1,0 +1,88 @@
+Coverage-audit evidence capture
+Captured UTC: 2026-10-22T01:13:36Z
+Redaction: absolute local paths replaced with <PYTHON_SITE_PACKAGES>, <PYTHON_STDLIB>, <REPO_ROOT> placeholders. No other content changed.
+Repository: vinhphan812/smart-factory
+Revision:
+87e2e383a4beb7819624a269180001b27adeae7f
+
+$ python --version
+Python 3.14.7
+$ python -m pytest --version
+pytest 8.4.2
+$ python -m pip show pytest pytest-cov coverage
+Name: pytest
+Version: 8.4.2
+Summary: pytest: simple powerful testing with Python
+Home-page: https://docs.pytest.org/en/latest/
+Author: Holger Krekel, Bruno Oliveira, Ronny Pfannschmidt, Floris Bruynooghe, Brianna Laugher, Florian Bruhin, Others (See AUTHORS)
+Author-email: 
+License: MIT
+Location: <PYTHON_SITE_PACKAGES>
+Requires: colorama, iniconfig, packaging, pluggy, pygments
+Required-by: pytest-asyncio, pytest-cov
+---
+Name: pytest-cov
+Version: 7.1.0
+Summary: Pytest plugin for measuring coverage.
+Home-page: 
+Author: 
+Author-email: Marc Schlaich <marc.schlaich@gmail.com>
+License-Expression: MIT
+Location: <PYTHON_SITE_PACKAGES>
+Requires: coverage, pluggy, pytest
+Required-by: 
+---
+Name: coverage
+Version: 7.16.2
+Summary: Code coverage measurement for Python
+Home-page: https://github.com/coveragepy/coveragepy
+Author: Ned Batchelder and 269 others
+Author-email: ned@nedbatchelder.com
+License: Apache-2.0
+Location: <PYTHON_SITE_PACKAGES>
+Requires: 
+Required-by: pytest-cov
+
+$ cd factory-control && python -m pytest --cov=src --cov-report=term-missing tests/
+============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-8.4.2, pluggy-1.7.0
+rootdir: <REPO_ROOT>/factory-control
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-0.26.0, cov-7.1.0
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 98 items
+
+tests\test_adapters.py .......................                           [ 23%]
+tests\test_conveyor_adapter.py .......................                   [ 46%]
+tests\test_simulator.py ............                                     [ 59%]
+tests\test_sorting_adapter.py ..............                             [ 73%]
+tests\test_state_machine.py ..........................                   [100%]
+
+============================== warnings summary ===============================
+tests/test_adapters.py::TestCommand::test_command_with_command_id
+  <PYTHON_ENV>\pytest_asyncio\plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.14.7-final-0 _______________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+src\__init__.py                                1      1     0%   14
+src\adapters\__init__.py                     103      4    96%   88, 117, 127, 146
+src\adapters\adapters.py                       2      2     0%   3-12
+src\adapters\base.py                          66     12    82%   59-60, 67-68, 96-97, 130-131, 145, 150, 155, 160
+src\adapters\conveyor.py                     142      7    95%   101, 162, 172, 182, 256, 312, 314
+src\adapters\sorting.py                      183     34    81%   69, 84-85, 90-95, 114-115, 118, 127, 155, 157, 163, 196, 205, 279-305, 314-316, 347, 351
+src\factory_control\__init__.py                3      3     0%   3-11
+src\factory_control\adapters\__init__.py       3      3     0%   3-6
+src\factory_control\adapters\base.py          57     57     0%   3-115
+src\factory_control\adapters\conveyor.py     119    119     0%   3-337
+src\factory_control\models.py                 45     45     0%   3-70
+src\models.py                                116      5    96%   133, 141, 143, 145, 147
+src\simulator.py                             115     34    70%   65, 80, 84, 102, 117-118, 140-169, 190-193, 199-202, 211-212
+src\state_machine.py                         120      7    94%   264, 277-278, 283-287, 344
+------------------------------------------------------------------------
+TOTAL                                       1075    333    69%
+======================== 98 passed, 1 warning in 0.71s ========================
