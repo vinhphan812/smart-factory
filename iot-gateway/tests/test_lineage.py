@@ -1,6 +1,7 @@
 """Tests for production job and material lineage state machine."""
 
 import pytest
+import asyncio
 from datetime import datetime, timezone
 from iot_gateway.lineage import (
     JobStatus,
@@ -348,6 +349,32 @@ class TestLineageEvents:
         events_by_type = {e.event_type: e for e in job.lineage_events}
         assert LineageEventType.JOB_STARTED in events_by_type
         assert LineageEventType.JOB_COMPLETED in events_by_type
+
+
+@pytest.mark.asyncio
+async def test_lineage_durability_and_concurrency(tmp_path):
+    db_path = tmp_path / "lineage_durable.db"
+    db_url = f"sqlite+aiosqlite:///{db_path}"
+
+    from iot_gateway.event_store import EventStore
+    store = EventStore(db_url)
+    await store.init()
+
+    job = ProductionJob(batch_id="batch-persist", product_type="Sensor", quantity=50)
+    job.transition_to(JobStatus.IN_PROGRESS, "module-assembly")
+
+    assert job.job_id is not None
+    assert len(job.lineage_events) == 1
+    assert job.lineage_events[0].event_id is not None
+
+    async def concurrent_update():
+        j = ProductionJob(batch_id="batch-concurrent", product_type="Actuator", quantity=10)
+        j.transition_to(JobStatus.IN_PROGRESS, "module-test")
+        return j.job_id
+
+    results = await asyncio.gather(*(concurrent_update() for _ in range(5)))
+    assert len(set(results)) == 5
+    await store.close()
 
 
 if __name__ == "__main__":
