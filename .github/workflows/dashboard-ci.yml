@@ -1,18 +1,30 @@
 # ==============================================================================
-# Routing truth table (path → workflow):
-#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
-#   dashboard/**                                    → dashboard-ci.yml  (this file)
-#   esp32-ukit-bridge/**                          → bridge-ci.yml
-#   factory-control/**                            → factory-control-ci.yml
-#   iot-gateway/**                                → gateway-ci.yml
+# Routing truth table (path -> workflow):
+#   adr/**, docs/**, .github/workflows/**          -> adr-lint.yml
+#   dashboard/**, .github/workflows/dashboard-ci.yml -> dashboard-ci.yml (this file)
+#   esp32-ukit-bridge/**                          -> bridge-ci.yml
+#   factory-control/**                            -> factory-control-ci.yml
+#   iot-gateway/**                                -> gateway-ci.yml
 #
-# Module ownership:
-#   dashboard/             : React + Vite operator dashboard (TypeScript)
+# Canonical ownership:
+#   This workflow file is the single canonical implementation of the Dashboard
+#   quality gate for the repository. PR #259 (issue #156) owns the gate; PR
+#   #260 (issue #149) carries a byte-identical copy of this file so the two
+#   open branches do not shadow each other and merge without an add/add
+#   conflict. Any change to the gate must be applied to both branches.
 #
 # Node version: eslint@10 requires node ^20.19.0 || ^22.13.0 || >=24;
 # npm lockfileVersion 3 requires npm 7+ (bundled with node 20+).
 # Node 22 is therefore the lowest-common-denominator major that satisfies
 # every dependency engine constraint declared in dashboard/package-lock.json.
+#
+# Supply-chain scope: the gate records (a) a dependency advisory assessment,
+# (b) an SBOM of the installed dependency tree, and (c) a retained build
+# artifact together with its SHA-256 digest. These steps are deliberately
+# non-blocking because the current lockfile still carries transitive
+# advisories in the vitest/tinypool dev chain, and `npm audit fix --force`
+# would apply a breaking major upgrade. The recorded evidence is review
+# material for release acceptance; it is not a claim of a clean audit.
 # ==============================================================================
 
 name: Dashboard CI
@@ -21,46 +33,82 @@ on:
   push:
     branches:
       - master
+      - 'feat/**'
+      - 'fix/**'
     paths:
-      - dashboard/**
-      - .github/workflows/dashboard-ci.yml
+      - 'dashboard/**'
+      - '.github/workflows/dashboard-ci.yml'
   pull_request:
+    branches:
+      - master
     paths:
-      - dashboard/**
-      - .github/workflows/dashboard-ci.yml
+      - 'dashboard/**'
+      - '.github/workflows/dashboard-ci.yml'
 
 permissions:
   contents: read
 
 jobs:
-  dashboard:
-    name: Dashboard typecheck / lint / test / build
+  dashboard-build-and-test:
+    name: Dashboard Quality & Build Gate
     runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: dashboard
+
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 22
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
 
-      - name: Install dependencies (npm ci, lockfile authoritative)
+      - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
+      - name: Dependency advisory assessment (non-blocking evidence)
+        run: |
+          npm audit --json > npm-audit.json || true
+          npm audit --audit-level=critical > npm-audit-summary.txt 2>&1 || true
+          echo "--- critical advisory summary ---"
+          cat npm-audit-summary.txt
+
+      - name: Generate SBOM for the installed dependency tree (non-blocking evidence)
+        run: |
+          npm sbom --sbom-format=cyclonedx > sbom.cdx.json 2>/dev/null \
+            || echo '{"note":"npm sbom unavailable in this npm version"}' > sbom.cdx.json
+          head -c 200 sbom.cdx.json; echo
+
+      - name: TypeScript typecheck
         run: npm run typecheck
 
-      - name: Lint
+      - name: ESLint
         run: npm run lint
 
-      - name: Test
+      - name: Vitest test suite
         run: npm run test
 
-      - name: Build
+      - name: Production Vite build
         run: npm run build
+
+      - name: Package build artifact with digest
+        run: |
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf dashboard-dist.tar.gz -C dist .
+          sha256sum dashboard-dist.tar.gz | tee dashboard-dist.tar.gz.sha256
+
+      - name: Upload build artifact and release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-dist-${{ github.sha }}
+          path: |
+            dashboard/dashboard-dist.tar.gz
+            dashboard/dashboard-dist.tar.gz.sha256
+            dashboard/npm-audit.json
+            dashboard/npm-audit-summary.txt
+            dashboard/sbom.cdx.json
+          retention-days: 14
+          if-no-files-found: error

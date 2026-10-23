@@ -101,10 +101,46 @@ See `evidence/adr-evidence.md` for the full prerequisite gate audit.
 
 | Check | Evidence level | Status | Command |
 |-------|---------------|--------|---------|
-| Dashboard CI workflow (typecheck / lint / test / build) | L0 | ADDED — lint step currently red on 9 pre-existing violations (tracked in #156) | `.github/workflows/dashboard-ci.yml` |
-| Dashboard typecheck | L1 | PASS once merge-conflict markers are resolved | `cd dashboard && npm run typecheck` |
-| Dashboard unit tests | L1 | PASS — 12 tests | `cd dashboard && npm run test` |
-| Dashboard production build | L2 | PASS once merge-conflict markers are resolved | `cd dashboard && npm run build` |
+| Dashboard CI workflow (typecheck / lint / test / build) | L0–L2 | PASS — workflow added by #156; green at HEAD `41b4d6c` (Dashboard CI run `39738050886`, SUCCESS) | `.github/workflows/dashboard-ci.yml` |
+| Dashboard typecheck | L1 | PASS — `tsc --noEmit` clean, 0 errors | `cd dashboard && npm run typecheck` |
+| Dashboard lint | L1 | PASS — 0 errors, 11 warnings (non-blocking `no-unused-vars` warnings only) | `cd dashboard && npm run lint` |
+| Dashboard unit tests | L1 | PASS — 12 tests / 2 files | `cd dashboard && npm run test` |
+| Dashboard production build | L2 | PASS — Vite production build succeeds | `cd dashboard && npm run build` |
+| Dashboard dependency advisory assessment | L2 | RECORDED, NOT CLEAN — `npm audit` reports 8 advisories (5 moderate, 1 high, 2 critical) in the transitive vitest/tinypool dev chain; `npm audit fix --force` would apply a breaking major upgrade, so the gate records the assessment instead of failing | `.github/workflows/dashboard-ci.yml` (advisory assessment step) |
+| Dashboard SBOM | L2 | RECORDED — CycloneDX SBOM generated for the installed tree | `.github/workflows/dashboard-ci.yml` (SBOM step) |
+| Dashboard release artifact retention | L2 | RECORDED — build tarball plus SHA-256 digest uploaded as a workflow artifact, 14-day retention | `.github/workflows/dashboard-ci.yml` (artifact upload step) |
+
+**Historical note (superseded, do not cite as current status):** an earlier revision
+of this manifest recorded the dashboard lint step as "currently red on 9
+pre-existing violations" (tracked in #156). That statement described the
+pre-#255 tree, in which `dashboard/eslint.config.js` and
+`dashboard/src/styles/global.css` still carried unresolved merge-conflict
+markers. #255 (`fix/dashboard-merge-conflict-markers`) removed those markers
+and the lint step has been green on every dashboard-touching HEAD since. The
+rows above supersede that assertion and are the ones to cite.
+
+**Scope and rollback for this gate:**
+
+- The gate is CI plumbing only. The dashboard application, layout, CSS and
+  package files were **not** modified by this change set; after rebasing onto
+  `origin/master` the effective diff is limited to `.github/workflows/**` and
+  `docs/research/manifest.md`.
+- Canonical ownership: `.github/workflows/dashboard-ci.yml` is the single
+  canonical Dashboard gate. PR #259 (#156) and PR #260 (#149) carry a
+  byte-identical copy of the file so the two open branches cannot shadow each
+  other or produce an add/add merge conflict.
+- Rollback: reverting this change set removes the workflow file and reverts
+  the manifest rows; the routing-truth-table comments in the other four
+  workflow files are comment-only and carry no behavioural effect.
+
+**What the gate does NOT establish (deployment acceptance still open):**
+
+- No authenticated gateway WebSocket/API interoperability check.
+- No browser navigation smoke test and no responsive/viewport capture in CI.
+- No deployed-dashboard check of security headers, CSP or cookie behaviour.
+- No physical / HIL evidence of any kind.
+- Green CI is evidence of the software quality gate only, never of deployment
+  or production acceptance.
 
 **CI routing truth table (path → workflow):**
 
@@ -145,6 +181,7 @@ See `evidence/hardware-blocked-audit.md` for the full 24-issue audit.
 | Date | Change | Evidence level | Notes |
 |------|--------|---------------|-------|
 | 2026-10-17 | Initial archive — v1.0 | L0–L2 | All available L0–L2 evidence pinned at commit `244f333` |
+| 2026-10-23 | Dashboard CI evidence corrected | L0–L2 | Replaced the stale "lint red on 9 violations" assertion with the verified Dashboard CI run `39738050886` (HEAD `41b4d6c`, SUCCESS), recorded advisory/SBOM/artifact evidence, documented canonical workflow ownership with #260 and the open deployment-acceptance gaps |
 
 ---
 
