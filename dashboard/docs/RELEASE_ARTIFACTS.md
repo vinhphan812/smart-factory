@@ -101,17 +101,20 @@ Current gate sequence:
    so the recorded output is review material, not a claim of a clean audit.
 3. CycloneDX SBOM generation — non-blocking evidence.
 4. `npm run typecheck`, `npm run lint`, `npm run test`.
-5. `npm run build` — production Vite bundle.
-6. Deterministic packaging — a reproducible `tar` archive (`dashboard-dist.tar.gz`) plus its
-   SHA-256 digest (`dashboard-dist.tar.gz.sha256`).
-7. `actions/upload-artifact@v4` uploads `dashboard-dist-${{ github.sha }}` containing the archive,
-   its digest, the audit reports and the SBOM, with a 14-day retention.
+5. `npm run build:integrity` — runs the production Vite build and writes the per-file
+   `dist/SHA256SUMS` manifest.
+6. `cd dist && sha256sum -c SHA256SUMS | tee ../sha256sum-verification.txt` — a blocking
+   verification step; any mismatch fails the job while its line-by-line output is retained.
+7. Deterministic packaging — a reproducible `tar` archive (`dashboard-dist.tar.gz`, including
+   `SHA256SUMS`) plus its SHA-256 digest (`dashboard-dist.tar.gz.sha256`).
+8. `actions/upload-artifact@v4` uploads `dashboard-dist-${{ github.sha }}` containing the archive,
+   archive digest, `dist/SHA256SUMS`, `sha256sum-verification.txt`, audit reports and SBOM, with a
+   14-day retention.
 
-**Note on `build:integrity`:** the per-file `dist/SHA256SUMS` manifest is produced by
-`npm run build:integrity` locally. The CI gate packages the `dist` tree into a tarball and
-digests the tarball instead, because the tarball is the artifact that is actually released and
-transported. Both integrity mechanisms are recorded; the authoritative digest for a given CI run
-is `dashboard-dist.tar.gz.sha256`.
+The CI release artifact provides two complementary integrity records: the archive digest
+(`dashboard-dist.tar.gz.sha256`) authenticates the transported tarball, and the per-file
+`dist/SHA256SUMS` plus `sha256sum-verification.txt` proves the unpacked build contents matched at
+CI verification time. The workflow runs both mechanisms on every Dashboard CI run.
 
 ## 4. Acceptance & Verification Boundary
 
