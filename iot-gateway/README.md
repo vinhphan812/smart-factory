@@ -85,4 +85,4 @@ The Gateway incident outbox (`alert_outbox.py`) remains the **sole** Yanshee
 notification dispatch path. FIWARE context never dispatches a skill.
 
 Contract: `contracts/fiware/ngsi-ld-yanshee-context.md` (v1.0.0).
-Decision record: `docs/adr/adr-0016-fiware-yanshee-context-mapping.md`.
+Decision record: `docs/adr/adr-0018-fiware-yanshee-context-mapping.md`.

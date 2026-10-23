@@ -53,4 +53,4 @@ the structural `ContextReader` protocol. It **does not import `iot-gateway`**
 | E-stop independent | The policy refuses while the E-stop is active and never clears it. The hardwired E-stop remains the authority (ADR-0006). |
 
 Contract: `contracts/fiware/ngsi-ld-yanshee-context.md` (v1.0.0).
-Decision record: `docs/adr/adr-0016-fiware-yanshee-context-mapping.md`.
+Decision record: `docs/adr/adr-0018-fiware-yanshee-context-mapping.md`.

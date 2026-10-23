@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://smart-factory.example.com/schemas/robot.json",
   "title": "Robot",
-  "description": "NGSI-LD Robot entity schema for Smart Factory (Issue #204, ADR-0016)",
+  "description": "NGSI-LD Robot entity schema for Smart Factory (Issue #204, ADR-0018)",
   "type": "object",
   "required": ["id", "type", "name", "robotId", "status", "batteryLevel", "supportedActions", "verificationStatus", "verificationSource", "dataQuality"],
   "properties": {

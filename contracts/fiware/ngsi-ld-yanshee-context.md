@@ -3,7 +3,7 @@
 **Owner:** Issue #204 (FIWARE context for Yanshee alerts, incident evidence, research API)
 **Version:** 1.0.0
 **Status:** Draft — Ready for review
-**Context:** ADR-0014 (FIWARE/Orion-LD context architecture), ADR-0016 (FIWARE context mapping for Yanshee notifications and incident evidence), Issue #197 (entity schema)
+**Context:** ADR-0014 (FIWARE/Orion-LD context architecture), ADR-0018 (FIWARE context mapping for Yanshee notifications and incident evidence), Issue #197 (entity schema)
 
 ---
 

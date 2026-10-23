@@ -3,7 +3,7 @@
 **Owner:** Issue #204 (SPEC-5)
 **Version:** 1.0.0
 **Status:** Draft — Ready for review
-**Context:** ADR-0014, ADR-0016, `contracts/fiware/ngsi-ld-yanshee-context.md`
+**Context:** ADR-0014, ADR-0018, `contracts/fiware/ngsi-ld-yanshee-context.md`
 
 ---
 
@@ -261,7 +261,7 @@ State them explicitly. The expected baseline for this deliverable:
 - `contracts/fiware/ngsi-ld-entity-schema.md` — base entity schema (Issue
   #197).
 - `docs/adr/adr-0014-fiware-orion-ld-context.md` — context architecture.
-- `docs/adr/adr-0016-fiware-yanshee-context-mapping.md` — this mapping
+- `docs/adr/adr-0018-fiware-yanshee-context-mapping.md` — this mapping
   decision.
 - `docs/testing-and-acceptance.md` — evidence levels.
 - `docs/PROJECT_CONTEXT.md` §5 — research measurement rules.

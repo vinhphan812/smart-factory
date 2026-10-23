@@ -1,4 +1,4 @@
-# ADR-0016: FIWARE Context Mapping for Yanshee Notifications and Incident Evidence
+# ADR-0018: FIWARE Context Mapping for Yanshee Notifications and Incident Evidence
 
 **Status:** Proposed
 **Date:** 2026-10-23

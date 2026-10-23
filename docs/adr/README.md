@@ -21,7 +21,7 @@ Owner: Issue #82 (ADR prerequisites) | Task t_08672f24 v2
 | [ADR-0013](adr-0013-edge-ai-safety-gate.md) | Edge AI Safety Decision Gate | Proposed | 2026-10-16 |
 | [ADR-0014](adr-0014-fiware-orion-ld-context.md) | FIWARE Orion-LD Context Architecture | Proposed | 2026-10-17 |
 | [ADR-0015](adr-0015-frontend-migration.md) | Frontend Migration to React + TypeScript + Vite | Proposed | 2026-10-19 |
-| [ADR-0016](adr-0016-fiware-yanshee-context-mapping.md) | FIWARE Context Mapping for Yanshee Notifications and Incident Evidence | Proposed | 2026-10-23 |
+| [ADR-0018](adr-0018-fiware-yanshee-context-mapping.md) | FIWARE Context Mapping for Yanshee Notifications and Incident Evidence | Proposed | 2026-10-23 |
 
 ## Status Lifecycle
 
