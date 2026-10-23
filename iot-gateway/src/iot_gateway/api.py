@@ -120,7 +120,7 @@ class WebSocketServer:
                     token = parts[1]
 
             from .auth import JWT_SECRET, decode_token, USERS_DB, _TEST_MODE
-            if JWT_SECRET is not None and (USERS_DB or not _TEST_MODE):
+            if JWT_SECRET is not None and USERS_DB and not _TEST_MODE:
                 if not token:
                     await conn.close(code=4001, reason="Unauthorized: Missing token")
                     return

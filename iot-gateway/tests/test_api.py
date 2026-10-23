@@ -269,7 +269,11 @@ class TestWebSocketBroadcast:
         # Close the client — the server's conn.close_code becomes non-None.
         # The handler detects this on its next queue timeout (≤ 1 s) and exits.
         await client.close()
-        await asyncio.sleep(1.5)
+        # Wait up to 3 seconds for the server handler loop to detect close_code and cleanup
+        for _ in range(30):
+            if len(ws._client_queues) == 0:
+                break
+            await asyncio.sleep(0.1)
 
         assert len(ws._client_queues) == 0
         await ws.shutdown()
