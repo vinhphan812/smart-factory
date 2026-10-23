@@ -80,7 +80,7 @@ def test_rbac_negative_permissions():
     assert login_resp.status_code == 200
     
     token = login_resp.cookies.get("access_token")
-    response = client.post("/api/jobs", json={"batch_id": "b1", "product_type": "widget", "quantity": 10}, cookies={"access_token": token})
+    response = client.post("/api/jobs", json={"batch_id": "b1", "product_type": "widget", "quantity": 10}, cookies={"access_token": token}, headers={"Origin": "http://localhost:3000"})
     assert response.status_code == 403
     assert "permission" in response.json()["detail"].lower()
 
