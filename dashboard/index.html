@@ -2,10 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss: http: https:; font-src 'self'; object-src 'none'; base-uri 'self';"
-    />
+        <!--
+          Review finding 6 (P1): the previous policy was "connect-src 'self' ws: wss: http: https:",
+          which permits arbitrary HTTP(S)/WS destinations and therefore does not constrain where
+          data can be exfiltrated. It is tightened below to loopback origins only.
+
+          Scope honesty: this CSP constrains requests issued by this document. It cannot restrict
+          a deployment to a specific remote gateway host without deployment-time configuration;
+          an HTML meta CSP cannot reference build-time env values. For a hosted deployment that
+          must talk to a remote gateway, reverse-proxy the gateway under the same origin
+          (recommended) or serve the CSP as an HTTP response header generated at deploy time.
+          See dashboard/docs/RELEASE_ARTIFACTS.md and issue #156.
+        -->
+        <meta
+          http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+        />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Smart Factory Operator Dashboard - Real-time monitoring and control of 9 factory modules" />

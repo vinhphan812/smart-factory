@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { MODULE_DEFINITIONS, deriveModuleState, type VisualState } from '../contracts/modules';
+import { MODULE_DEFINITIONS, deriveModuleState, findModule, type VisualState } from '../contracts/modules';
 import { ModuleCard } from '../design-system';
 import { useGatewayStore, useOperationalMode } from '../store/gatewayStore';
 
@@ -29,13 +29,11 @@ export function FactoryModulesPage() {
   const [density, setDensity] = useState<DensityMode>('normal');
   const [columnCols, setColumnCols] = useState<ColumnDensity>(3);
 
-  // Track current time for stale detection — updated after render via effect
-  const [now, setNow] = useState<number>(0);
+  // Track current time for stale detection — re-evaluates on every tick so an idle
+  // device can never appear fresh indefinitely (review finding 4).
+  const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
-    const ts = Date.now();
-    setNow(ts);
-    // Refresh every minute for stale detection
-    const timer = setInterval(() => setNow(Date.now()), 60000);
+    const timer = setInterval(() => setNow(Date.now()), 15000);
     return () => clearInterval(timer);
   }, []);
 
@@ -48,6 +46,7 @@ export function FactoryModulesPage() {
     return Array.from(devicesMap.values()).map((d) => ({
       device_id: d.deviceId,
       status: d.status,
+      state: d.state,
       last_heartbeat_at: d.lastSeen ?? undefined,
     }));
   }, [devicesMap]);
@@ -67,17 +66,22 @@ export function FactoryModulesPage() {
     });
   };
 
-  // Compute states for all modules
+  // Compute states for all modules.
+  // `now` is a dependency so the staleness verdict re-evaluates on every clock tick
+  // even when the gateway store has not changed (review finding 4).
   const moduleStates = useMemo(() => {
     return MODULE_DEFINITIONS.map((mod) => {
-      const derived = deriveModuleState(mod, statuses, now);
+      const derived = deriveModuleState(mod, statuses, {
+        now,
+        provenance: operationalMode === 'live' ? 'live' : 'simulated',
+      });
       return {
         module: mod,
         visualState: (derived?.visualState || 'UNKNOWN') as VisualState,
         lastSeen: derived?.lastSeen,
       };
     });
-  }, [statuses]);
+  }, [statuses, now, operationalMode]);
 
   // Filter modules
   const filteredModules = useMemo(() => {
@@ -127,20 +131,21 @@ export function FactoryModulesPage() {
     return res;
   }, [moduleStates]);
 
-  // Generate mock stats per module for preview
+  /**
+   * Per-module stat rows.
+   *
+   * Review finding 1 (P0): hard-coded sample measurements (24 m/min, 92% battery,
+   * Stock 450 ...) were rendered as if they were real monitoring values. The dashboard
+   * has no verified per-device telemetry source yet, so every numeric cell must be N/A
+   * until the gateway supplies a measurement. Only sourced, non-numeric facts are shown.
+   */
   const getStats = (moduleId: string) => {
-    switch (moduleId) {
-      case 'conveyor-01': return [{ label: 'Speed', value: '24 m/min' }, { label: 'Throughput', value: '180/hr' }];
-      case 'sorting-01': return [{ label: 'Sorted', value: 312 }, { label: 'Grade A', value: '78%' }];
-      case 'tower-crane-01': return [{ label: 'Cycles', value: 94 }, { label: 'Payload', value: '12.5 kg' }];
-      case 'parking-01': return [{ label: 'Staged', value: 8 }, { label: 'Capacity', value: '80%' }];
-      case 'forklift-01': return [{ label: 'Active AGV', value: 3 }, { label: 'Battery', value: '92%' }];
-      case 'dump-truck-01': return [{ label: 'Deliveries', value: 14 }, { label: 'Weight', value: '1.2t' }];
-      case 'packaging-01': return [{ label: 'Packaged', value: 89 }, { label: 'Rate', value: '45/hr' }];
-      case 'brackets-01': return [{ label: 'Stock', value: 450 }, { label: 'Status', value: 'Ready' }];
-      case 'combine-01': return [{ label: 'Nodes', value: 24 }, { label: 'Uptime', value: '99.9%' }];
-      default: return [];
-    }
+    const definition = findModule(moduleId);
+    const hasTelemetry = definition?.hasTelemetry !== false;
+    return [
+      { label: 'Controller source', value: definition?.controllerSource ?? 'N/A' },
+      { label: 'Measurement', value: hasTelemetry ? 'N/A (no telemetry source)' : 'N/A (no sensors)' },
+    ];
   };
 
   // Grid column class mapper

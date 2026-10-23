@@ -2,10 +2,10 @@
  * OverviewPage - Factory module overview with status cards
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MODULE_DEFINITIONS, deriveModuleState, type VisualState } from '../contracts/modules';
 import { ModuleCard } from '../design-system';
-import { useGatewayStore } from '../store/gatewayStore';
+import { useGatewayStore, useOperationalMode } from '../store/gatewayStore';
 
 type CategoryFilter = 'all' | 'production' | 'logistics' | 'control';
 type StateFilter = 'all' | VisualState;
@@ -15,26 +15,39 @@ export function OverviewPage(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<StateFilter>('all');
 
   // Get live devices from gateway store
-  const devicesMap = useGatewayStore((state) => state.devices);
-  const statuses = useMemo(() => {
-    return Array.from(devicesMap.values()).map((d) => ({
-      device_id: d.deviceId,
-      status: d.status,
-      last_heartbeat_at: d.lastSeen ?? undefined,
-    }));
-  }, [devicesMap]);
+    const devicesMap = useGatewayStore((state) => state.devices);
+    const operationalMode = useOperationalMode();
+    const statuses = useMemo(() => {
+      return Array.from(devicesMap.values()).map((d) => ({
+        device_id: d.deviceId,
+        status: d.status,
+        state: d.state,
+        last_heartbeat_at: d.lastSeen ?? undefined,
+      }));
+    }, [devicesMap]);
 
-  // Derive visual state for each canonical module
-  const modulesWithState = useMemo(() => {
-    return MODULE_DEFINITIONS.map((module) => {
-      const derived = deriveModuleState(module, statuses);
-      return {
-        module,
-        visualState: (derived?.visualState || 'UNKNOWN') as VisualState,
-        lastSeen: derived?.lastSeen,
-      };
-    });
-  }, [statuses]);
+    // Re-evaluate freshness on a clock tick so an idle device can never appear fresh
+    // indefinitely even when the gateway store has not changed (review finding 4).
+    const [now, setNow] = useState<number>(() => Date.now());
+    useEffect(() => {
+      const timer = setInterval(() => setNow(Date.now()), 15000);
+      return () => clearInterval(timer);
+    }, []);
+
+    // Derive visual state for each canonical module
+    const modulesWithState = useMemo(() => {
+      return MODULE_DEFINITIONS.map((module) => {
+        const derived = deriveModuleState(module, statuses, {
+          now,
+          provenance: operationalMode === 'live' ? 'live' : 'simulated',
+        });
+        return {
+          module,
+          visualState: (derived?.visualState || 'UNKNOWN') as VisualState,
+          lastSeen: derived?.lastSeen,
+        };
+      });
+    }, [statuses, now, operationalMode]);
 
   // Filter modules based on selected filters
   const filteredModules = useMemo(() => {

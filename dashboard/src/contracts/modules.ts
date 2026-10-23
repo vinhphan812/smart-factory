@@ -153,57 +153,123 @@ export interface DeviceStatusInput {
   stale?: boolean;
 }
 
+/**
+ * Provenance of the data backing a derived state.
+ * - 'live'      : gateway-reported telemetry/state
+ * - 'simulated' : explicitly simulated or replay data
+ */
+export type StateProvenance = 'live' | 'simulated';
+
+export interface DeriveOptions {
+  /** Evaluation clock; defaults to Date.now(). */
+  now?: number;
+  /** Provenance of the underlying data; SIMULATED is only reachable when explicitly simulated. */
+  provenance?: StateProvenance;
+}
+
 export interface DerivedModuleState {
   visualState: VisualState;
   lastSeen?: string;
   rawState?: string;
+  provenance?: StateProvenance;
 }
 
+/** Maximum tolerated clock skew for an accepted heartbeat (ms). */
+export const MAX_CLOCK_SKEW_MS = 5000;
+
+/** Raw firmware/gateway states that indicate real motion or active production. */
+const RUNNING_STATES = ['RUNNING', 'MOVING', 'ROUTING', 'DUMPING', 'SEALING', 'LIFTING', 'CHARGING'] as const;
+
+/** Raw firmware/gateway states that indicate a fault or emergency stop. */
+const FAULT_STATES = ['FAULT', 'ERROR', 'E_STOP', 'E_STOP_ACTIVE', 'OVERCURRENT', 'OVERTEMP'] as const;
+
+/** Raw firmware/gateway states explicitly flagged as simulated by the gateway. */
+const SIMULATED_STATES = ['SIMULATED', 'DEMO', 'MOCK', 'REPLAY', 'SYNTHETIC'] as const;
+
+function parseTimestamp(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Derive the operator-visible state of a canonical module from gateway device status.
+ *
+ * Fail-closed rules (never fabricate a trustworthy-looking state):
+ * - Unknown module, unknown device, or an absent/parsable-invalid heartbeat yields `UNKNOWN`.
+ * - A heartbeat in the future beyond {@link MAX_CLOCK_SKEW_MS} is rejected as `UNKNOWN`.
+ * - A heartbeat older than {@link STALE_THRESHOLD_MS} yields `STALE` and can never be `RUNNING`.
+ * - A passive module without sensors yields `UNKNOWN` regardless of any reported state (TC-2).
+ * - `SIMULATED` is only returned when provenance is explicitly simulated, or the gateway
+ *   explicitly reports a simulated state. It is never a fallback for unclassified live data.
+ */
 export function deriveModuleState(
   moduleDef: ModuleDefinition | null | undefined,
   statuses: DeviceStatusInput | DeviceStatusInput[] | undefined,
-  now: number = Date.now()
+  options: number | DeriveOptions = {}
 ): DerivedModuleState | null {
   if (!moduleDef) {
     return null;
   }
 
-  // TC-2: brackets-01 never reports RUNNING
-  if (moduleDef.moduleId === 'brackets-01') {
-    return { visualState: 'UNKNOWN' };
+  const opts: DeriveOptions = typeof options === 'number' ? { now: options } : options;
+  const now = opts.now ?? Date.now();
+  const provenance: StateProvenance | undefined = opts.provenance;
+
+  // TC-2: passive structural module (no sensors attached) never reports an operational state.
+  if (moduleDef.moduleId === 'brackets-01' || moduleDef.hasTelemetry === false) {
+    return { visualState: 'UNKNOWN', provenance };
   }
 
   const statusList = Array.isArray(statuses) ? statuses : statuses ? [statuses] : [];
   const deviceStatus = statusList.find((s) => s.device_id === moduleDef.moduleId);
 
   if (!deviceStatus) {
-    return { visualState: 'UNKNOWN' };
-  }
-
-  if (deviceStatus.status === 'offline') {
-    return { visualState: 'OFFLINE', lastSeen: deviceStatus.last_heartbeat_at || deviceStatus.timestamp };
-  }
-
-  if (deviceStatus.stale) {
-    return { visualState: 'STALE', lastSeen: deviceStatus.last_heartbeat_at || deviceStatus.timestamp };
-  }
-
-  if (deviceStatus.last_heartbeat_at || deviceStatus.timestamp) {
-    const timeStr = deviceStatus.last_heartbeat_at || deviceStatus.timestamp!;
-    const time = new Date(timeStr).getTime();
-    if (!isNaN(time) && now - time > STALE_THRESHOLD_MS) {
-      return { visualState: 'STALE', lastSeen: timeStr };
-    }
+    return { visualState: 'UNKNOWN', provenance };
   }
 
   const rawState = deviceStatus.state;
-  if (rawState === 'RUNNING' || rawState === 'MOVING' || rawState === 'ROUTING' || rawState === 'DUMPING' || rawState === 'SEALING') {
-    return { visualState: 'RUNNING', rawState };
+  const lastSeen = deviceStatus.last_heartbeat_at || deviceStatus.timestamp;
+  const lastSeenMs = parseTimestamp(lastSeen);
+
+  // A gateway that explicitly reports a simulated state is trusted as such.
+  if (rawState && SIMULATED_STATES.includes(rawState.toUpperCase() as (typeof SIMULATED_STATES)[number])) {
+    return { visualState: 'SIMULATED', lastSeen, rawState, provenance: 'simulated' };
   }
 
-  if (rawState === 'FAULT' || rawState === 'ERROR' || rawState === 'E_STOP') {
-    return { visualState: 'FAULT', rawState };
+  // Explicit offline status is reported as-is (the gateway is authoritative).
+  if (deviceStatus.status === 'offline') {
+    return { visualState: 'OFFLINE', lastSeen, rawState, provenance };
   }
 
-  return { visualState: 'SIMULATED', rawState: rawState || 'IDLE' };
+  // Fail closed: without a parsable heartbeat we cannot assert freshness.
+  if (lastSeenMs === null) {
+    return { visualState: 'UNKNOWN', rawState, provenance };
+  }
+
+  // Reject impossible future timestamps beyond tolerated clock skew.
+  if (lastSeenMs - now > MAX_CLOCK_SKEW_MS) {
+    return { visualState: 'UNKNOWN', rawState, provenance };
+  }
+
+  const isStaleByClock = now - lastSeenMs > STALE_THRESHOLD_MS;
+  if (deviceStatus.stale || isStaleByClock) {
+    return { visualState: 'STALE', lastSeen, rawState, provenance };
+  }
+
+  // Fault states outrank motion states.
+  if (rawState && FAULT_STATES.includes(rawState.toUpperCase() as (typeof FAULT_STATES)[number])) {
+    return { visualState: 'FAULT', lastSeen, rawState, provenance };
+  }
+
+  if (rawState && RUNNING_STATES.includes(rawState.toUpperCase() as (typeof RUNNING_STATES)[number])) {
+    return { visualState: 'RUNNING', lastSeen, rawState, provenance };
+  }
+
+  // SIMULATED requires explicit provenance; unclassified live data fails closed to UNKNOWN.
+  if (provenance === 'simulated') {
+    return { visualState: 'SIMULATED', lastSeen, rawState, provenance };
+  }
+
+  return { visualState: 'UNKNOWN', lastSeen, rawState, provenance };
 }

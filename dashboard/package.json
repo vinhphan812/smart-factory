@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:integrity": "npm run build && node -e \"const fs=require('fs'), crypto=require('crypto'), path=require('path'); const dist='dist'; const files=fs.readdirSync(dist, {recursive:true, withFileTypes:true}).filter(d=>d.isFile()).map(d=>path.join(d.path||d.parentPath, d.name)); const out=files.map(f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex') + '  ' + path.relative(dist, f)).join('\\n'); fs.writeFileSync(path.join(dist, 'SHA256SUMS'), out); console.log('Wrote dist/SHA256SUMS');\"",
+    "build:integrity": "npm run build && node scripts/build-integrity.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives",

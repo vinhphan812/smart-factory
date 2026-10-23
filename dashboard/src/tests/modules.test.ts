@@ -31,6 +31,19 @@ describe('nine-module registry (TC-1 & TC-2)', () => {
     expect(deriveModuleState(null, [])).toBeNull();
   });
 
+  it('reports OFFLINE when the gateway explicitly reports the device offline', () => {
+    const conveyor = MODULE_DEFINITIONS.find((m) => m.moduleId === 'conveyor-01')!;
+    const now = Date.now();
+    const freshTime = new Date(now - 1000).toISOString();
+
+    const offlineState = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'offline', last_heartbeat_at: freshTime }],
+      { now, provenance: 'live' }
+    );
+    expect(offlineState?.visualState).toBe('OFFLINE');
+  });
+
   it('never reports RUNNING for brackets-01 (TC-2)', () => {
     const bracket = MODULE_DEFINITIONS.find((m) => m.moduleId === 'brackets-01')!;
     expect(bracket).toBeDefined();
@@ -61,42 +74,125 @@ describe('nine-module registry (TC-1 & TC-2)', () => {
     expect(state!.visualState).not.toBe('RUNNING');
   });
 
-  it('correctly transitions between offline, fault, running, and simulated states', () => {
+  it('derives RUNNING and FAULT from a real gateway-reported state (review finding 3)', () => {
     const conveyor = MODULE_DEFINITIONS.find((m) => m.moduleId === 'conveyor-01')!;
     const now = Date.now();
     const freshTime = new Date(now - 1000).toISOString();
 
-    // Offline status
-    const offlineState = deriveModuleState(
-      conveyor,
-      [{ device_id: 'conveyor-01', status: 'offline', last_heartbeat_at: freshTime }],
-      now
-    );
-    expect(offlineState?.visualState).toBe('OFFLINE');
-
-    // Fault state
-    const faultState = deriveModuleState(
-      conveyor,
-      [{ device_id: 'conveyor-01', status: 'online', state: 'FAULT', last_heartbeat_at: freshTime }],
-      now
-    );
-    expect(faultState?.visualState).toBe('FAULT');
-
-    // Running state
     const runningState = deriveModuleState(
       conveyor,
       [{ device_id: 'conveyor-01', status: 'online', state: 'RUNNING', last_heartbeat_at: freshTime }],
-      now
+      { now, provenance: 'live' }
     );
     expect(runningState?.visualState).toBe('RUNNING');
+    expect(runningState?.rawState).toBe('RUNNING');
 
-    // Simulated state
-    const simState = deriveModuleState(
+    const faultState = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'FAULT', last_heartbeat_at: freshTime }],
+      { now, provenance: 'live' }
+    );
+    expect(faultState?.visualState).toBe('FAULT');
+
+    const estopState = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'E_STOP', last_heartbeat_at: freshTime }],
+      { now, provenance: 'live' }
+    );
+    expect(estopState?.visualState).toBe('FAULT');
+  });
+
+  it('fails closed to UNKNOWN for live data without a parsable heartbeat (review finding 2)', () => {
+    const conveyor = MODULE_DEFINITIONS.find((m) => m.moduleId === 'conveyor-01')!;
+    const now = Date.now();
+
+    // No timestamp at all
+    const noTimestamp = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'RUNNING' }],
+      { now, provenance: 'live' }
+    );
+    expect(noTimestamp?.visualState).toBe('UNKNOWN');
+    expect(noTimestamp?.visualState).not.toBe('SIMULATED');
+
+    // Unparsable timestamp
+    const badTimestamp = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'RUNNING', last_heartbeat_at: 'not-a-timestamp' }],
+      { now, provenance: 'live' }
+    );
+    expect(badTimestamp?.visualState).toBe('UNKNOWN');
+
+    // Empty timestamp string
+    const emptyTimestamp = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'RUNNING', last_heartbeat_at: '' }],
+      { now, provenance: 'live' }
+    );
+    expect(emptyTimestamp?.visualState).toBe('UNKNOWN');
+  });
+
+  it('rejects future timestamps beyond the tolerated clock skew (review finding 2)', () => {
+    const conveyor = MODULE_DEFINITIONS.find((m) => m.moduleId === 'conveyor-01')!;
+    const now = Date.now();
+
+    // Far future -> rejected
+    const farFuture = new Date(now + 60 * 60 * 1000).toISOString();
+    const rejected = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'RUNNING', last_heartbeat_at: farFuture }],
+      { now, provenance: 'live' }
+    );
+    expect(rejected?.visualState).toBe('UNKNOWN');
+
+    // Small skew within tolerance -> accepted
+    const smallSkew = new Date(now + 1000).toISOString();
+    const accepted = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'RUNNING', last_heartbeat_at: smallSkew }],
+      { now, provenance: 'live' }
+    );
+    expect(accepted?.visualState).toBe('RUNNING');
+  });
+
+  it('only reports SIMULATED when provenance or the gateway state says so (review finding 2)', () => {
+    const conveyor = MODULE_DEFINITIONS.find((m) => m.moduleId === 'conveyor-01')!;
+    const now = Date.now();
+    const freshTime = new Date(now - 1000).toISOString();
+
+    // Live provenance with an unclassified state must NOT become SIMULATED
+    const liveIdle = deriveModuleState(
       conveyor,
       [{ device_id: 'conveyor-01', status: 'online', state: 'IDLE', last_heartbeat_at: freshTime }],
-      now
+      { now, provenance: 'live' }
     );
-    expect(simState?.visualState).toBe('SIMULATED');
+    expect(liveIdle?.visualState).toBe('UNKNOWN');
+
+    // No provenance at all also fails closed
+    const noProvenance = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'IDLE', last_heartbeat_at: freshTime }],
+      { now }
+    );
+    expect(noProvenance?.visualState).toBe('UNKNOWN');
+
+    // Explicit simulated provenance -> SIMULATED
+    const simulated = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'IDLE', last_heartbeat_at: freshTime }],
+      { now, provenance: 'simulated' }
+    );
+    expect(simulated?.visualState).toBe('SIMULATED');
+    expect(simulated?.provenance).toBe('simulated');
+
+    // Gateway explicitly flags the state as simulated
+    const gatewayFlagged = deriveModuleState(
+      conveyor,
+      [{ device_id: 'conveyor-01', status: 'online', state: 'SIMULATED', last_heartbeat_at: freshTime }],
+      { now, provenance: 'live' }
+    );
+    expect(gatewayFlagged?.visualState).toBe('SIMULATED');
+    expect(gatewayFlagged?.provenance).toBe('simulated');
   });
 
   it('contains expected module types and device IDs', () => {

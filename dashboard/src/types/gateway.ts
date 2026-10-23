@@ -145,6 +145,12 @@ export interface DeviceInfo {
   type: 'conveyor' | 'robotic-arm' | 'cnc-mill' | 'unknown';
   status: 'online' | 'offline' | 'unknown';
   lastSeen: string | null;
+  /**
+   * Latest raw gateway/firmware state for this device (e.g. RUNNING, IDLE, FAULT, E_STOP).
+   * Required by the module state derivation so RUNNING/FAULT can be derived from live data
+   * instead of falling back to a fabricated state.
+   */
+  state?: string;
 }
 
 /** Gateway configuration from environment */

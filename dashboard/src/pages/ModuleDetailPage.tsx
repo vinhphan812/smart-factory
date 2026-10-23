@@ -8,7 +8,7 @@
  * values are rendered strictly as N/A and never guessed/synthesized.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { findModule, deriveModuleState, type VisualState } from '../contracts/modules';
 import { ModuleStatusBadge } from '../design-system/ModuleStatusBadge';
@@ -25,6 +25,14 @@ export function ModuleDetailPage(): React.JSX.Element {
   const devicesMap = useGatewayStore((state) => state.devices);
   const incidents = useGatewayStore((state) => state.incidents);
 
+  // Re-evaluate freshness on a clock tick so an idle device can never appear fresh
+  // indefinitely even when the gateway store has not changed (review finding 4).
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Find matching device status
   const deviceStatus = moduleId ? devicesMap.get(moduleId) : undefined;
   const statusInput = useMemo(() => {
@@ -32,6 +40,7 @@ export function ModuleDetailPage(): React.JSX.Element {
     return {
       device_id: deviceStatus.deviceId,
       status: deviceStatus.status,
+      state: deviceStatus.state,
       last_heartbeat_at: deviceStatus.lastSeen ?? undefined,
     };
   }, [deviceStatus]);
@@ -39,8 +48,11 @@ export function ModuleDetailPage(): React.JSX.Element {
   // Derive visual state
   const derivedState = useMemo(() => {
     if (!module) return null;
-    return deriveModuleState(module, statusInput);
-  }, [module, statusInput]);
+    return deriveModuleState(module, statusInput, {
+      now,
+      provenance: operationalMode === 'live' ? 'live' : 'simulated',
+    });
+  }, [module, statusInput, now, operationalMode]);
 
   const visualState: VisualState = derivedState?.visualState || 'UNKNOWN';
 
@@ -178,10 +190,19 @@ export function ModuleDetailPage(): React.JSX.Element {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] p-4">
                 <span className="text-xs text-[var(--color-text-muted)]">Primary Metric</span>
-                <div className="text-2xl font-bold font-mono text-[var(--color-text-primary)] mt-1">
-                  {visualState === 'RUNNING' ? '12.4' : visualState === 'SIMULATED' ? '0.0' : 'N/A'}{' '}
-                  <span className="text-sm font-normal text-[var(--color-text-muted)]">{module.unit}</span>
+                {/*
+                  Review finding 1 (P0): the previous implementation rendered hard-coded
+                  sample numbers (12.4 when RUNNING, 0.0 when SIMULATED). No verified
+                  per-device telemetry source exists yet, so the value must stay N/A
+                  until the gateway supplies a real measurement.
+                */}
+                <div className="text-2xl font-bold font-mono text-[var(--color-text-muted)] mt-1">
+                  N/A
+                  <span className="text-sm font-normal text-[var(--color-text-muted)]"> {module.unit}</span>
                 </div>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                  No verified telemetry source for this metric yet.
+                </p>
               </div>
 
               <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] p-4">
