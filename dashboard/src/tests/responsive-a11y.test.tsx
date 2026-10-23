@@ -2,14 +2,21 @@
  * Responsive & Accessibility UX Tests (SPEC-2, TC-1, TC-2, TC-4)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from '../layout/Sidebar';
 import { AppRoutes } from '../app/routes';
+import { FactoryModulesPage } from '../pages/FactoryModulesPage';
+import { useGatewayStore } from '../store/gatewayStore';
 
 describe('Accessibility & Responsive UX Contracts (TC-1, TC-2, TC-4)', () => {
+  afterEach(() => {
+    act(() => {
+      useGatewayStore.getState().setOperationalMode('demo');
+    });
+  });
   it('renders main navigation landmark and all 10 SPEC-2 destinations in Sidebar', () => {
     render(
       <MemoryRouter>
@@ -72,5 +79,52 @@ describe('Accessibility & Responsive UX Contracts (TC-1, TC-2, TC-4)', () => {
     ).toBeDefined();
     const safetyGateMentions = screen.getAllByText(/backend safety gates/i);
     expect(safetyGateMentions.length).toBeGreaterThan(0);
+  });
+
+  it('switches gateway live/offline mode transition (Finding 4)', () => {
+    act(() => {
+      useGatewayStore.getState().setOperationalMode('demo');
+    });
+
+    render(
+      <MemoryRouter>
+        <FactoryModulesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('OFFLINE SIMULATION / DEMO (L0/L2 Mock)')).toBeDefined();
+
+    act(() => {
+      useGatewayStore.getState().setOperationalMode('live');
+    });
+
+    expect(screen.getByText('LIVE GATEWAY (L2 Telemetry)')).toBeDefined();
+
+    act(() => {
+      useGatewayStore.getState().setOperationalMode('demo');
+    });
+
+    expect(screen.getByText('OFFLINE SIMULATION / DEMO (L0/L2 Mock)')).toBeDefined();
+  });
+
+  it('verifies reserved /commands route non-actuation and TC-4 safety policy (Finding 4)', () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/commands']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    // Assert that there are no buttons or submit elements that can actuate hardware
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    const actionableElements = container.querySelectorAll(
+      'button, input[type="submit"], input[type="button"], form'
+    );
+    expect(actionableElements.length).toBe(0);
+
+    // Assert that the TC-4 safety policy notice is present and mentions that the browser operator dashboard is strictly read-only
+    expect(screen.getByText(/Safety Policy \(TC-4\):/i)).toBeDefined();
+    expect(
+      screen.getByText(/browser operator dashboard is strictly read-only/i)
+    ).toBeDefined();
   });
 });
