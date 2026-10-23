@@ -1,6 +1,6 @@
 # ADR-0015: Frontend Migration to React + TypeScript + Vite
 
-**Date:** 2024-10-19
+**Date:** 2026-10-19
 **Status:** Proposed
 **Related Issues:** #148
 
