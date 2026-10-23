@@ -6,7 +6,8 @@ import os
 
 def main():
     schemas = ['base.json', 'geojson.json', 'device.json', 'module.json', 
-               'job.json', 'material.json', 'operator.json', 'alert.json', 'incident.json']
+               'job.json', 'material.json', 'operator.json', 'alert.json', 'incident.json',
+               'robot.json']
     errors = []
 
     for schema_file in schemas:

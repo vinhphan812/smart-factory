@@ -1,12 +1,15 @@
 # ==============================================================================
 # Routing truth table (path → workflow):
 #   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
+#   edge-ai-robot/**, integration-tests/**         → edge-ai-ci.yml
 #   esp32-ukit-bridge/**                          → bridge-ci.yml  (this file)
 #   factory-control/**                            → factory-control-ci.yml
 #   iot-gateway/**                                → gateway-ci.yml
 #
 # Module ownership:
+#   edge-ai-robot/    : robot adapter + bounded skills + FIWARE response policy
 #   esp32-ukit-bridge/    : ESP32 ↔ MEGA-uKit firmware + AMLP bridge
+#   integration-tests/: cross-module scenario harness (L2 simulation)
 # ==============================================================================
 
 name: CI

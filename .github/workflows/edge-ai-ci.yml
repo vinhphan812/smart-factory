@@ -1,0 +1,87 @@
+# ==============================================================================
+# Routing truth table (path → workflow):
+#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
+#   edge-ai-robot/**, integration-tests/**         → edge-ai-ci.yml  (this file)
+#   esp32-ukit-bridge/**                          → bridge-ci.yml
+#   factory-control/**                            → factory-control-ci.yml
+#   iot-gateway/**                                → gateway-ci.yml
+#
+# Module ownership:
+#   edge-ai-robot/    : robot adapter, bounded skills, FIWARE response policy
+#   integration-tests/: cross-module scenario harness (L2 simulation)
+# ==============================================================================
+
+name: Edge AI Robot & Integration Tests
+
+on:
+  push:
+    branches:
+      - master
+      - "feat/**"
+      - "fix/**"
+    paths:
+      - "edge-ai-robot/**"
+      - "integration-tests/**"
+      - ".github/workflows/edge-ai-ci.yml"
+  pull_request:
+    paths:
+      - "edge-ai-robot/**"
+      - "integration-tests/**"
+      - ".github/workflows/edge-ai-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  edge-ai-pytest:
+    name: edge-ai-robot pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install edge-ai-robot with test extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "edge-ai-robot[dev]"
+
+      - name: Run edge-ai-robot tests
+        run: |
+          python -m pytest edge-ai-robot/tests/ -v --tb=short
+
+  integration-pytest:
+    name: integration scenario pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install both modules
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "iot-gateway[test]"
+          pip install -e "edge-ai-robot[dev]"
+
+      - name: Run integration scenario tests
+        run: |
+          python -m pytest integration-tests/ -v --tb=short

@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/schemas/robot.json",
+  "title": "Robot",
+  "description": "NGSI-LD Robot entity schema for Smart Factory (Issue #204, ADR-0016)",
+  "type": "object",
+  "required": ["id", "type", "name", "robotId", "status", "batteryLevel", "supportedActions", "verificationStatus", "verificationSource", "dataQuality"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^urn:ngsi-ld:Robot:.*$",
+      "description": "Full NGSI-LD entity ID"
+    },
+    "type": {
+      "const": "Robot"
+    },
+    "name": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "robotId": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"],
+      "description": "Robot status, or UNKNOWN when the source is not verified"
+    },
+    "batteryLevel": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["Number", "Text"] },
+        "value": {}
+      },
+      "required": ["type", "value"],
+      "description": "Number (percent) when a verified reading exists, otherwise Text UNKNOWN"
+    },
+    "supportedActions": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Array" },
+        "value": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "verificationStatus": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["VERIFIED", "UNVERIFIED"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "verificationSource": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": { "type": "string" }
+      },
+      "required": ["type", "value"]
+    },
+    "dataQuality": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Text" },
+        "value": {
+          "type": "string",
+          "enum": ["PHYSICAL", "SIMULATED", "UNKNOWN"]
+        }
+      },
+      "required": ["type", "value"]
+    },
+    "observedAt": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "DateTime" },
+        "value": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "value"]
+    },
+    "emergencyStop": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "Boolean" },
+        "value": { "type": "boolean" }
+      },
+      "required": ["type", "value"],
+      "description": "Read-only for consumers; the local hardwired E-stop remains the authority"
+    },
+    "partOf": {
+      "$ref": "./base.json#/definitions/Relationship"
+    }
+  }
+}

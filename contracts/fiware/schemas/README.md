@@ -15,6 +15,7 @@ JSON Schema validation files for Smart Factory NGSI-LD entities.
 | `operator.json` | Operator entity validation |
 | `alert.json` | Alert entity validation |
 | `incident.json` | Incident entity validation |
+| `robot.json` | Robot entity validation (Issue #204, ADR-0016) |
 
 ## Usage
 

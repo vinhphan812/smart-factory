@@ -72,3 +72,17 @@ iot-gateway --broker localhost --port 1883
 | `WS_PORT` | `8000` | WebSocket bind port |
 | `WS_HTTP_PORT` | `8001` | HTTP REST bind port (defaults to `WS_PORT + 1`) |
 | `MAX_EVENTS` | `10000` | Max events to keep in SQLite |
+
+## FIWARE context layer (Issue #204)
+
+| Module | Role |
+|---|---|
+| `src/iot_gateway/adapters/orion_robot.py` | Maps a robot capability source onto an NGSI-LD `Robot` entity. An unverified source yields `UNKNOWN` status/battery, an empty `supportedActions` list and `verificationStatus: UNVERIFIED` — it never fabricates status, battery or supported actions. |
+| `src/iot_gateway/adapters/orion_incident.py` | Projects a Gateway incident onto an NGSI-LD `Alert` carrying `traceId`, `sourceEventId`, `sourceSystem` and operator state. Read model only; the incident store stays authoritative. |
+| `src/iot_gateway/context_query.py` | `ContextQueryFacade` — **read-only** NGSI-LD query facade (HTTP `GET` only). No upsert, delete, publish or command path exists on this class. |
+
+The Gateway incident outbox (`alert_outbox.py`) remains the **sole** Yanshee
+notification dispatch path. FIWARE context never dispatches a skill.
+
+Contract: `contracts/fiware/ngsi-ld-yanshee-context.md` (v1.0.0).
+Decision record: `docs/adr/adr-0016-fiware-yanshee-context-mapping.md`.
