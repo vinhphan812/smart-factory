@@ -105,10 +105,10 @@ See `evidence/adr-evidence.md` for the full prerequisite gate audit.
 | Dashboard typecheck | L1 | PASS — `tsc --noEmit` clean, 0 errors | `cd dashboard && npm run typecheck` |
 | Dashboard lint | L1 | PASS — 0 errors, 11 warnings (non-blocking `no-unused-vars` warnings only) | `cd dashboard && npm run lint` |
 | Dashboard unit tests | L1 | PASS — 12 tests / 2 files | `cd dashboard && npm run test` |
-| Dashboard production build | L2 | PASS — Vite production build succeeds | `cd dashboard && npm run build` |
+| Dashboard production build & per-file integrity verification | L2 | PASS — Vite production build with per-file integrity manifest (`npm run build:integrity`) and blocking `sha256sum -c SHA256SUMS` verification succeeds | `.github/workflows/dashboard-ci.yml` (`build:integrity` & `sha256sum -c`) |
 | Dashboard dependency advisory assessment | L2 | RECORDED, NOT CLEAN — `npm audit` reports 8 advisories (5 moderate, 1 high, 2 critical) in the transitive vitest/tinypool dev chain; `npm audit fix --force` would apply a breaking major upgrade, so the gate records the assessment instead of failing | `.github/workflows/dashboard-ci.yml` (advisory assessment step) |
 | Dashboard SBOM | L2 | RECORDED — CycloneDX SBOM generated for the installed tree | `.github/workflows/dashboard-ci.yml` (SBOM step) |
-| Dashboard release artifact retention | L2 | RECORDED — build tarball plus SHA-256 digest uploaded as a workflow artifact, 14-day retention | `.github/workflows/dashboard-ci.yml` (artifact upload step) |
+| Dashboard release artifact retention | L2 | RECORDED — build tarball plus SHA-256 digest, per-file `SHA256SUMS`, and verification output uploaded as workflow artifacts, 14-day retention | `.github/workflows/dashboard-ci.yml` (artifact upload step) |
 
 **Historical note (superseded, do not cite as current status):** an earlier revision
 of this manifest recorded the dashboard lint step as "currently red on 9
@@ -181,6 +181,7 @@ See `evidence/hardware-blocked-audit.md` for the full 24-issue audit.
 | Date | Change | Evidence level | Notes |
 |------|--------|---------------|-------|
 | 2026-10-17 | Initial archive — v1.0 | L0–L2 | All available L0–L2 evidence pinned at commit `244f333` |
+| 2026-10-23 | Reconcile canonical Dashboard CI workflow with #260 integrity change | L0–L2 | Aligned `.github/workflows/dashboard-ci.yml` across PR #259 and PR #260 to execute `npm run build:integrity` and verify `sha256sum -c SHA256SUMS`, and updated manifest evidence |
 | 2026-10-23 | Dashboard CI evidence corrected | L0–L2 | Replaced the stale "lint red on 9 violations" assertion with the verified Dashboard CI run `39738050886` (HEAD `41b4d6c`, SUCCESS), recorded advisory/SBOM/artifact evidence, documented canonical workflow ownership with #260 and the open deployment-acceptance gaps |
 
 ---

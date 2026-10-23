@@ -91,8 +91,13 @@ jobs:
       - name: Vitest test suite
         run: npm run test
 
-      - name: Production Vite build
-        run: npm run build
+      - name: Production build with per-file integrity manifest
+        run: npm run build:integrity
+
+      - name: Verify per-file integrity manifest
+        run: |
+          cd dist
+          sha256sum -c SHA256SUMS | tee ../sha256sum-verification.txt
 
       - name: Package build artifact with digest
         run: |
@@ -107,6 +112,8 @@ jobs:
           path: |
             dashboard/dashboard-dist.tar.gz
             dashboard/dashboard-dist.tar.gz.sha256
+            dashboard/dist/SHA256SUMS
+            dashboard/sha256sum-verification.txt
             dashboard/npm-audit.json
             dashboard/npm-audit-summary.txt
             dashboard/sbom.cdx.json
