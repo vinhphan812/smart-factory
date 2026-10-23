@@ -101,7 +101,7 @@ See `evidence/adr-evidence.md` for the full prerequisite gate audit.
 
 | Check | Evidence level | Status | Command |
 |-------|---------------|--------|---------|
-| Dashboard CI workflow (typecheck / lint / test / build) | L0–L2 | PASS — workflow added by #156; green at HEAD `41b4d6c` (Dashboard CI run `39738050886`, SUCCESS) | `.github/workflows/dashboard-ci.yml` |
+| Dashboard CI workflow (typecheck / lint / test / build) | L0–L2 | PASS — workflow added by #156; GitHub Actions run [`39738050886`](https://github.com/vinhphan812/smart-factory/actions/runs/39738050886), started `2026-10-22T07:04:53Z`, completed SUCCESS for HEAD `41b4d6c32df18d9f8d4871535f171ce794a67c17` | `.github/workflows/dashboard-ci.yml` |
 | Dashboard typecheck | L1 | PASS — `tsc --noEmit` clean, 0 errors | `cd dashboard && npm run typecheck` |
 | Dashboard lint | L1 | PASS — 0 errors, 11 warnings (non-blocking `no-unused-vars` warnings only) | `cd dashboard && npm run lint` |
 | Dashboard unit tests | L1 | PASS — 12 tests / 2 files | `cd dashboard && npm run test` |
