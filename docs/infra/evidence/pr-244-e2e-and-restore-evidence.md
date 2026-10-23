@@ -4,6 +4,42 @@
 **Environment:** Windows 11 host (Docker Desktop 29.4.2, Docker Compose v5.1.3, Python 3.14.7 host / Python 3.12-slim container runtime)  
 **Evidence Level:** L2 simulation (mock MQTT stack, containerized gateway, Orion-LD 1.5.0, MongoDB 5.0 simulation pairing) — no physical hardware (HIL) claims.
 
+## Evidence provenance and scope — historical JSON report
+
+`e2e/simulation/e2e-report.json` is **historical evidence only**. It is not
+current-HEAD proof for this PR and must not be used to certify the current
+branch tip.
+
+| Field | Recorded, verifiable value |
+|---|---|
+| JSON `target_sha` | `caebf4a45fc5454eae61cd721b28930eaedf1338` |
+| JSON `generated_at` | `2026-10-22T03:32:58Z` |
+| Historical CI run that archived the checked-in JSON | [E2E Simulation & Backup-Restore Drill run `39717484035`](https://github.com/vinhphan812/smart-factory/actions/runs/39717484035), artefact `e2e-simulation-report` (`12399980400`, SHA-256 archive digest `f11e5566bd9a64c821362687e5294b06e1353ad8ceae0ec4bde0cecd203528be`) |
+| Report-generation source | `e2e/simulation/scenarios/conftest.py` pytest session hook (`pytest_sessionfinish`): it serialises scenario call results, records UTC `generated_at`, and resolves `target_sha` from `TARGET_SHA` or `git rev-parse HEAD`. |
+
+The historical workflow run failed and skipped its backup-restore step; the
+JSON's eight passing scenario results therefore do **not** establish an
+all-green E2E workflow for `caebf4a...` or any later commit. The source
+available in this repository does not provide a separate immutable execution
+record for the report's pre-workflow timestamp beyond the report itself and
+its subsequent CI artefact upload. That limitation is recorded rather than
+backfilled with an inferred run identifier or SHA.
+
+For the exact reviewed head
+`8a162fb05e6a5db187876af9eff52087ea23a453`, the authoritative CI evidence is
+[E2E Simulation & Backup-Restore Drill run `39789237752`](https://github.com/vinhphan812/smart-factory/actions/runs/39789237752), which completed
+SUCCESS on `2026-10-22T13:44:31Z`; its L2 job ran both the Compose smoke-test
+and backup-restore-drill steps successfully. That run also uploaded an
+`e2e-simulation-report` artefact (`12430756606`, SHA-256 archive digest
+`3d25c3b27cc09a3abc736d2ca77fbefc00396a52c4d4cf0fd9de26eb77ec1bcc`), but it
+contains the same historical checked-in JSON. It is retained as a workflow
+artefact, not relabelled as a regenerated current-HEAD report. CI evidence
+here does not demonstrate deployment, production recovery, physical hardware,
+or HIL acceptance.
+
+Findings 4 (deployment/supply-chain constraints) and 5 (recovery/hardware
+boundaries) remain open and are outside this provenance clarification.
+
 ---
 
 ## 0. CI Failure Analysis and Root Cause (run `39738892208`, head `b70eb4a`)
