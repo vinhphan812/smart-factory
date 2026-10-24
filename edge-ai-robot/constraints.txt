@@ -3,6 +3,11 @@
 #   python -m pip freeze | grep -Ei "^(pydantic|pydantic_core|pydantic-settings|httpx|httpcore|anyio|idna|sniffio|certifi|h11|websockets|structlog|pytest|pytest-asyncio|pytest-cov|coverage|iniconfig|packaging|pluggy|ruff|mypy|typing_extensions|typing-extensions|annotated-types|jsonschema|rpds-py|referencing|attrs)==" | sort
 # Refresh deliberately when a dependency is intentionally upgraded; CI installs
 # from this file so the advisory report and SBOM describe a reproducible tree.
+#
+# The build backend requirements from pyproject.toml [build-system].requires
+# are pinned here as well, so every direct dependency declared by the project
+# has an exact "==" pin. tests/test_constraints.py enforces that invariant
+# offline, without dependency resolution.
 annotated-types==0.8.0
 anyio==4.15.1
 attrs==26.1.0
@@ -26,6 +31,8 @@ pytest-cov==7.1.0
 referencing==0.37.0
 rpds-py==2026.9.1
 ruff==0.17.2
+setuptools==84.2.1
 structlog==26.1.0
 typing_extensions==4.16.0
 websockets==17.3
+wheel==0.48.0
