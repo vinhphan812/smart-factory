@@ -9,6 +9,14 @@
 # Module ownership:
 #   edge-ai-robot/    : robot adapter, bounded skills, FIWARE response policy
 #   integration-tests/: cross-module scenario harness (L2 simulation)
+#
+# Supply-chain scope (Issue #204 / ADR-0017): the gate records (a) a dependency
+# advisory assessment over the pinned constraint set, and (b) a CycloneDX SBOM
+# of the installed dependency tree, both uploaded as a retained artifact. These
+# steps are deliberately non-blocking, mirroring the repository's Dashboard
+# gate: the recorded output is review material for release acceptance, not a
+# claim of a clean audit. The FIWARE schema validation job is blocking,
+# because a malformed schema is unambiguously a defect.
 # ==============================================================================
 
 name: Edge AI Robot & Integration Tests
@@ -22,11 +30,13 @@ on:
     paths:
       - "edge-ai-robot/**"
       - "integration-tests/**"
+      - "contracts/fiware/**"
       - ".github/workflows/edge-ai-ci.yml"
   pull_request:
     paths:
       - "edge-ai-robot/**"
       - "integration-tests/**"
+      - "contracts/fiware/**"
       - ".github/workflows/edge-ai-ci.yml"
 
 permissions:
@@ -85,3 +95,63 @@ jobs:
       - name: Run integration scenario tests
         run: |
           python -m pytest integration-tests/ -v --tb=short
+
+  fiware-schema-validation:
+    name: FIWARE schema validation
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: contracts/fiware/schemas
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install jsonschema
+        run: python -m pip install --upgrade pip && pip install "jsonschema>=4.20"
+
+      - name: Validate FIWARE schemas and canonical entities
+        run: python validate_schemas.py
+
+  edge-ai-supply-chain:
+    name: edge-ai-robot supply chain evidence
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install edge-ai-robot from the pinned constraint set
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c edge-ai-robot/constraints.txt -e "edge-ai-robot[dev]"
+
+      - name: Dependency advisory assessment (non-blocking evidence)
+        run: |
+          python -m pip install pip-audit
+          python -m pip_audit --requirement edge-ai-robot/constraints.txt \
+            --format columns > edge-ai-advisory.txt 2>&1 || true
+          cat edge-ai-advisory.txt
+
+      - name: Generate SBOM for the installed dependency tree (non-blocking evidence)
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py environment --output-file edge-ai-sbom.cdx.json || true
+          head -c 200 edge-ai-sbom.cdx.json; echo
+
+      - name: Upload supply-chain evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-ai-supply-chain-${{ github.sha }}
+          path: |
+            edge-ai-advisory.txt
+            edge-ai-sbom.cdx.json
+            edge-ai-robot/constraints.txt
+          retention-days: 14
