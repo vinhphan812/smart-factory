@@ -3,13 +3,10 @@
  */
 
 import React, { useEffect, Component } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { GatewayWsProvider } from '../hooks/useGatewayWs';
-import { OverviewPage } from '../pages/OverviewPage';
-import { TelemetryPage } from '../pages/TelemetryPage';
-import { EventsPage } from '../pages/EventsPage';
-import { IncidentsPage, IncidentDetailPage } from '../pages/incidents';
+import { AppRoutes } from './routes';
 
 // Error Boundary class component
 interface ErrorBoundaryState {
@@ -66,32 +63,11 @@ function App(): React.ReactElement {
           {/* Single application shell (AppLayout renders the design-system
               Header + Sidebar with 9-module navigation) hosting all routes. */}
           <AppLayout>
-            <Routes>
-              <Route path="/" element={<OverviewPage />} />
-              <Route path="/telemetry" element={<TelemetryPage />} />
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/incidents" element={<IncidentsPage />} />
-              <Route path="/incidents/:incidentId" element={<IncidentDetailPage />} />
-              <Route path="/modules/:moduleId" element={<ModuleDetailPage />} />
-            </Routes>
+            <AppRoutes />
           </AppLayout>
         </GatewayWsProvider>
       </BrowserRouter>
     </ErrorBoundary>
-  );
-}
-
-// Placeholder module detail page (route target for the 9-module sidebar links)
-function ModuleDetailPage() {
-  return (
-    <div className="max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-        Module Detail
-      </h1>
-      <p className="text-[var(--color-text-muted)] mt-2">
-        Module detail view coming soon...
-      </p>
-    </div>
   );
 }
 

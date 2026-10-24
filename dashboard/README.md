@@ -25,6 +25,9 @@ The legacy `dashboard/src/index.html` is preserved. If issues occur, revert to s
 
 ## Features
 
+- **Nine-Module Factory Overview (Issue #149):** Canonical representation of all 9 physical factory modules (`conveyor-01`, `sorting-01`, `tower-crane-01`, `parking-01`, `forklift-01`, `dump-truck-01`, `packaging-01`, `brackets-01`, `combine-01`) reflecting `contracts/physical/factory-interface.md` §1.1.
+- **Derived Visual State Engine:** Deterministic 6-state status derivation (`UNKNOWN`, `STALE`, `OFFLINE`, `SIMULATED`, `RUNNING`, `FAULT`) with staleness detection (60s threshold) and no-sensor safety safeguards (`brackets-01` strictly yields N/A, never `RUNNING`).
+- **Responsive Operator Navigation:** 10 application destinations with responsive collapse (360px mobile, 768px tablet, 1440px desktop), search, filtering, and density controls.
 - **Telemetry Views:** Time-range selector (5m, 1h, 24h), per-device telemetry charts, and metric aggregation (rate, average, peak)
 - **Event Timeline:** Unified event stream filtered by severity (INFO, WARN, ERROR, CRITICAL), device, and trace ID
 - **WebSocket Integration:** Real-time data from the IoT gateway with automatic reconnection

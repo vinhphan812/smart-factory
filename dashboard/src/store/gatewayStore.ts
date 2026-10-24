@@ -126,6 +126,19 @@ function extractTelemetryPoint(event: CanonicalEvent): TelemetryPoint | null {
   };
 }
 
+/**
+ * Extract the latest raw firmware/gateway state for a device from the canonical event payload.
+ * The canonical envelope keeps module state in `payload.state`; `status` is used as a fallback
+ * because some gateway builds publish the state under that key instead.
+ */
+function extractDeviceState(event: CanonicalEvent): string | undefined {
+  const candidate = event.payload?.state ?? event.payload?.status;
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return candidate.trim();
+  }
+  return undefined;
+}
+
 /** Create the store */
 export const useGatewayStore = create<GatewayStore>()(
   subscribeWithSelector((set, get) => ({
@@ -173,14 +186,18 @@ export const useGatewayStore = create<GatewayStore>()(
           : state.incidents;
 
         // Update device registry
-        const newDevices = new Map(state.devices);
-        newDevices.set(event.device_id, {
-          deviceId: event.device_id,
-          displayName: event.device_id,
-          type: 'unknown',
-          status: event.event_type === EventType.STATUS_OFFLINE ? 'offline' : 'online',
-          lastSeen: event.ingested_at,
-        });
+                const newDevices = new Map(state.devices);
+                const previousDevice = state.devices.get(event.device_id);
+                newDevices.set(event.device_id, {
+                  deviceId: event.device_id,
+                  displayName: event.device_id,
+                  type: 'unknown',
+                  status: event.event_type === EventType.STATUS_OFFLINE ? 'offline' : 'online',
+                  lastSeen: event.ingested_at,
+                  // Preserve the last known raw state when an event carries no state payload
+                  // (e.g. pure heartbeat or metric event) so RUNNING/FAULT is not silently lost.
+                  state: extractDeviceState(event) ?? previousDevice?.state,
+                });
 
         return {
           events: newEvents,
@@ -206,16 +223,18 @@ export const useGatewayStore = create<GatewayStore>()(
           }
 
           // Update device status
-          const latestForDevice = perDeviceLatest[event.device_id];
-          if (latestForDevice) {
-            devices.set(event.device_id, {
-              deviceId: event.device_id,
-              displayName: event.device_id,
-              type: 'unknown',
-              status: latestForDevice.event_type === EventType.STATUS_OFFLINE ? 'offline' : 'online',
-              lastSeen: latestForDevice.ingested_at,
-            });
-          }
+                    const latestForDevice = perDeviceLatest[event.device_id];
+                    if (latestForDevice) {
+                      const previousDevice = devices.get(event.device_id);
+                      devices.set(event.device_id, {
+                        deviceId: event.device_id,
+                        displayName: event.device_id,
+                        type: 'unknown',
+                        status: latestForDevice.event_type === EventType.STATUS_OFFLINE ? 'offline' : 'online',
+                        lastSeen: latestForDevice.ingested_at,
+                        state: extractDeviceState(latestForDevice) ?? extractDeviceState(event) ?? previousDevice?.state,
+                      });
+                    }
         }
 
         return {
