@@ -34,6 +34,9 @@ factory-control/
 │   ├── __init__.py           # Package init
 │   ├── state_machine.py      # Deterministic production state machine
 │   ├── simulator.py          # Factory simulator for offline testing
+│   ├── capability_schema.py  # Versioned capability schema loader + validator
+│   ├── capability_admission.py # Pre-actuator capability admission layer
+│   ├── capability_fixtures.py  # Deterministic NORMAL CYCLE fixture runner
 │   └── adapters/
 │       ├── __init__.py       # DeviceAdapter base class + concrete adapters
 │       └── adapters.py        # Re-exports
@@ -41,7 +44,11 @@ factory-control/
     ├── conftest.py           # Test configuration
     ├── test_state_machine.py # State machine tests (26 tests)
     ├── test_adapters.py     # Adapter tests (23 tests)
-    └── test_simulator.py    # Simulator tests (12 tests)
+    ├── test_simulator.py    # Simulator tests (12 tests)
+    ├── test_capability_schema.py             # TC-1 schema catalogue
+    ├── test_capability_matrix_conformance.py # TC-1 L0 matrix cross-check
+    ├── test_capability_admission.py          # TC-2 admission rejections
+    └── test_capability_normal_cycle.py       # TC-3 (partial) normal cycle
 ```
 
 ### Key Features
@@ -63,6 +70,25 @@ factory-control/
    - Command execution interface
    - Event and telemetry callbacks
    - Preset factory configurations (`create_minimal_factory()`, `create_demo_factory()`)
+
+4. **Versioned Capability Schema and Admission Layer** (Issue #174, L1)
+   - `contracts/physical/capability-schema.v1.json` — the versioned, machine-readable
+     catalogue of the nine physical modules, their typed IO channels, capabilities,
+     mode transitions, watchdog and local-interlock ownership, and pin-mapping
+     provenance. Derived from the L0 contract `contracts/physical/capability-matrix.md`.
+   - `capability_schema.py` — loader and structural validator for that schema.
+   - `capability_admission.py` — the admission layer: a command addressed to an unknown
+     module, to a module that does not support the capability, with a value outside the
+     declared range, or with an illegal transition is rejected **before** any actuator
+     path is reached, with a typed, machine-readable error naming the module, the
+     capability and the violated constraint.
+   - `capability_fixtures.py` — the deterministic NORMAL CYCLE fixture runner. The
+     jam, missing-sensor, limit-switch, E-stop, offline and calibration-expiry fixtures
+     remain a separate increment.
+   - See [contracts/physical/capability-schema.md](../contracts/physical/capability-schema.md)
+     and [ADR-0020](../docs/adr/adr-0020-versioned-capability-schema-and-admission-layer.md).
+   - The admission layer is a network-side admission filter, **not** a substitute for the
+     device-local interlocks of ADR-0006.
 
 ### Usage
 
