@@ -207,5 +207,11 @@ confused with a reading.
   `edge-ai-robot/src/edge_ai_robot/context/__init__.py` — the implementation.
 - `integration-tests/fiware/test_fiware_yanshee_scenario.py` — L2 controlled
   scenario with transport and provenance trace (SPEC-4, TC-1..TC-5).
+- `integration-tests/fiware/test_context_policy_fail_closed.py` — L2 proof that
+  the fail-closed denial paths hold over the real facade and the real
+  `ContextEntity` parsing path (ADR-0017).
+- `contracts/fiware/yanshee-context-acceptance-boundary.md` — the explicit
+  L1/L2-versus-hardware acceptance boundary for this context path, and the
+  deployment-safety and supply-chain gates added by ADR-0017.
 - Issue #204 — FIWARE context mapping for Yanshee notifications, incident
   evidence and research API.

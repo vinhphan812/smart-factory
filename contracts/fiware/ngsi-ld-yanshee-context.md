@@ -5,6 +5,9 @@
 **Status:** Draft — Ready for review
 **Context:** ADR-0014 (FIWARE/Orion-LD context architecture), ADR-0018 (FIWARE context mapping for Yanshee notifications and incident evidence), Issue #197 (entity schema)
 
+> **Acceptance boundary:** see `contracts/fiware/yanshee-context-acceptance-boundary.md`
+> for exactly what this context path does and does not prove.
+
 ---
 
 ## Overview
