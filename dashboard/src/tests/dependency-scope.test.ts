@@ -24,8 +24,20 @@ import {
 } from '../../scripts/dependency-scope.mjs';
 import {
   buildSeparation,
+  deriveDevelopmentSbom,
   deriveRuntimeSbom,
 } from '../../scripts/release-evidence.mjs';
+import {
+  blockingAdvisories,
+  buildManifest,
+  cleanupTempArchive,
+  collectFiles,
+  createTempArchive,
+  removeArchiveFile,
+  verifyManifest,
+  writeArchiveFile,
+  writeManifest,
+} from '../../scripts/release-evidence-archive.mjs';
 import type {
   SbomDocument,
   SeparationResult,
@@ -303,5 +315,237 @@ describe('buildSeparation', () => {
     ) as SeparationResult;
     expect(separation.productionClosureCrossCheck.consistent).toBe(false);
     expect(separation.productionClosureCrossCheck.mismatches.length).toBeGreaterThan(0);
+  });
+});
+
+describe('deriveDevelopmentSbom', () => {
+  const FULL_SBOM: SbomDocument = {
+    metadata: { component: { 'bom-ref': 'pkg:dashboard/fixture@0.0.0' } },
+    components: [
+      { name: 'react', version: '18.3.1', 'bom-ref': 'pkg:npm/react@18.3.1' },
+      { name: 'react-dom', version: '18.3.1', 'bom-ref': 'pkg:npm/react-dom@18.3.1' },
+      { name: 'vite', version: '5.4.0', 'bom-ref': 'pkg:npm/vite@5.4.0' },
+      { name: 'vite', version: '6.4.5', 'bom-ref': 'pkg:npm/vite@6.4.5' },
+    ],
+    dependencies: [
+      {
+        ref: 'pkg:dashboard/fixture@0.0.0',
+        dependsOn: ['pkg:npm/react@18.3.1', 'pkg:npm/vite@6.4.5'],
+      },
+      { ref: 'pkg:npm/react@18.3.1', dependsOn: [] },
+      { ref: 'pkg:npm/vite@6.4.5', dependsOn: [] },
+      { ref: 'pkg:npm/vite@5.4.0', dependsOn: [] },
+    ],
+  };
+
+  const CLOSURE = new Map([
+    ['react', '18.3.1'],
+    ['react-dom', '18.3.1'],
+  ]);
+
+  it('keeps the components that are not in the production closure', () => {
+    const dev = deriveDevelopmentSbom(FULL_SBOM, CLOSURE) as SbomDocument;
+    expect(dev.components.map((c) => c.name)).toEqual(['vite', 'vite']);
+  });
+
+  it('partitions the full tree with no overlap and no gaps', () => {
+    const runtime = deriveRuntimeSbom(FULL_SBOM, CLOSURE) as SbomDocument;
+    const dev = deriveDevelopmentSbom(FULL_SBOM, CLOSURE) as SbomDocument;
+    const runtimeRefs = new Set(runtime.components.map((c) => c['bom-ref']));
+    const devRefs = new Set(dev.components.map((c) => c['bom-ref']));
+    const fullRefs = new Set(FULL_SBOM.components.map((c) => c['bom-ref']));
+
+    expect([...runtimeRefs].filter((r) => devRefs.has(r))).toEqual([]);
+    expect(new Set([...runtimeRefs, ...devRefs]).size).toBe(fullRefs.size);
+    expect(runtime.components.length + dev.components.length).toBe(
+      FULL_SBOM.components.length,
+    );
+  });
+
+  it('classifies a package present in the closure at a different version as development', () => {
+    const closure = new Map([...CLOSURE, ['vite', '6.4.5']]);
+    const dev = deriveDevelopmentSbom(FULL_SBOM, closure) as SbomDocument;
+    const vite = dev.components.filter((c) => c.name === 'vite');
+    expect(vite).toHaveLength(1);
+    expect(vite[0].version).toBe('5.4.0');
+  });
+
+  it('prunes dependency edges so every dependsOn target is present', () => {
+    const dev = deriveDevelopmentSbom(FULL_SBOM, CLOSURE) as SbomDocument;
+    const present = new Set(dev.components.map((c) => c['bom-ref']));
+    for (const entry of dev.dependencies) {
+      for (const target of entry.dependsOn ?? []) {
+        expect(present.has(target)).toBe(true);
+      }
+    }
+  });
+
+  it('retains the root component entry', () => {
+    const dev = deriveDevelopmentSbom(FULL_SBOM, CLOSURE) as SbomDocument;
+    const refs = dev.dependencies.map((d) => d.ref);
+    expect(refs).toContain('pkg:dashboard/fixture@0.0.0');
+  });
+
+  it('records the development scope as an SBOM property', () => {
+    const dev = deriveDevelopmentSbom(FULL_SBOM, CLOSURE) as SbomDocument;
+    const props = dev.metadata.properties ?? [];
+    const scope = props.find((p) => p.name === 'sbom:scope');
+    expect(scope).toBeDefined();
+    expect(scope?.value).toContain('development');
+  });
+});
+
+describe('blockingAdvisories', () => {
+  it('returns nothing for a clean audit', () => {
+    const audit = {
+      metadata: { vulnerabilities: { total: 0, critical: 0, high: 0 } },
+      vulnerabilities: {},
+    };
+    expect(blockingAdvisories(audit)).toEqual([]);
+  });
+
+  it('reports a critical advisory as blocking', () => {
+    const audit = {
+      metadata: { vulnerabilities: { total: 1, critical: 1, high: 0 } },
+      vulnerabilities: {
+        lodash: {
+          name: 'lodash',
+          severity: 'critical',
+          isDirect: true,
+          range: '<4.17.21',
+          via: [{ title: 'Prototype Pollution', severity: 'critical' }],
+        },
+      },
+    };
+    const blocking = blockingAdvisories(audit);
+    expect(blocking).toHaveLength(1);
+    expect(blocking[0].name).toBe('lodash');
+    expect(blocking[0].severity).toBe('critical');
+  });
+
+  it('reports a high advisory as blocking', () => {
+    const audit = {
+      metadata: { vulnerabilities: { total: 1, critical: 0, high: 1 } },
+      vulnerabilities: {
+        react: {
+          name: 'react',
+          severity: 'high',
+          isDirect: true,
+          range: '<18.3.2',
+          via: [{ title: 'Open redirect', severity: 'high' }],
+        },
+      },
+    };
+    const blocking = blockingAdvisories(audit);
+    expect(blocking).toHaveLength(1);
+    expect(blocking[0].severity).toBe('high');
+  });
+
+  it('does not treat a moderate advisory as blocking', () => {
+    const audit = {
+      metadata: { vulnerabilities: { total: 1, critical: 0, high: 0 } },
+      vulnerabilities: {
+        minimist: {
+          name: 'minimist',
+          severity: 'moderate',
+          isDirect: false,
+          range: '<1.2.6',
+          via: [{ title: 'Prototype Pollution', severity: 'moderate' }],
+        },
+      },
+    };
+    expect(blockingAdvisories(audit)).toEqual([]);
+  });
+});
+
+describe('archive manifest', () => {
+  it('lists every artefact with its digest and byte size', () => {
+    const dir = createTempArchive({
+      COMMIT: 'a'.repeat(40),
+      'evidence.txt': 'hello',
+    });
+    try {
+      const files = collectFiles(dir);
+      expect(files).toEqual(['COMMIT', 'evidence.txt']);
+
+      const manifest = buildManifest(dir, 'a'.repeat(40));
+      expect(manifest.artifactCount).toBe(2);
+      expect(manifest.commit).toBe('a'.repeat(40));
+      for (const artefact of manifest.artifacts) {
+        expect(artefact.sha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(artefact.bytes).toBeGreaterThan(0);
+      }
+    } finally {
+      cleanupTempArchive(dir);
+    }
+  });
+
+  it('verifies an intact archive', () => {
+    const dir = createTempArchive({
+      COMMIT: 'a'.repeat(40),
+      'evidence.txt': 'hello',
+    });
+    try {
+      writeManifest(dir, 'a'.repeat(40));
+
+      const verification = verifyManifest(dir);
+      expect(verification.ok).toBe(true);
+      expect(verification.checked).toBe(2);
+      expect(verification.mismatches).toEqual([]);
+    } finally {
+      cleanupTempArchive(dir);
+    }
+  });
+
+  it('detects a tampered artefact', () => {
+    const dir = createTempArchive({
+      COMMIT: 'a'.repeat(40),
+      'evidence.txt': 'hello',
+    });
+    try {
+      writeManifest(dir, 'a'.repeat(40));
+
+      writeArchiveFile(dir, 'evidence.txt', 'tampered');
+      const verification = verifyManifest(dir);
+      expect(verification.ok).toBe(false);
+      expect(verification.mismatches.length).toBeGreaterThan(0);
+    } finally {
+      cleanupTempArchive(dir);
+    }
+  });
+
+  it('detects a missing artefact', () => {
+    const dir = createTempArchive({
+      COMMIT: 'a'.repeat(40),
+      'evidence.txt': 'hello',
+    });
+    try {
+      writeManifest(dir, 'a'.repeat(40));
+
+      removeArchiveFile(dir, 'evidence.txt');
+      const verification = verifyManifest(dir);
+      expect(verification.ok).toBe(false);
+      expect(verification.mismatches.length).toBeGreaterThan(0);
+    } finally {
+      cleanupTempArchive(dir);
+    }
+  });
+
+  it('detects a tampered manifest entry', () => {
+    const dir = createTempArchive({
+      COMMIT: 'a'.repeat(40),
+      'evidence.txt': 'hello',
+    });
+    try {
+      const manifest = writeManifest(dir, 'a'.repeat(40));
+      const tampered = { ...manifest, artifacts: manifest.artifacts.map((a) => ({ ...a, sha256: '0'.repeat(64) })) };
+      writeArchiveFile(dir, 'MANIFEST.json', `${JSON.stringify(tampered, null, 2)}\n`);
+
+      const verification = verifyManifest(dir);
+      expect(verification.ok).toBe(false);
+      expect(verification.mismatches.length).toBeGreaterThan(0);
+    } finally {
+      cleanupTempArchive(dir);
+    }
   });
 });

@@ -29,6 +29,15 @@ Two things are recorded here, and the distinction matters:
 2. **The remediation and its verification** — the exact version changes, the separated release
    SBOM evidence, and the local validation output that was actually executed.
 
+**This document is report text, and report text is not a permanent clearance.** The triage table
+in §2 is a **point-in-time observation** of the npm advisory database as of **2026-10-24** for the
+lockfile at the reviewed head; it must be **re-derived at each release** and must never be carried
+forward as a standing approval (§7.1). The **durable, SHA-bound** evidence is the archived CI
+artefact set described in **§5.3**: for the exact commit being built, the canonical Dashboard CI
+workflow produces the raw production and full `npm audit` JSON, the production and development
+SBOMs, a `COMMIT` file and a SHA256 manifest, and uploads them as a retained artefact. That
+artefact set — not this prose — is what a reviewer re-verifies, with a single documented command.
+
 ---
 
 ## 1. Audit Command & Reproduction
@@ -452,19 +461,129 @@ downloaded tarball (`8d99f2ca00817eb8850bb177ee6e610d88bf94444b39a34d48e5e7bdf22
 **Evidence level of this re-verification: L0 static + L1 reproducible execution + L2 simulation.**
 No L3/L4/L5 hardware, deployed-environment or HIL evidence is claimed or produced.
 
+### 5.3 Archived, SHA-bound release evidence (artefact set, not report text)
+
+Everything above is *report text*. Report text is a claim; it is not evidence that survives the
+author's machine, the CI runner and the report itself being gone. To make the release claim
+**provable from an immutable artefact**, the canonical Dashboard CI workflow now produces an
+archived evidence set for the **exact commit being built** and uploads it as a retained CI
+artefact.
+
+The archive is produced by `dashboard/scripts/release-evidence-archive.mjs`, which drives the
+**existing** generator (`dashboard/scripts/release-evidence.mjs`) rather than re-implementing the
+advisory triage or the SBOM generation. The archive contains:
+
+| File | What it is |
+| :--- | :--- |
+| `COMMIT` | The exact commit SHA the artefacts were produced from. |
+| `METADATA.json` | Provenance: commit, workflow run, repository, ref, tool versions, npm audit exit codes. |
+| `npm-audit.production.json` | Raw `npm audit --json --omit=dev` output for the production dependency tree. |
+| `npm-audit.full.json` | Raw `npm audit --json` output for the full installed tree. |
+| `sbom.runtime.cdx.json` | Production SBOM (the runtime closure that ships in the bundle). |
+| `sbom.development.cdx.json` | Development/build SBOM (the complement of the runtime closure). |
+| `sbom.full.cdx.json` | CycloneDX SBOM of the complete installed tree. |
+| `sbom-separation.json` | The generator's separation manifest, with per-SBOM digests. |
+| `dependency-scope.json` / `dependency-scope.md` | The advisory disposition, machine- and human-readable. |
+| `MANIFEST.json` | SHA256 manifest: filename, SHA256 and byte size of every artefact above. |
+| `SHA256SUMS` | GNU-compatible digest list for `sha256sum -c SHA256SUMS`. |
+
+The development SBOM was added by this change: `release-evidence.mjs` previously derived only the
+runtime SBOM, so the "development" scope existed in the separation report but had no SBOM of its
+own. `deriveDevelopmentSbom()` now derives it as the **complement** of the production closure, using
+the same name-and-version matching rule as the runtime derivation, and prunes the CycloneDX
+dependency graph so every `dependsOn` edge points at a retained component. On the reviewed tree the
+partition is exact: **17 runtime + 260 development/build = 277 total**, with an empty overlap and
+no dangling dependency edges.
+
+#### Verifying the archive without trusting the report
+
+`MANIFEST.json` lists the filename, SHA256 digest **and** byte size of every artefact. A reviewer
+re-verifies the whole set with one line, run inside the downloaded artefact directory:
+
+```
+node -e "const fs=require('fs'),c=require('crypto'),m=JSON.parse(fs.readFileSync('MANIFEST.json','utf8'));let bad=0;for(const a of m.artifacts){const b=fs.readFileSync(a.file);if(c.createHash('sha256').update(b).digest('hex')!==a.sha256||b.length!==a.bytes){console.error('MISMATCH '+a.file);bad++}}if(bad)process.exit(1);console.log('OK: '+m.artifacts.length+' artefacts verified against MANIFEST.json (commit '+m.commit+')')"
+```
+
+The command is also embedded in the archive's own `README.md`, so the check travels with the
+artefact rather than living only in this document. The SHA256 **of `MANIFEST.json` itself** is
+printed in the CI run log and stated in the pull request body; `MANIFEST.json` cannot list itself,
+so its digest is the trust anchor and must be compared out of band.
+
+#### The gate is blocking
+
+The `release-evidence` job **fails** the workflow when either archived audit report contains a
+**high** or **critical** advisory, and when the SHA256 manifest cannot be produced or verified.
+The job is not conditional, not skippable and not `continue-on-error`. The four failure modes were
+exercised directly (see §5.4).
+
+#### Retention — stated plainly
+
+GitHub Actions artefact retention for this repository is capped at **90 days**
+(`maximum_allowed_days: 90`), and the workflow sets `retention-days: 90` explicitly. **This does
+not satisfy an immutable-evidence requirement.** The archive *expires*; it is a 90-day retained
+artefact, not a permanent record. The digest of `MANIFEST.json` and the commit SHA are also stated
+in the pull request body so that the claim remains checkable after the artefact has expired, but a
+reviewer must record that **longer-lived, immutable retention is a residual gap** that GitHub
+Actions cannot close. If the release process requires evidence that outlives 90 days, it needs a
+retention mechanism outside GitHub Actions — for example a release-attached checksum file, a
+signed tag annotation, or an external evidence store.
+
+### 5.4 Failure modes of the archived-evidence gate, exercised
+
+The gate was exercised against real inputs rather than asserted:
+
+| Scenario | Command | Observed result |
+| :--- | :--- | :--- |
+| Clean tree | `node scripts/release-evidence-archive.mjs --out-dir release-evidence-archive` | exit **0** — 11 artefacts listed, manifest verified |
+| One-line re-verification | the `node -e` command above, in the archive directory | exit **0** — `OK: 11 artefacts verified against MANIFEST.json` |
+| Tampered artefact | appended one byte to `sbom.runtime.cdx.json`, then re-verified | exit **1** — `MISMATCH sbom.runtime.cdx.json` |
+| Tampered manifest | rewrote one digest inside `MANIFEST.json`, then re-verified | exit **1** — `COMMIT: SHA256 mismatch` |
+| Missing artefact | deleted `sbom.runtime.cdx.json`, then re-verified | exit **1** — `sbom.runtime.cdx.json: listed artefact is missing` |
+| Critical advisory | injected a critical `lodash` advisory into `npm-audit.production.json`, then ran `--gate` | exit **1** — `BLOCKING CRITICAL: lodash (<4.17.21)`; `the release evidence gate failed` |
+
 ---
 
 ## 6. Cross-PR Reconciliation with PR #259
 
 PR #259 is the canonical owner of the Dashboard CI gate. This change **does not** redesign the
-workflow or any check name.
+workflow or any check name, and it does **not** create a second Dashboard CI workflow.
 
 | File | Blob on #259 | Blob on #260 (this branch) | Relationship |
 | :--- | :--- | :--- | :--- |
-| `.github/workflows/dashboard-ci.yml` | `69ee4298` | `69ee4298` | **Byte-identical — unchanged** |
+| `.github/workflows/dashboard-ci.yml` | `69ee4298` | modified by this change | **Extended** — see below |
 | `dashboard/scripts/build-integrity.mjs` | `5ea325ad` | `5ea325ad` | **Byte-identical — unchanged** |
 | `dashboard/docs/RELEASE_ARTIFACTS.md` | `27601ff6` | `27601ff6` | **Byte-identical — unchanged** |
 | `dashboard/sha256sum-verification.txt` | `024ffe02` | `024ffe02` | **Byte-identical — unchanged** |
+
+### 6.1 The canonical workflow and check names remain #259's
+
+The canonical workflow file is `.github/workflows/dashboard-ci.yml` and the canonical check name is
+**`Dashboard Quality & Build Gate`**. Both remain owned by PR #259. This change adds a **separate
+job** inside that same workflow file:
+
+| Job | Check name | Owner |
+| :--- | :--- | :--- |
+| `dashboard-quality` | `Dashboard Quality & Build Gate` | **PR #259** (unchanged) |
+| `release-evidence` | `Release Evidence (Archived, SHA-Bound)` | PR #260 (new) |
+
+The two jobs do not compete: they run in parallel, they have different check names, and neither
+modifies the other. The canonical gate's steps, its `if:` conditions and its artefact uploads are
+untouched. There is exactly **one** Dashboard CI workflow file in the repository; this change adds
+no second one.
+
+### 6.2 The add/add conflict this creates, and how to resolve it
+
+`origin/master` does **not** contain `.github/workflows/dashboard-ci.yml`. Both PR #259 and PR #260
+*add* that file, so merging the two branches produces a Git **add/add conflict** on it whenever
+their contents differ — which they now do, because this change adds the `release-evidence` job.
+
+This is a known, deliberate consequence of the card's instruction to extend the existing workflow
+file rather than create a competing one. It is recorded here so the merge owner can resolve it
+deliberately instead of discovering it. The resolution is mechanical: keep the **superset** — the
+`dashboard-quality` job from PR #259 **plus** the `release-evidence` job from PR #260 — and
+confirm that the canonical `Dashboard Quality & Build Gate` job body is byte-identical to
+PR #259's. Equivalently, the same `release-evidence` job can be applied to PR #259's branch
+before merging, which makes the two blobs identical again and the conflict disappears.
 
 The only file that **both** this change and PR #259 modify is `dashboard/package.json`; it is the
 one file both PRs necessarily touch. (This change also modifies `dashboard/package-lock.json`,
@@ -474,7 +593,7 @@ added **at the end** of the `scripts` block rather than adjacent to `build:integ
 so that the two PRs' insertions do not land in the same hunk region. A merge test of this branch
 against PR #259 confirms `dashboard/package.json` auto-merges cleanly, with both `build:integrity`
 and `release:evidence` present in the merged result, and confirms that the merged tree retains
-`dashboard-ci.yml` at blob `69ee4298` and `build-integrity.mjs` at blob `5ea325ad`.
+`build-integrity.mjs` at blob `5ea325ad`.
 
 One pre-existing conflict remains between the two branches, in
 `.github/workflows/adr-lint.yml`: the two branches contain differing text in the routing-truth-table
@@ -486,12 +605,23 @@ It is recorded here so the merge owner can resolve it deliberately rather than d
 
 ## 7. Limitations
 
-1. The advisory disposition is a **point-in-time** assessment against the npm registry advisory
-   database as of 2026-10-24. A future advisory affecting any package in the runtime closure would
-   require re-triage.
+1. **The triage table in this document is a point-in-time observation, never a permanent
+   clearance.** §2 and §3 describe the advisories as reported by `npm audit` against the npm
+   registry advisory database **as of 2026-10-24**, for the lockfile at the reviewed head. It must
+   be **re-derived at each release**, from the lockfile actually being released, against the
+   advisory database as it stands at that moment. A future advisory affecting any package in the
+   runtime closure — or the emergence of a new advisory against a package that was clean today —
+   invalidates this table. Nothing in this document authorises shipping a later release on the
+   strength of a clean table from 2026-10-24. The blocking `release-evidence` CI job exists to
+   make that re-derivation automatic and non-skippable (§5.3), and the archived artefact set is
+   the per-release record of what was actually observed.
 2. "0 vulnerabilities" means 0 advisories reported by `npm audit` for this lockfile. It is not a
    guarantee that the code is free of defects; it is a statement about the published advisory
    database.
 3. The development/build toolchain remains 260 of the 277 installed components. Those packages are
    not in the shipped bundle, but they do execute on developer machines and in CI.
-4. The deployment-level gaps listed in §5.1 are unchanged by this work and remain open.
+4. **The archived evidence is retained for 90 days, not indefinitely** (§5.3). GitHub Actions
+   cannot provide immutable long-lived artefact retention for this repository, so the archive is
+   a bounded-retention artefact and the `MANIFEST.json` digest recorded in the pull request body
+   is the durable anchor. This is a residual gap, not a satisfied requirement.
+5. The deployment-level gaps listed in §5.1 are unchanged by this work and remain open.

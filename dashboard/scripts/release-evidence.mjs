@@ -12,11 +12,15 @@
  *   2. `dependency-scope.md` — the same disposition as a reviewable table.
  *   3. `sbom.runtime.cdx.json` — CycloneDX SBOM of the **production closure
  *      only** (what `npm ci --omit=dev` installs, i.e. what can ship).
- *   4. `sbom.full.cdx.json` — CycloneDX SBOM of the **full installed tree**
+ *   4. `sbom.development.cdx.json` — CycloneDX SBOM of the **development/build
+ *      toolchain only**: the exact complement of the production closure within
+ *      the installed tree. Together with the runtime SBOM it partitions the
+ *      full tree, so neither document can silently over- or under-report.
+ *   5. `sbom.full.cdx.json` — CycloneDX SBOM of the **full installed tree**
  *      (runtime + development/build toolchain).
- *   5. `sbom-separation.json` — the separation manifest: every component
+ *   6. `sbom-separation.json` — the separation manifest: every component
  *      classified as runtime or development/build, the counts on both sides,
- *      and the SHA-256 of each SBOM so the pair is tamper-evident.
+ *      and the SHA-256 of each SBOM so the set is tamper-evident.
  *
  * The release SBOM is therefore *separated* from the development toolchain
  * SBOM: a release reviewer can state exactly which third-party code is in the
@@ -209,6 +213,60 @@ export function deriveRuntimeSbom(fullSbom, closureVersions) {
 }
 
 /**
+ * Derive the development/build toolchain SBOM from the full SBOM.
+ *
+ * This is the exact complement of {@link deriveRuntimeSbom} within the full
+ * installed tree: every component that is *not* part of the verified
+ * production closure. Components are matched on name *and* version, using the
+ * same rule as the runtime derivation, so the runtime and development
+ * documents partition the full tree without overlap and without gaps.
+ *
+ * The CycloneDX `dependencies` graph is pruned to match, so the emitted
+ * document is internally consistent: every `dependsOn` edge points at a
+ * component that is present in the document.
+ *
+ * @param {object} fullSbom The complete installed-tree SBOM
+ * @param {Map<string, string>} closureVersions Production closure name -> version
+ * @returns {object} A CycloneDX SBOM document restricted to the toolchain
+ */
+export function deriveDevelopmentSbom(fullSbom, closureVersions) {
+  const components = (fullSbom.components ?? []).filter((c) => {
+    const expected = closureVersions.get(c.name);
+    // A component is development/build when it is NOT the exact
+    // name@version pair that the production closure pins. A package that
+    // appears in the closure at a different version (for example
+    // `lru-cache@5.1.1` against a closure of `lru-cache@10.4.3`) is
+    // development-only, exactly as `buildSeparation` classifies it.
+    return expected !== c.version;
+  });
+  const present = new Set(components.map((c) => c['bom-ref'] ?? componentKey(c)));
+
+  const dependencies = (fullSbom.dependencies ?? [])
+    .filter((entry) => {
+      // The root entry is always retained; it documents the project itself.
+      if (entry.ref === fullSbom.metadata?.component?.['bom-ref']) return true;
+      return present.has(entry.ref);
+    })
+    .map((entry) => ({
+      ref: entry.ref,
+      dependsOn: (entry.dependsOn ?? []).filter((ref) => present.has(ref)),
+    }));
+
+  return {
+    ...fullSbom,
+    metadata: {
+      ...fullSbom.metadata,
+      properties: [
+        ...(fullSbom.metadata?.properties ?? []),
+        { name: 'sbom:scope', value: 'development and build toolchain' },
+      ],
+    },
+    components,
+    dependencies,
+  };
+}
+
+/**
  * Classify every component of the full SBOM as runtime or development/build,
  * and cross-check the classification against the production closure.
  *
@@ -382,7 +440,13 @@ function renderMarkdown(report, separation, auditSource) {
     'The runtime SBOM (`sbom.runtime.cdx.json`) contains only the production dependency closure;',
   );
   lines.push(
-    'the full SBOM (`sbom.full.cdx.json`) contains the complete installed tree. The runtime SBOM is',
+    'the development SBOM (`sbom.development.cdx.json`) contains only the development/build',
+  );
+  lines.push(
+    'toolchain; the full SBOM (`sbom.full.cdx.json`) contains the complete installed tree.',
+  );
+  lines.push(
+    'The runtime and development SBOMs partition the full tree: the runtime SBOM is',
   );
   lines.push(
     'derived by filtering the full SBOM against the verified production closure, because',
@@ -460,6 +524,7 @@ function main() {
     productionClosureCrossCheck: { available: false, mismatches: [], consistent: null },
   };
   let runtimeSha = null;
+  let developmentSha = null;
   let fullSha = null;
 
   if (options.sbom) {
@@ -481,14 +546,20 @@ function main() {
     // The runtime SBOM is derived from the full SBOM by filtering on the
     // verified production closure, not taken from `npm sbom --omit=dev`.
     const runtimeSbom = deriveRuntimeSbom(full.sbom, closure.versions);
+    // The development SBOM is the exact complement of the runtime SBOM, so
+    // the two documents partition the installed tree.
+    const developmentSbom = deriveDevelopmentSbom(full.sbom, closure.versions);
 
     const runtimeText = `${JSON.stringify(runtimeSbom, null, 2)}\n`;
+    const developmentText = `${JSON.stringify(developmentSbom, null, 2)}\n`;
     const fullText = `${JSON.stringify(full.sbom, null, 2)}\n`;
     writeFileSync(path.join(options.outDir, 'sbom.runtime.cdx.json'), runtimeText, 'utf8');
+    writeFileSync(path.join(options.outDir, 'sbom.development.cdx.json'), developmentText, 'utf8');
     writeFileSync(path.join(options.outDir, 'sbom.full.cdx.json'), fullText, 'utf8');
     runtimeSha = createHash('sha256').update(runtimeText, 'utf8').digest('hex');
+    developmentSha = createHash('sha256').update(developmentText, 'utf8').digest('hex');
     fullSha = createHash('sha256').update(fullText, 'utf8').digest('hex');
-    log('Wrote sbom.runtime.cdx.json and sbom.full.cdx.json');
+    log('Wrote sbom.runtime.cdx.json, sbom.development.cdx.json and sbom.full.cdx.json');
 
     separation = buildSeparation(full.sbom, closure.versions);
   }
@@ -500,6 +571,7 @@ function main() {
     productionClosureAgreement: closureAgreement,
     sbom: {
       runtime: { file: 'sbom.runtime.cdx.json', sha256: runtimeSha },
+      development: { file: 'sbom.development.cdx.json', sha256: developmentSha },
       full: { file: 'sbom.full.cdx.json', sha256: fullSha },
     },
     separation,

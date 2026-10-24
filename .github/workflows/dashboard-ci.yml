@@ -13,6 +13,13 @@
 #   open branches do not shadow each other and merge without an add/add
 #   conflict. Any change to the gate must be applied to both branches.
 #
+#   The `release-evidence` job added by PR #260 is a *separate, non-competing*
+#   job. It does not rename, replace or relax the canonical
+#   `Dashboard Quality & Build Gate` check, which remains owned by PR #259.
+#   Because the two branches both add this file, the merge owner must apply
+#   the same `release-evidence` job to PR #259's branch (or resolve the
+#   add/add conflict in favour of the superset) — see the PR #260 body.
+#
 # Node version: eslint@10 requires node ^20.19.0 || ^22.13.0 || >=24;
 # npm lockfileVersion 3 requires npm 7+ (bundled with node 20+).
 # Node 22 is therefore the lowest-common-denominator major that satisfies
@@ -25,6 +32,13 @@
 # advisories in the vitest/tinypool dev chain, and `npm audit fix --force`
 # would apply a breaking major upgrade. The recorded evidence is review
 # material for release acceptance; it is not a claim of a clean audit.
+#
+#   The separate `release-evidence` job is the exception: it *is* blocking.
+#   It archives the raw npm audit reports, the production and development
+#   SBOMs and a SHA256 manifest for the exact commit being built, and it
+#   fails the job on any high or critical advisory or on any manifest
+#   production/verification failure. It is not skippable and is not
+#   `continue-on-error`.
 # ==============================================================================
 
 name: Dashboard CI
@@ -119,3 +133,66 @@ jobs:
             dashboard/sbom.cdx.json
           retention-days: 14
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Archived, SHA-bound release evidence for the exact commit being built.
+  #
+  # This job is deliberately SEPARATE from, and does not modify, the canonical
+  # `Dashboard Quality & Build Gate` job above, which remains owned by PR #259.
+  # It adds a distinct check name so neither check competes with the other.
+  #
+  # Unlike the advisory steps of the canonical gate, this job is BLOCKING:
+  #   - it fails when either archived audit report contains a high or
+  #     critical advisory;
+  #   - it fails when the SHA256 manifest cannot be produced or verified.
+  # There is no `continue-on-error` and no conditional skip on this job.
+  #
+  # Retention: this repository's Actions artefact retention is capped at 90
+  # days (the repository maximum). The archived evidence therefore EXPIRES
+  # and is not an immutable, permanently retained record. The manifest digest
+  # and the commit SHA are additionally stated in the PR body so the claim
+  # stays checkable after expiry. This is a known residual gap.
+  # ---------------------------------------------------------------------------
+  release-evidence:
+    name: Release Evidence (Archived, SHA-Bound)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Pin the checkout to the exact SHA being built so the archive's
+          # COMMIT can never disagree with the tree the artefacts came from.
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Produce archived release evidence (audit, SBOMs, SHA256 manifest)
+        run: |
+          node scripts/release-evidence-archive.mjs \
+            --out-dir release-evidence-archive \
+            --commit "${{ github.sha }}"
+
+      - name: Verify archived SHA256 manifest
+        run: node scripts/release-evidence-archive.mjs --out-dir release-evidence-archive --verify
+
+      - name: Upload archived release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: dashboard/release-evidence-archive
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Advisory gate (fails the job on any high or critical advisory)
+        run: node scripts/release-evidence-archive.mjs --out-dir release-evidence-archive --gate

@@ -60,6 +60,11 @@ export declare function deriveRuntimeSbom(
   closureVersions: Map<string, string>,
 ): SbomDocument;
 
+export declare function deriveDevelopmentSbom(
+  fullSbom: SbomDocument,
+  closureVersions: Map<string, string>,
+): SbomDocument;
+
 export declare function buildSeparation(
   fullSbom: SbomDocument | null,
   closureVersions: Map<string, string> | null,
