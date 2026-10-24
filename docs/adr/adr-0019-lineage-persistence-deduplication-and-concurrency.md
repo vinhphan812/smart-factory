@@ -1,9 +1,11 @@
-# ADR-0016: Lineage Module Deduplication, Persistence Boundary and Concurrency Model
+# ADR-0019: Lineage Module Deduplication, Persistence Boundary and Concurrency Model
 
 **Status:** Proposed
 **Date:** 2026-10-23
 **Deciders:** Vinh Phan (System Architect)
-**Related issues:** PR #242, Finding 4
+**Related issues:** #152 (via PR #242, Finding 4)
+
+> **Numbering note:** This record's identifier was reallocated to ADR-0019 before merge so that ADR identifiers stay unique across the open pull requests. The decision, status and date are unchanged by the reallocation.
 
 ## Context
 During Maintainer Review Iteration #3 on PR #242, Finding 4 identified that `iot-gateway/src/iot_gateway/lineage.py` and `factory-control/src/lineage.py` were 463-line near-identical duplicates. Both defined separate in-memory `JobStore` and `MaterialStore` singletons, resulting in lineage state being lost on process restart and not shared across factory backend services. Furthermore, durability and concurrent-writer semantics were not explicitly defined.
