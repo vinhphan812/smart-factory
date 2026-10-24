@@ -15,6 +15,7 @@ class GatewayConfig:
     ws_port: int
     ws_http_port: int
     max_events: int
+    mqtt_ca_cert: str | None = None
 
     @classmethod
     def from_env(cls) -> "GatewayConfig":
@@ -31,6 +32,7 @@ class GatewayConfig:
             ws_port=ws_port,
             ws_http_port=int(os.environ.get("WS_HTTP_PORT", str(ws_port + 1))),
             max_events=int(os.environ.get("MAX_EVENTS", "10000")),
+            mqtt_ca_cert=os.environ.get("MQTT_CA_CERT") or None,
         )
 
 

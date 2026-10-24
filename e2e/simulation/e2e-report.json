@@ -4,6 +4,11 @@
   "evidence_level": "L2 simulation",
   "hardware_required": false,
   "target_sha": "caebf4a45fc5454eae61cd721b28930eaedf1338",
+  "evidence_provenance": {
+    "kind": "historical_checked_in_simulation_report",
+    "source_commit": "b70eb4a1b1f458752246ae845b79d3aae9abf582",
+    "note": "This immutable report records the successful simulation at target_sha; it is not evidence for a later checkout. Run the E2E workflow for the checked-out revision."
+  },
   "compose_file": "e2e/simulation/docker-compose.e2e.yml",
   "endpoints": {
     "gateway_http": "http://localhost:8001",

@@ -172,6 +172,7 @@ class Gateway:
             port=self._config.mqtt_port,
             username=self._config.mqtt_username,
             password=self._config.mqtt_password,
+            ca_cert=self._config.mqtt_ca_cert,
             topics=DEFAULT_TOPICS,
             on_message=self._mqtt_callback,
         )

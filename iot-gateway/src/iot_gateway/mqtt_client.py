@@ -38,6 +38,7 @@ class MqttSubscriber:
         port: int,
         username: str | None,
         password: str | None,
+        ca_cert: str | None,
         topics: list[str],
         on_message: Callable[[str, bytes], None],
     ) -> None:
@@ -45,6 +46,7 @@ class MqttSubscriber:
         self._port = port
         self._username = username
         self._password = password
+        self._ca_cert = ca_cert
         self._topics = topics
         self._on_message = on_message
         self._client: mqtt.Client | None = None
@@ -94,6 +96,8 @@ class MqttSubscriber:
         self._client = mqtt.Client(client_id=client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         if self._username:
             self._client.username_pw_set(self._username, self._password)
+        if self._port == 8883:
+            self._client.tls_set(ca_certs=self._ca_cert)
 
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
