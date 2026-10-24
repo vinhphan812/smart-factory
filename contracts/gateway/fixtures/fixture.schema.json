@@ -1,0 +1,284 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/gateway/fixtures/fixture.schema.json",
+  "title": "Gateway Northbound Fixture Pack",
+  "description": "Schema for the language-agnostic consumer fixture pack of contracts/gateway/. A fixture pack is a recorded Gateway read (a snapshot response plus a stream of frames) together with the projected consumer state that the projection rule defined in contracts/gateway/fixtures/README.md must produce. Both the Unity C# GatewayAdapter and the React/TypeScript gateway client are validated against the SAME pack, so their projected visual/status states are comparable field-for-field. The 'unity' and 'react' sections of expected_state MUST be equal.",
+  "type": "object",
+  "definitions": {
+    "canonical_event": {
+      "type": "object",
+      "description": "A northbound canonical event. Field semantics are defined by contracts/gateway/northbound-fanout-contract.md section 1.3 and contracts/gateway/northbound-fanout.schema.json#/definitions/canonical_event.",
+      "properties": {
+        "envelope_version": { "type": "string" },
+        "event_id": { "type": "string" },
+        "device_id": { "type": "string" },
+        "module_id": { "type": ["string", "null"] },
+        "event_type": {
+          "type": "string",
+          "enum": ["command_ack", "status_online", "status_offline", "telemetry", "heartbeat"]
+        },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "observed_at": { "type": ["integer", "null"] },
+        "received_at": { "type": "string" },
+        "received_at_ms": { "type": "integer" },
+        "boot_id": { "type": ["string", "null"] },
+        "units": { "type": "object" },
+        "quality": { "type": "object" },
+        "payload": { "type": "object" },
+        "mqtt_topic": { "type": "string" },
+        "mqtt_timestamp_ms": { "type": "integer" },
+        "ingested_at": { "type": "string" },
+        "stale": { "type": "boolean" },
+        "out_of_order": { "type": "boolean" },
+        "is_timestamp_synchronized": { "type": "boolean" },
+        "latency_ms": { "type": "integer" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": [
+        "event_id",
+        "device_id",
+        "event_type",
+        "sequence",
+        "received_at",
+        "received_at_ms",
+        "ingested_at",
+        "units",
+        "quality",
+        "payload"
+      ]
+    },
+    "stream_frame": {
+      "type": "object",
+      "properties": {
+        "envelope_version": { "type": "string" },
+        "frame_type": { "type": "string", "enum": ["event", "gap", "heartbeat"] },
+        "event": { "$ref": "#/definitions/canonical_event" },
+        "gap": {
+          "type": "object",
+          "properties": {
+            "from_sequence": { "type": "integer" },
+            "to_sequence": { "type": "integer" },
+            "reason": {
+              "type": "string",
+              "enum": ["queue_overflow", "retention_evicted", "slow_consumer", "unknown"]
+            }
+          },
+          "required": ["from_sequence", "to_sequence", "reason"]
+        },
+        "heartbeat": {
+          "type": "object",
+          "properties": {
+            "high_watermark": { "type": "integer" },
+            "gateway_time": { "type": "string" }
+          },
+          "required": ["high_watermark", "gateway_time"]
+        }
+      },
+      "required": ["frame_type"]
+    },
+    "projected_device_state": {
+      "type": "object",
+      "description": "The projected per-device state. Field names and values are identical in the 'unity' and 'react' sections of expected_state; only the binding that renders them differs.",
+      "properties": {
+        "device_id": { "type": "string" },
+        "connectivity": {
+          "type": "string",
+          "description": "Connectivity visual state.",
+          "enum": ["online", "offline", "unknown"]
+        },
+        "data_state": {
+          "type": "string",
+          "description": "Freshness visual state of the latest applied telemetry event, independent of connectivity. 'live' = quality good; 'stale' = quality degraded or quality.stale true; 'uncertain' = quality uncertain (e.g. unsynchronised clock); 'unknown' = no telemetry event applied yet.",
+          "enum": ["live", "stale", "uncertain", "unknown"]
+        },
+        "last_event_type": { "type": ["string", "null"] },
+        "last_sequence": { "type": ["integer", "null"] },
+        "last_event_id": { "type": ["string", "null"] },
+        "boot_id": { "type": ["string", "null"] },
+        "observed_at": { "type": ["integer", "null"] },
+        "received_at": { "type": ["string", "null"] },
+        "clock_domain": {
+          "type": "string",
+          "enum": ["utc", "device_monotonic", "unknown"]
+        },
+        "quality_status": {
+          "type": "string",
+          "enum": ["good", "uncertain", "degraded", "invalid", "unknown"]
+        },
+        "quality_reason": { "type": "string" },
+        "units": { "type": "object" },
+        "values": {
+          "type": "object",
+          "description": "Latest measured quantities, keyed by measurement name, in the unit declared by units."
+        },
+        "payload_state": {
+          "type": ["string", "null"],
+          "description": "The payload 'state' field when the payload carries one, else null."
+        }
+      },
+      "required": [
+        "device_id",
+        "connectivity",
+        "data_state",
+        "last_event_type",
+        "last_sequence",
+        "last_event_id",
+        "boot_id",
+        "observed_at",
+        "received_at",
+        "clock_domain",
+        "quality_status",
+        "quality_reason",
+        "units",
+        "values",
+        "payload_state"
+      ]
+    },
+    "expected_state": {
+      "type": "object",
+      "description": "The expected projected state of the whole fixture, expressed once per consumer language. The two sections MUST be identical.",
+      "properties": {
+        "unity": {
+          "type": "object",
+          "properties": {
+            "consumer": { "type": "string" },
+            "devices": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/definitions/projected_device_state" }
+            },
+            "last_applied_sequence": { "type": ["integer", "null"] },
+            "resync_required": { "type": "boolean" },
+            "gap_detected": { "type": "boolean" },
+            "applied_event_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "dropped_duplicate_event_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": [
+            "consumer",
+            "devices",
+            "last_applied_sequence",
+            "resync_required",
+            "gap_detected",
+            "applied_event_ids",
+            "dropped_duplicate_event_ids"
+          ]
+        },
+        "react": {
+          "type": "object",
+          "properties": {
+            "consumer": { "type": "string" },
+            "devices": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/definitions/projected_device_state" }
+            },
+            "last_applied_sequence": { "type": ["integer", "null"] },
+            "resync_required": { "type": "boolean" },
+            "gap_detected": { "type": "boolean" },
+            "applied_event_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "dropped_duplicate_event_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": [
+            "consumer",
+            "devices",
+            "last_applied_sequence",
+            "resync_required",
+            "gap_detected",
+            "applied_event_ids",
+            "dropped_duplicate_event_ids"
+          ]
+        }
+      },
+      "required": ["unity", "react"]
+    }
+  },
+  "properties": {
+    "fixture_version": {
+      "type": "string",
+      "description": "Version of the fixture pack format itself.",
+      "examples": ["1.0.0"]
+    },
+    "envelope_version": {
+      "type": "string",
+      "description": "The northbound envelope_version the fixture was recorded against."
+    },
+    "description": {
+      "type": "string",
+      "description": "What the fixture exercises."
+    },
+    "gateway": {
+      "type": "object",
+      "description": "Description of the Gateway that produced the recording.",
+      "properties": {
+        "service": { "type": "string" },
+        "version": { "type": "string" },
+        "http_port": { "type": "integer" },
+        "ws_port": { "type": "integer" }
+      },
+      "required": ["service", "version", "http_port", "ws_port"]
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "The recorded GET /snapshot response body.",
+      "properties": {
+        "envelope_version": { "type": "string" },
+        "cursor": {
+          "type": "object",
+          "properties": {
+            "high_watermark": { "type": "integer" },
+            "last_sequence": { "type": "integer" },
+            "since_sequence": { "type": "integer" }
+          },
+          "required": ["high_watermark", "last_sequence", "since_sequence"]
+        },
+        "high_watermark": { "type": "integer" },
+        "snapshot_count": { "type": "integer" },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/canonical_event" }
+        },
+        "per_device_latest": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/canonical_event" }
+        },
+        "overflow": { "type": "boolean" },
+        "overflow_limit": { "type": "integer" },
+        "resync_required": { "type": "boolean" },
+        "oldest_retained_sequence": { "type": "integer" }
+      },
+      "required": [
+        "high_watermark",
+        "snapshot_count",
+        "events",
+        "per_device_latest",
+        "overflow",
+        "overflow_limit"
+      ]
+    },
+    "frames": {
+      "type": "array",
+      "description": "The recorded incremental stream frames, in delivery order.",
+      "items": { "$ref": "#/definitions/stream_frame" }
+    },
+    "expected_state": { "$ref": "#/definitions/expected_state" }
+  },
+  "required": [
+    "fixture_version",
+    "envelope_version",
+    "description",
+    "gateway",
+    "snapshot",
+    "frames",
+    "expected_state"
+  ]
+}

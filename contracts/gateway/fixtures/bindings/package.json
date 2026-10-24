@@ -1,0 +1,7 @@
+{
+  "name": "smart-factory-gateway-fixture-bindings",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Reference typed bindings for the Gateway northbound consumer fixture. Not published, not part of any application build.",
+  "type": "module"
+}
