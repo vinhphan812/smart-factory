@@ -1,0 +1,2880 @@
+{
+  "schema_id": "smart-factory.physical.capability",
+  "schema_version": "1.0.0",
+  "contract_status": "planned_controller_contract_v0.1",
+  "evidence_level": "L1",
+  "provenance": {
+    "source_contract": "contracts/physical/factory-interface.md",
+    "source_matrix": "contracts/physical/capability-matrix.md",
+    "source_sequence": "contracts/physical/end-to-end-sequence.md",
+    "safety_authority": "docs/adr/adr-0006-local-physical-safety.md",
+    "compatibility_boundary": [
+      "contracts/v1/schemas/command.schema.json",
+      "contracts/v1/schemas/telemetry.schema.json"
+    ],
+    "notes": "Executable catalogue derived from the L0 physical contracts. The v1 bridge command envelope remains the only published wire contract; the capabilities below are planned controller-contract v0.1 and require a future controller schema version plus compatibility review before publication through the bridge."
+  },
+  "io_types": {
+    "DI": {
+      "direction": "input",
+      "value_type": "boolean",
+      "meaning": "Binary sensor; polarity declared by implementation."
+    },
+    "AI": {
+      "direction": "input",
+      "value_type": "number",
+      "meaning": "Analog sensor; unit and calibration are controller-owned."
+    },
+    "ENC": {
+      "direction": "input",
+      "value_type": "integer",
+      "meaning": "Quadrature/position feedback count."
+    },
+    "DO": {
+      "direction": "output",
+      "value_type": "boolean",
+      "meaning": "Switched actuator-enable signal."
+    },
+    "SERVO": {
+      "direction": "output",
+      "value_type": "number",
+      "meaning": "Servo command in microseconds or calibrated degrees; local controller owns hard bounds."
+    },
+    "MOTOR": {
+      "direction": "output",
+      "value_type": "object",
+      "meaning": "Motor direction plus bounded PWM duty."
+    },
+    "STEP": {
+      "direction": "output",
+      "value_type": "object",
+      "meaning": "Stepper trajectory request; never raw remote pulse streaming."
+    },
+    "ESTOP": {
+      "direction": "input",
+      "value_type": "boolean",
+      "meaning": "Normally closed hardwired chain; open or fault means unsafe. Not a normal DI."
+    },
+    "LOGICAL": {
+      "direction": "input|output",
+      "value_type": "object",
+      "meaning": "Logical channel of an orchestrated or structural construct; not raw GPIO."
+    },
+    "SERVO|DO": {
+      "direction": "output",
+      "value_type": "number",
+      "meaning": "Composite placeholder for an actuator the L0 contract leaves unresolved between a servo position and a switched enable. The concrete type is TBD-L3 and is not asserted at L1; the composite type contributes to no resolved channel count."
+    }
+  },
+  "state_model": {
+    "any_state": "ANY",
+    "notes": "A command is transition-constrained only when the L0 state diagram declares a command-triggered edge. Commands without a declared edge are controller-owned and are not transition-checked at L1."
+  },
+  "admission_contract": {
+    "layer": "capability_admission",
+    "position": "The admission layer is evaluated before any actuator path is reached. A command that is not admitted must never energise an actuator, engage a servo or move a stepper.",
+    "ownership": "Local device controllers own motion limits, E-stop authority and every controller-owned range. Admission is a network-side admission filter, not a substitute for a local interlock (ADR-0006).",
+    "transition_policies": {
+      "declared_edge": "The capability declares at least one command-triggered edge in mode_transitions. Admission checks the observed module state against the declared source states; ANY matches every state.",
+      "always_allowed": "The L0 contract accepts the command from any state (for example a local safety stop). Admission does not check the transition; the local controller still applies its own state and fault rules."
+    },
+    "error_codes": [
+      "UNKNOWN_MODULE",
+      "CAPABILITY_NOT_SUPPORTED",
+      "UNKNOWN_ARGUMENT",
+      "MISSING_ARGUMENT",
+      "INVALID_ARGUMENT_TYPE",
+      "ARGUMENT_OUT_OF_RANGE",
+      "ARGUMENT_VALUE_NOT_ALLOWED",
+      "ILLEGAL_TRANSITION",
+      "STATE_UNKNOWN"
+    ],
+    "error_shape": {
+      "code": "machine-readable rejection code",
+      "module_id": "the addressed module identifier",
+      "capability": "the requested capability name",
+      "constraint": "the violated constraint, for example range:10..100 or transition:IDLE",
+      "detail": "human-readable explanation",
+      "evidence_level": "the evidence level of the schema that produced the decision"
+    },
+    "staleness_rule": "A command whose transition is transition-checked cannot be admitted while the observed module state is unknown or stale; the state is surfaced as UNKNOWN and never inferred (ADR-0006)."
+  },
+  "modules": [
+    {
+      "module_id": "conveyor-01",
+      "name": "Conveyor",
+      "role": "Material feed",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": 3,
+        "AI": 1,
+        "ENC": 0,
+        "DO": 0,
+        "SERVO": 0,
+        "MOTOR": 1,
+        "STEP": 0,
+        "ESTOP": 1
+      },
+      "count_status": {},
+      "derived_counts": {
+        "sensors": 4,
+        "motors": 1,
+        "actuators": 1,
+        "encoders": 0,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "CONV_ENTRY",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Material arrival detection.",
+          "fault_codes": []
+        },
+        {
+          "channel": "CONV_EXIT",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Material departure detection.",
+          "fault_codes": []
+        },
+        {
+          "channel": "CONV_JAM",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Jam/obstruction detection.",
+          "fault_codes": [
+            "JAM_ACTIVE"
+          ]
+        },
+        {
+          "channel": "CONV_MOTOR_TEMP",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": "°C",
+          "range": null,
+          "purpose": "Motor thermal monitoring.",
+          "fault_codes": [
+            "THERMAL_FAULT"
+          ]
+        },
+        {
+          "channel": "CONV_MOTOR",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": {
+            "min": 0,
+            "max": 100,
+            "unit": "pwm_percent",
+            "source": "contracts/physical/capability-matrix.md#1-conveyor--conveyor-01 (pwm: 0-100)",
+            "evidence": "L0 contract; electrical tolerance not measured (Issue #98)"
+          },
+          "purpose": "Belt drive.",
+          "fault_codes": [
+            "JAM_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "CONV_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "STARTING",
+        "RUNNING",
+        "STOPPING",
+        "E_STOP",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "STARTING",
+          "trigger": {
+            "kind": "command",
+            "value": "CONVEYOR_START"
+          }
+        },
+        {
+          "from": "STARTING",
+          "to": "RUNNING",
+          "trigger": {
+            "kind": "event",
+            "value": "motion_feedback"
+          }
+        },
+        {
+          "from": "RUNNING",
+          "to": "STOPPING",
+          "trigger": {
+            "kind": "command",
+            "value": "CONVEYOR_STOP"
+          }
+        },
+        {
+          "from": "RUNNING",
+          "to": "STOPPING",
+          "trigger": {
+            "kind": "event",
+            "value": "exit_complete"
+          }
+        },
+        {
+          "from": "STOPPING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "zero_speed"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "jam_or_estop_or_watchdog"
+          }
+        },
+        {
+          "from": "E_STOP",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local release and clear sensors"
+        },
+        {
+          "from": "ANY",
+          "to": "FAULT",
+          "trigger": {
+            "kind": "event",
+            "value": "sensor_or_controller_fault"
+          }
+        },
+        {
+          "from": "FAULT",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local repair"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "CONVEYOR_START",
+          "capability_id": "belt.motion.start",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "speedMmPerSec",
+              "type": "number",
+              "unit": "mm/s",
+              "required": false,
+              "range": {
+                "min": 10,
+                "max": 100
+              },
+              "range_owner": "local_controller",
+              "range_source": "factory-control/src/models.py:ConveyorLimits (L1 default configuration)",
+              "enforcement": "admission"
+            }
+          ],
+          "reject_codes": [
+            "E_STOP_OPEN",
+            "JAM_ACTIVE",
+            "INVALID_SPEED",
+            "WATCHDOG_TRIPPED"
+          ]
+        },
+        {
+          "name": "CONVEYOR_STOP",
+          "capability_id": "belt.motion.stop",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS",
+            "JAM_PERSISTS",
+            "FAULT_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": true,
+        "owner": "local_controller",
+        "timeout_seconds": 300,
+        "timeout_source": "factory-control/src/models.py:ConveyorLimits.watchdog_timeout_s",
+        "behaviour": "WATCHDOG_TRIPPED rejects CONVEYOR_START until the watchdog is cleared.",
+        "evidence": "L1 software default; hardware timeout not measured (Issue #98)."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (CONV_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "Jam or E-stop removes CONV_MOTOR enable locally.",
+          "Thermal or watchdog fault transitions to FAULT.",
+          "Loss of motion feedback while running fails closed to FAULT.",
+          "Recovery requires local safe state and operator clearance."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "DECLARED_UNVERIFIED",
+        "source": "factory-control/docs/conveyor-adapter.md#5-hardware-pinout-reference",
+        "verification": "BLOCKED_L3 (Issue #98): no measured pinout or electrical validation.",
+        "declared_pins": {
+          "CONV_MOTOR": "D9",
+          "CONV_ENTRY": "D22",
+          "CONV_EXIT": "D23",
+          "CONV_JAM": "D24"
+        },
+        "undeclared_channels": [
+          "CONV_MOTOR_TEMP",
+          "CONV_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "CONVEYOR_START",
+            "args": {
+              "speedMmPerSec": 50
+            },
+            "expect_state": "STARTING"
+          },
+          {
+            "kind": "event",
+            "trigger": "motion_feedback",
+            "expect_state": "RUNNING"
+          },
+          {
+            "kind": "command",
+            "capability": "CONVEYOR_STOP",
+            "args": {},
+            "expect_state": "STOPPING"
+          },
+          {
+            "kind": "event",
+            "trigger": "zero_speed",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "Reaching RUNNING requires the declared motion-feedback event; sensor-driven and fault fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "sorting-01",
+      "name": "Sorting",
+      "role": "Classification/routing of items",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": 3,
+        "AI": 1,
+        "ENC": 0,
+        "DO": 0,
+        "SERVO": 1,
+        "MOTOR": 0,
+        "STEP": 0,
+        "ESTOP": 1
+      },
+      "count_status": {},
+      "derived_counts": {
+        "sensors": 4,
+        "motors": 0,
+        "actuators": 1,
+        "encoders": 0,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "SORT_INLET",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Item presence at inlet.",
+          "fault_codes": []
+        },
+        {
+          "channel": "SORT_METAL",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Metal classification signal.",
+          "fault_codes": []
+        },
+        {
+          "channel": "SORT_JAM",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Obstruction detection.",
+          "fault_codes": [
+            "JAM_ACTIVE"
+          ]
+        },
+        {
+          "channel": "SORT_CLASS",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": null,
+          "range": null,
+          "purpose": "Optional colour/vision classification signal.",
+          "fault_codes": [
+            "MISSING_CLASSIFICATION"
+          ]
+        },
+        {
+          "channel": "SORT_DIVERTER",
+          "io_type": "SERVO",
+          "direction": "output",
+          "value_type": "number",
+          "unit": "deg",
+          "range": {
+            "min": -45,
+            "max": 90,
+            "unit": "deg",
+            "source": "factory-control/docs/sorting-adapter.md#5-hardware-pinout-reference (diverter angle -45 to 90 deg)",
+            "evidence": "L0/L1 declared value; not measured (Issue #98)"
+          },
+          "purpose": "Route selected item to destination.",
+          "fault_codes": [
+            "JAM_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "SORT_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "CLASSIFYING",
+        "ROUTING",
+        "REJECTING",
+        "STOPPED",
+        "E_STOP",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "CLASSIFYING",
+          "trigger": {
+            "kind": "command",
+            "value": "SORT_ITEM"
+          }
+        },
+        {
+          "from": "CLASSIFYING",
+          "to": "ROUTING",
+          "trigger": {
+            "kind": "event",
+            "value": "valid_class"
+          }
+        },
+        {
+          "from": "CLASSIFYING",
+          "to": "REJECTING",
+          "trigger": {
+            "kind": "event",
+            "value": "unknown_item"
+          }
+        },
+        {
+          "from": "ROUTING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "route_confirmed"
+          }
+        },
+        {
+          "from": "REJECTING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "reject_confirmed"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "STOPPED",
+          "trigger": {
+            "kind": "command",
+            "value": "SORTING_STOP"
+          }
+        },
+        {
+          "from": "STOPPED",
+          "to": "CLASSIFYING",
+          "trigger": {
+            "kind": "command",
+            "value": "SORT_ITEM"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "jam_or_estop_open"
+          }
+        },
+        {
+          "from": "E_STOP",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local release"
+        },
+        {
+          "from": "ANY",
+          "to": "FAULT",
+          "trigger": {
+            "kind": "event",
+            "value": "sensor_heartbeat_lost"
+          }
+        },
+        {
+          "from": "FAULT",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "repair"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "SORT_ITEM",
+          "capability_id": "sorting.classify_and_route",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "itemId",
+              "type": "string",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "type_only"
+            },
+            {
+              "name": "itemClass",
+              "type": "string",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "type_only"
+            }
+          ],
+          "reject_codes": [
+            "JAM_ACTIVE",
+            "E_STOP_OPEN",
+            "BUSY",
+            "MISSING_CLASSIFICATION"
+          ]
+        },
+        {
+          "name": "ROUTE_MANUAL",
+          "capability_id": "sorting.route.manual",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [
+            {
+              "name": "destination",
+              "type": "string",
+              "unit": null,
+              "required": false,
+              "allowed_values": [
+                "BIN_1",
+                "BIN_2",
+                "BIN_3",
+                "REJECT_LANE"
+              ],
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": "factory-control/src/models.py:RouteDestination",
+              "enforcement": "admission"
+            }
+          ],
+          "reject_codes": [
+            "INVALID_DESTINATION",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "SORTING_STOP",
+          "capability_id": "sorting.stop",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS",
+            "JAM_PERSISTS",
+            "FAULT_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "local_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "No watchdog behaviour is declared for this module in the L0 contract; sensor heartbeat loss is the declared latched fault.",
+        "evidence": "L0 contract only; no watchdog parameter may be asserted at L1."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (SORT_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "Jam or E-stop disables SORT_DIVERTER motion.",
+          "Sensor heartbeat loss is a latched fault.",
+          "Manual route cannot bypass the safety reject lane.",
+          "Recovery requires the physical cause cleared and heartbeat restored."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "DECLARED_UNVERIFIED",
+        "source": "factory-control/docs/sorting-adapter.md#5-hardware-pinout-reference",
+        "verification": "BLOCKED_L3 (Issue #98): no measured pinout or electrical validation.",
+        "declared_pins": {
+          "SORT_DIVERTER": "D10",
+          "SORT_INLET": "D25",
+          "SORT_METAL": "D26",
+          "SORT_JAM": "D27",
+          "SORT_ESTOP": "D28"
+        },
+        "undeclared_channels": [
+          "SORT_CLASS"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "SORT_ITEM",
+            "args": {
+              "itemId": "lot-17",
+              "itemClass": "METAL"
+            },
+            "expect_state": "CLASSIFYING"
+          },
+          {
+            "kind": "event",
+            "trigger": "valid_class",
+            "expect_state": "ROUTING"
+          },
+          {
+            "kind": "event",
+            "trigger": "route_confirmed",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "Classification, jam, heartbeat-loss and reject-lane fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "tower-crane-01",
+      "name": "Tower Crane",
+      "role": "Lift and place operations",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": 4,
+        "AI": 1,
+        "ENC": 2,
+        "DO": 0,
+        "SERVO": 0,
+        "MOTOR": 1,
+        "STEP": 1,
+        "ESTOP": 1
+      },
+      "count_status": {},
+      "derived_counts": {
+        "sensors": 7,
+        "motors": 1,
+        "actuators": 2,
+        "encoders": 2,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "CRANE_X_MIN",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "X-axis minimum limit.",
+          "fault_codes": [
+            "LIMIT_ACTIVE"
+          ]
+        },
+        {
+          "channel": "CRANE_X_MAX",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "X-axis maximum limit.",
+          "fault_codes": [
+            "LIMIT_ACTIVE"
+          ]
+        },
+        {
+          "channel": "CRANE_Z_LOW",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hoist lower limit.",
+          "fault_codes": [
+            "HOIST_LIMIT_ACTIVE"
+          ]
+        },
+        {
+          "channel": "CRANE_Z_HIGH",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hoist upper limit.",
+          "fault_codes": [
+            "HOIST_LIMIT_ACTIVE"
+          ]
+        },
+        {
+          "channel": "CRANE_X_ENCODER",
+          "io_type": "ENC",
+          "direction": "input",
+          "value_type": "integer",
+          "unit": "count",
+          "range": null,
+          "purpose": "X-axis position feedback.",
+          "fault_codes": [
+            "ENCODER_TIMEOUT"
+          ]
+        },
+        {
+          "channel": "CRANE_Z_ENCODER",
+          "io_type": "ENC",
+          "direction": "input",
+          "value_type": "integer",
+          "unit": "count",
+          "range": null,
+          "purpose": "Hoist position feedback.",
+          "fault_codes": [
+            "ENCODER_TIMEOUT"
+          ]
+        },
+        {
+          "channel": "CRANE_LOAD",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": "g",
+          "range": null,
+          "purpose": "Overload guard.",
+          "fault_codes": [
+            "OVERLOAD"
+          ]
+        },
+        {
+          "channel": "CRANE_TROLLEY",
+          "io_type": "STEP",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "steps",
+          "range": null,
+          "purpose": "X-axis trolley motion.",
+          "fault_codes": [
+            "LIMIT_ACTIVE",
+            "ZONE_OCCUPIED",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "CRANE_HOIST",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": null,
+          "purpose": "Raise/lower hoist.",
+          "fault_codes": [
+            "OVERLOAD",
+            "HOIST_LIMIT_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "CRANE_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "MOVING_X",
+        "HOISTING",
+        "PICKING",
+        "E_STOP",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "MOVING_X",
+          "trigger": {
+            "kind": "command",
+            "value": "CRANE_MOVE_X"
+          }
+        },
+        {
+          "from": "MOVING_X",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "target_or_limit"
+          }
+        },
+        {
+          "from": "IDLE",
+          "to": "HOISTING",
+          "trigger": {
+            "kind": "command",
+            "value": "CRANE_HOIST"
+          }
+        },
+        {
+          "from": "HOISTING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "target_or_limit"
+          }
+        },
+        {
+          "from": "IDLE",
+          "to": "PICKING",
+          "trigger": {
+            "kind": "command",
+            "value": "CRANE_PICKUP"
+          }
+        },
+        {
+          "from": "PICKING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "load_confirmed"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "limit_or_overload_or_zone_or_estop"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "FAULT",
+          "trigger": {
+            "kind": "event",
+            "value": "encoder_timeout"
+          }
+        },
+        {
+          "from": "E_STOP",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local clearance and verified encoder position"
+        },
+        {
+          "from": "FAULT",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local clearance"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "CRANE_MOVE_X",
+          "capability_id": "crane.trolley.move",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "targetMm",
+              "type": "number",
+              "unit": "mm",
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            }
+          ],
+          "reject_codes": [
+            "OUT_OF_BOUNDS",
+            "ZONE_OCCUPIED",
+            "LIMIT_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "CRANE_HOIST",
+          "capability_id": "crane.hoist.move",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "targetMm",
+              "type": "number",
+              "unit": "mm",
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            }
+          ],
+          "reject_codes": [
+            "OVERLOAD",
+            "HOIST_LIMIT_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "CRANE_PICKUP",
+          "capability_id": "crane.load.pickup",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [],
+          "reject_codes": [
+            "LOAD_NOT_CONFIRMED",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "CRANE_DROPOFF",
+          "capability_id": "crane.load.dropoff",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "LOAD_STATE_CONFLICT",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "CRANE_STOP",
+          "capability_id": "crane.motion.stop",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS",
+            "ENCODER_TIMEOUT",
+            "FAULT_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "local_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "No watchdog behaviour is declared for this module in the L0 contract; encoder timeout is the declared fault.",
+        "evidence": "L0 contract only; no watchdog parameter may be asserted at L1."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (CRANE_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "A hard limit removes CRANE_TROLLEY and CRANE_HOIST authority.",
+          "E-stop open removes all motor authority.",
+          "Overload stops hoist motion.",
+          "Crane and forklift movement require a verified zone-clear protocol; network acknowledgement is insufficient.",
+          "Recovery requires local clearance and verified encoder position."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_DECLARED",
+        "source": "contracts/physical/capability-matrix.md#reading-guide",
+        "verification": "BLOCKED_L3: channel identifiers are logical names only; controller and channel allocation pending hardware evidence.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "CRANE_X_MIN",
+          "CRANE_X_MAX",
+          "CRANE_Z_LOW",
+          "CRANE_Z_HIGH",
+          "CRANE_X_ENCODER",
+          "CRANE_Z_ENCODER",
+          "CRANE_LOAD",
+          "CRANE_TROLLEY",
+          "CRANE_HOIST",
+          "CRANE_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "CRANE_MOVE_X",
+            "args": {
+              "targetMm": 150
+            },
+            "expect_state": "MOVING_X"
+          },
+          {
+            "kind": "event",
+            "trigger": "target_or_limit",
+            "expect_state": "IDLE"
+          },
+          {
+            "kind": "command",
+            "capability": "CRANE_HOIST",
+            "args": {
+              "targetMm": 80
+            },
+            "expect_state": "HOISTING"
+          },
+          {
+            "kind": "event",
+            "trigger": "target_or_limit",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "Target bounds are controller-owned and not asserted at L1; overload, zone-lock and limit fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "parking-01",
+      "name": "Parking",
+      "role": "Vehicle staging at entry/exit",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": null,
+        "AI": 0,
+        "ENC": 0,
+        "DO": null,
+        "SERVO": null,
+        "MOTOR": 0,
+        "STEP": 0,
+        "ESTOP": 1
+      },
+      "count_status": {
+        "DI": "TBD_L3: N+1 (N slot sensors plus one gate-clear input); N is not specified in the L0 contract.",
+        "DO": "TBD_L3: gate actuator is SERVO or DO, unresolved.",
+        "SERVO": "TBD_L3: gate actuator is SERVO or DO, unresolved."
+      },
+      "derived_counts": {
+        "sensors": null,
+        "motors": 0,
+        "actuators": null,
+        "encoders": 0,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "PARK_SLOT_1..N",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Per-slot occupancy detection.",
+          "fault_codes": [
+            "NO_SLOT_AVAILABLE"
+          ]
+        },
+        {
+          "channel": "PARK_GATE_CLEAR",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Gate path obstruction check.",
+          "fault_codes": [
+            "OBSTRUCTION_PRESENT"
+          ]
+        },
+        {
+          "channel": "PARK_GATE",
+          "io_type": "SERVO|DO",
+          "direction": "output",
+          "value_type": "number",
+          "unit": null,
+          "range": null,
+          "purpose": "Gate open/close. Actuator type TBD-L3.",
+          "fault_codes": [
+            "GATE_FAULT"
+          ]
+        },
+        {
+          "channel": "PARK_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "OPENING",
+        "CLOSING",
+        "BLOCKED",
+        "E_STOP"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "OPENING",
+          "trigger": {
+            "kind": "command",
+            "value": "GATE_OPEN"
+          },
+          "precondition": "slot available"
+        },
+        {
+          "from": "OPENING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "open_feedback"
+          }
+        },
+        {
+          "from": "IDLE",
+          "to": "CLOSING",
+          "trigger": {
+            "kind": "command",
+            "value": "GATE_CLOSE"
+          },
+          "precondition": "gate clear"
+        },
+        {
+          "from": "CLOSING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "closed_feedback"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "BLOCKED",
+          "trigger": {
+            "kind": "event",
+            "value": "slot_full_while_admit_requested"
+          }
+        },
+        {
+          "from": "BLOCKED",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "slot_available"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "estop_open"
+          }
+        },
+        {
+          "from": "E_STOP",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local release"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "GATE_OPEN",
+          "capability_id": "parking.gate.open",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [],
+          "reject_codes": [
+            "NO_SLOT_AVAILABLE",
+            "E_STOP_OPEN",
+            "GATE_FAULT"
+          ]
+        },
+        {
+          "name": "GATE_CLOSE",
+          "capability_id": "parking.gate.close",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [],
+          "reject_codes": [
+            "OBSTRUCTION_PRESENT",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "GET_STATUS",
+          "capability_id": "module.status.read",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "local_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "No watchdog behaviour is declared for this module in the L0 contract.",
+        "evidence": "L0 contract only; no watchdog parameter may be asserted at L1."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (PARK_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "The gate must reopen automatically when an obstruction is detected.",
+          "Admission is denied when no verified free slot exists.",
+          "RESET is refused until the E-stop is cleared."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_DECLARED",
+        "source": "contracts/physical/capability-matrix.md#reading-guide",
+        "verification": "BLOCKED_L3: channel identifiers are logical names only; controller and channel allocation pending hardware evidence.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "PARK_SLOT_1..N",
+          "PARK_GATE_CLEAR",
+          "PARK_GATE",
+          "PARK_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "GATE_OPEN",
+            "args": {},
+            "expect_state": "OPENING"
+          },
+          {
+            "kind": "event",
+            "trigger": "open_feedback",
+            "expect_state": "IDLE"
+          },
+          {
+            "kind": "command",
+            "capability": "GATE_CLOSE",
+            "args": {},
+            "expect_state": "CLOSING"
+          },
+          {
+            "kind": "event",
+            "trigger": "closed_feedback",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "The gate actuator type is unresolved at L3; slot-full, obstruction and E-stop fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "forklift-01",
+      "name": "Forklift",
+      "role": "Pallet transport within the factory floor",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": 4,
+        "AI": 0,
+        "ENC": 0,
+        "DO": 0,
+        "SERVO": 1,
+        "MOTOR": 2,
+        "STEP": 0,
+        "ESTOP": 1
+      },
+      "count_status": {},
+      "derived_counts": {
+        "sensors": 4,
+        "motors": 2,
+        "actuators": 3,
+        "encoders": 0,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "FORK_FRONT_OBSTACLE",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Forward collision guard.",
+          "fault_codes": [
+            "OBSTACLE_PRESENT"
+          ]
+        },
+        {
+          "channel": "FORK_REAR_OBSTACLE",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Rear collision guard.",
+          "fault_codes": [
+            "OBSTACLE_PRESENT"
+          ]
+        },
+        {
+          "channel": "FORK_LIFT_LOW",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Lower fork lift limit.",
+          "fault_codes": [
+            "LIFT_LIMIT_ACTIVE"
+          ]
+        },
+        {
+          "channel": "FORK_LIFT_HIGH",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Upper fork lift limit.",
+          "fault_codes": [
+            "LIFT_LIMIT_ACTIVE"
+          ]
+        },
+        {
+          "channel": "FORK_DRIVE",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": null,
+          "purpose": "Traction drive.",
+          "fault_codes": [
+            "OBSTACLE_PRESENT",
+            "CRANE_ZONE_OCCUPIED",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "FORK_LIFT",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": null,
+          "purpose": "Fork raise/lower.",
+          "fault_codes": [
+            "LIFT_LIMIT_ACTIVE",
+            "OVERLOAD",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "FORK_STEER",
+          "io_type": "SERVO",
+          "direction": "output",
+          "value_type": "number",
+          "unit": "deg",
+          "range": null,
+          "purpose": "Steering angle.",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "FORK_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "DRIVING",
+        "LIFTING",
+        "STOPPED",
+        "E_STOP",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "DRIVING",
+          "trigger": {
+            "kind": "command",
+            "value": "FORK_DRIVE"
+          }
+        },
+        {
+          "from": "DRIVING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "target_reached"
+          }
+        },
+        {
+          "from": "IDLE",
+          "to": "LIFTING",
+          "trigger": {
+            "kind": "command",
+            "value": "FORK_LIFT"
+          }
+        },
+        {
+          "from": "LIFTING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "limit_or_target"
+          }
+        },
+        {
+          "from": "DRIVING",
+          "to": "STOPPED",
+          "trigger": {
+            "kind": "event",
+            "value": "obstacle_detected"
+          }
+        },
+        {
+          "from": "STOPPED",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "path_clearance_and_new_command"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "estop_open_or_overload"
+          }
+        },
+        {
+          "from": "E_STOP",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "obstacle cleared, E-stop released, safe load state confirmed"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "FORK_DRIVE",
+          "capability_id": "forklift.drive",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "xTarget",
+              "type": "number",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            },
+            {
+              "name": "yTarget",
+              "type": "number",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            }
+          ],
+          "reject_codes": [
+            "OBSTACLE_PRESENT",
+            "CRANE_ZONE_OCCUPIED",
+            "OUT_OF_BOUNDS",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "FORK_LIFT",
+          "capability_id": "forklift.lift",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "heightMm",
+              "type": "number",
+              "unit": "mm",
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            }
+          ],
+          "reject_codes": [
+            "LIFT_LIMIT_ACTIVE",
+            "OVERLOAD",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "FORK_PICKUP",
+          "capability_id": "forklift.load.pickup",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "INVALID_LOAD_STATE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "FORK_DROPOFF",
+          "capability_id": "forklift.load.dropoff",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "INVALID_LOAD_STATE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "FORK_STOP",
+          "capability_id": "forklift.motion.stop",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS",
+            "FAULT_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "local_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "No watchdog behaviour is declared for this module in the L0 contract.",
+        "evidence": "L0 contract only; no watchdog parameter may be asserted at L1."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (FORK_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "An obstacle input immediately requests a local drive stop.",
+          "Lift limits remove lift motion authority.",
+          "A shared zone lock prevents crane and forklift concurrency.",
+          "RESET is refused until the obstacle is cleared, the E-stop released and a safe load state confirmed."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_DECLARED",
+        "source": "contracts/physical/capability-matrix.md#reading-guide",
+        "verification": "BLOCKED_L3: channel identifiers are logical names only; controller and channel allocation pending hardware evidence.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "FORK_FRONT_OBSTACLE",
+          "FORK_REAR_OBSTACLE",
+          "FORK_LIFT_LOW",
+          "FORK_LIFT_HIGH",
+          "FORK_DRIVE",
+          "FORK_LIFT",
+          "FORK_STEER",
+          "FORK_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "FORK_DRIVE",
+            "args": {
+              "xTarget": 2,
+              "yTarget": 4
+            },
+            "expect_state": "DRIVING"
+          },
+          {
+            "kind": "event",
+            "trigger": "target_reached",
+            "expect_state": "IDLE"
+          },
+          {
+            "kind": "command",
+            "capability": "FORK_LIFT",
+            "args": {
+              "heightMm": 80
+            },
+            "expect_state": "LIFTING"
+          },
+          {
+            "kind": "event",
+            "trigger": "limit_or_target",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "Floor-coordinate bounds are controller-owned and not asserted at L1; obstacle, lift-limit and zone-lock fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "dump-truck-01",
+      "name": "Dump Truck",
+      "role": "Bulk material delivery",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": 2,
+        "AI": 2,
+        "ENC": 0,
+        "DO": 0,
+        "SERVO": 1,
+        "MOTOR": 2,
+        "STEP": 0,
+        "ESTOP": 1
+      },
+      "count_status": {},
+      "derived_counts": {
+        "sensors": 4,
+        "motors": 2,
+        "actuators": 3,
+        "encoders": 0,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "TRUCK_FRONT_OBSTACLE",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Forward collision guard.",
+          "fault_codes": [
+            "OBSTACLE_PRESENT"
+          ]
+        },
+        {
+          "channel": "TRUCK_REAR_OBSTACLE",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Rear collision guard.",
+          "fault_codes": [
+            "OBSTACLE_PRESENT"
+          ]
+        },
+        {
+          "channel": "TRUCK_DUMP_ANGLE",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": "°",
+          "range": null,
+          "purpose": "Bed position angle.",
+          "fault_codes": []
+        },
+        {
+          "channel": "TRUCK_LOAD",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": "g",
+          "range": null,
+          "purpose": "Bed mass.",
+          "fault_codes": [
+            "OVERLOAD"
+          ]
+        },
+        {
+          "channel": "TRUCK_DRIVE",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": null,
+          "purpose": "Traction.",
+          "fault_codes": [
+            "OBSTACLE_PRESENT",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "TRUCK_DUMP",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": null,
+          "purpose": "Tipper actuator.",
+          "fault_codes": [
+            "OVERLOAD",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "TRUCK_STEER",
+          "io_type": "SERVO",
+          "direction": "output",
+          "value_type": "number",
+          "unit": "deg",
+          "range": null,
+          "purpose": "Steering.",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "TRUCK_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "DRIVING",
+        "DUMPING",
+        "DUMP_COMPLETE",
+        "E_STOP",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "DRIVING",
+          "trigger": {
+            "kind": "command",
+            "value": "TRUCK_DRIVE"
+          }
+        },
+        {
+          "from": "DRIVING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "target_reached"
+          }
+        },
+        {
+          "from": "IDLE",
+          "to": "DUMPING",
+          "trigger": {
+            "kind": "command",
+            "value": "TRUCK_DUMP_START"
+          }
+        },
+        {
+          "from": "DUMPING",
+          "to": "DUMP_COMPLETE",
+          "trigger": {
+            "kind": "event",
+            "value": "target_angle"
+          }
+        },
+        {
+          "from": "DUMP_COMPLETE",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "TRUCK_DUMP_LOWER"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "obstacle_or_overload_or_estop_open"
+          }
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "TRUCK_DRIVE",
+          "capability_id": "truck.drive",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "xTarget",
+              "type": "number",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            },
+            {
+              "name": "yTarget",
+              "type": "number",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            }
+          ],
+          "reject_codes": [
+            "OBSTACLE_PRESENT",
+            "OUT_OF_BOUNDS",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "TRUCK_DUMP_START",
+          "capability_id": "truck.dump.start",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [],
+          "reject_codes": [
+            "VEHICLE_MOVING",
+            "OVERLOAD",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "TRUCK_DUMP_LOWER",
+          "capability_id": "truck.dump.lower",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [],
+          "reject_codes": [
+            "VEHICLE_MOVING",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "name": "TRUCK_STOP",
+          "capability_id": "truck.motion.stop",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS",
+            "FAULT_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "local_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "No watchdog behaviour is declared for this module in the L0 contract.",
+        "evidence": "L0 contract only; no watchdog parameter may be asserted at L1."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (TRUCK_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "Dump is enabled only at verified zero traction, confirmed through telemetry.",
+          "Overload and E-stop remove all actuator authority.",
+          "No physical channel sharing with forklift-01 is permitted until a controller-selection topology is L3-verified.",
+          "RESET is refused until the fault is cleared and the vehicle is in a safe stationary state."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_DECLARED",
+        "source": "contracts/physical/capability-matrix.md#reading-guide",
+        "verification": "BLOCKED_L3: channel identifiers are logical names only; controller and channel allocation pending hardware evidence.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "TRUCK_FRONT_OBSTACLE",
+          "TRUCK_REAR_OBSTACLE",
+          "TRUCK_DUMP_ANGLE",
+          "TRUCK_LOAD",
+          "TRUCK_DRIVE",
+          "TRUCK_DUMP",
+          "TRUCK_STEER",
+          "TRUCK_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "TRUCK_DRIVE",
+            "args": {
+              "xTarget": 2,
+              "yTarget": 4
+            },
+            "expect_state": "DRIVING"
+          },
+          {
+            "kind": "event",
+            "trigger": "target_reached",
+            "expect_state": "IDLE"
+          },
+          {
+            "kind": "command",
+            "capability": "TRUCK_DUMP_START",
+            "args": {},
+            "expect_state": "DUMPING"
+          },
+          {
+            "kind": "event",
+            "trigger": "target_angle",
+            "expect_state": "DUMP_COMPLETE"
+          },
+          {
+            "kind": "command",
+            "capability": "TRUCK_DUMP_LOWER",
+            "args": {},
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "Dump authorisation requires observed zero traction; overload, obstacle and E-stop fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "packaging-01",
+      "name": "Packaging",
+      "role": "Package and seal products",
+      "construct": "physical",
+      "physical_controller": true,
+      "controller_board": {
+        "family": "MEGA-2560-uKit",
+        "allocation_status": "BLOCKED_L3",
+        "provenance": "docs/hardware-readiness.md#arduino-mega-2560"
+      },
+      "io_counts": {
+        "DI": 3,
+        "AI": 2,
+        "ENC": 0,
+        "DO": null,
+        "SERVO": null,
+        "MOTOR": 1,
+        "STEP": 0,
+        "ESTOP": 1
+      },
+      "count_status": {
+        "DO": "TBD_L3: seal actuator is SERVO or DO, unresolved.",
+        "SERVO": "TBD_L3: seal actuator is SERVO or DO, unresolved."
+      },
+      "derived_counts": {
+        "sensors": 5,
+        "motors": 1,
+        "actuators": null,
+        "encoders": 0,
+        "estop_channels": 1
+      },
+      "io_signals": [
+        {
+          "channel": "PACK_INLET",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Product entry detection.",
+          "fault_codes": []
+        },
+        {
+          "channel": "PACK_OUTLET",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Product exit detection.",
+          "fault_codes": []
+        },
+        {
+          "channel": "PACK_JAM",
+          "io_type": "DI",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Obstruction/jam detection.",
+          "fault_codes": [
+            "JAM_ACTIVE"
+          ]
+        },
+        {
+          "channel": "PACK_TEMP",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": "°C",
+          "range": null,
+          "purpose": "Heater temperature.",
+          "fault_codes": [
+            "TEMP_OUT_OF_RANGE"
+          ]
+        },
+        {
+          "channel": "PACK_PRESSURE",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": "kPa",
+          "range": null,
+          "purpose": "Pneumatic pressure.",
+          "fault_codes": [
+            "PRESSURE_UNSAFE"
+          ]
+        },
+        {
+          "channel": "PACK_FEED",
+          "io_type": "MOTOR",
+          "direction": "output",
+          "value_type": "object",
+          "unit": "pwm_percent",
+          "range": null,
+          "purpose": "Product feed.",
+          "fault_codes": [
+            "JAM_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "PACK_SEAL",
+          "io_type": "SERVO|DO",
+          "direction": "output",
+          "value_type": "number",
+          "unit": null,
+          "range": null,
+          "purpose": "Seal operation. Final actuator type TBD.",
+          "fault_codes": [
+            "JAM_ACTIVE",
+            "E_STOP_OPEN"
+          ]
+        },
+        {
+          "channel": "PACK_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Hardwired stop chain (NC).",
+          "fault_codes": [
+            "E_STOP_OPEN"
+          ]
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "FEEDING",
+        "SEALING",
+        "COMPLETE",
+        "E_STOP",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "FEEDING",
+          "trigger": {
+            "kind": "command",
+            "value": "PACK_START"
+          }
+        },
+        {
+          "from": "FEEDING",
+          "to": "SEALING",
+          "trigger": {
+            "kind": "event",
+            "value": "inlet"
+          }
+        },
+        {
+          "from": "SEALING",
+          "to": "COMPLETE",
+          "trigger": {
+            "kind": "event",
+            "value": "seal_complete"
+          }
+        },
+        {
+          "from": "COMPLETE",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "outlet"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "E_STOP",
+          "trigger": {
+            "kind": "event",
+            "value": "jam_or_estop_open"
+          }
+        },
+        {
+          "from": "SEALING",
+          "to": "FAULT",
+          "trigger": {
+            "kind": "event",
+            "value": "temperature_or_pressure_fault"
+          }
+        },
+        {
+          "from": "E_STOP",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local clearance"
+        },
+        {
+          "from": "FAULT",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "command",
+            "value": "RESET"
+          },
+          "precondition": "local clearance"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "PACK_START",
+          "capability_id": "packaging.cycle.start",
+          "actuation": true,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "packageType",
+              "type": "string",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "type_only"
+            }
+          ],
+          "reject_codes": [
+            "E_STOP_OPEN",
+            "JAM_ACTIVE",
+            "PRESSURE_UNSAFE",
+            "TEMP_OUT_OF_RANGE"
+          ]
+        },
+        {
+          "name": "PACK_STOP",
+          "capability_id": "packaging.cycle.stop",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "SET_TEMP",
+          "capability_id": "packaging.thermal.setpoint",
+          "actuation": true,
+          "transition_policy": "always_allowed",
+          "args": [
+            {
+              "name": "targetC",
+              "type": "number",
+              "unit": "°C",
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "deferred_to_local_controller"
+            }
+          ],
+          "reject_codes": [
+            "TARGET_OUT_OF_BOUNDS"
+          ]
+        },
+        {
+          "name": "RESET",
+          "capability_id": "module.fault.reset",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": [
+            "ESTOP_PERSISTS",
+            "JAM_PERSISTS",
+            "FAULT_PERSISTS"
+          ]
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "local_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "No watchdog behaviour is declared for this module in the L0 contract; unsafe temperature or low pressure latches FAULT.",
+        "evidence": "L0 contract only; no watchdog parameter may be asserted at L1."
+      },
+      "local_interlocks": {
+        "owner": "local_controller",
+        "estop_authority": "hardwired E-stop chain (PACK_ESTOP)",
+        "authority": "ADR-0006",
+        "rules": [
+          "Jam removes PACK_FEED and PACK_SEAL authority.",
+          "Unsafe temperature or low pressure latches FAULT.",
+          "The thermal setpoint range is local controller configuration, not a remote override.",
+          "RESET is refused until the jam is cleared and temperature and pressure are in a safe range."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_DECLARED",
+        "source": "contracts/physical/capability-matrix.md#reading-guide",
+        "verification": "BLOCKED_L3: channel identifiers are logical names only; controller and channel allocation pending hardware evidence.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "PACK_INLET",
+          "PACK_OUTLET",
+          "PACK_JAM",
+          "PACK_TEMP",
+          "PACK_PRESSURE",
+          "PACK_FEED",
+          "PACK_SEAL",
+          "PACK_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "PACK_START",
+            "args": {
+              "packageType": "box"
+            },
+            "expect_state": "FEEDING"
+          },
+          {
+            "kind": "event",
+            "trigger": "inlet",
+            "expect_state": "SEALING"
+          },
+          {
+            "kind": "event",
+            "trigger": "seal_complete",
+            "expect_state": "COMPLETE"
+          },
+          {
+            "kind": "event",
+            "trigger": "outlet",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "The seal actuator type is unresolved at L3; jam, pressure and temperature fault fixtures remain a separate increment."
+      }
+    },
+    {
+      "module_id": "brackets-01",
+      "name": "Brackets",
+      "role": "Structural support module",
+      "construct": "structural",
+      "physical_controller": false,
+      "controller_board": null,
+      "controller_board_note": "Structural construct with no independent actuator or controller; the hosted module's controller owns the stop action.",
+      "io_counts": {
+        "DI": 0,
+        "AI": 2,
+        "ENC": 0,
+        "DO": 0,
+        "SERVO": 0,
+        "MOTOR": 0,
+        "STEP": 0,
+        "ESTOP": null
+      },
+      "count_status": {
+        "ESTOP": "OPTIONAL_L3: optional mechanical safety chain, only if designed."
+      },
+      "derived_counts": {
+        "sensors": 2,
+        "motors": 0,
+        "actuators": 0,
+        "encoders": 0,
+        "estop_channels": null
+      },
+      "io_signals": [
+        {
+          "channel": "BRACKET_ALIGNMENT",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": null,
+          "range": null,
+          "purpose": "Optional structural alignment measurement.",
+          "fault_codes": []
+        },
+        {
+          "channel": "BRACKET_LOAD",
+          "io_type": "AI",
+          "direction": "input",
+          "value_type": "number",
+          "unit": null,
+          "range": null,
+          "purpose": "Optional load measurement.",
+          "fault_codes": []
+        },
+        {
+          "channel": "BRACKET_ESTOP",
+          "io_type": "ESTOP",
+          "direction": "input",
+          "value_type": "boolean",
+          "unit": null,
+          "range": null,
+          "purpose": "Optional mechanical safety chain, if designed.",
+          "fault_codes": []
+        }
+      ],
+      "supported_modes": [
+        "NOMINAL",
+        "FAULT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "NOMINAL",
+          "to": "FAULT",
+          "trigger": {
+            "kind": "event",
+            "value": "hosted_module_structural_fault"
+          }
+        },
+        {
+          "from": "FAULT",
+          "to": "NOMINAL",
+          "trigger": {
+            "kind": "event",
+            "value": "physical_inspection_and_hosted_controller_reset"
+          }
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "GET_STATUS",
+          "capability_id": "module.status.read",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        }
+      ],
+      "capability_note": "No remote actuation is permitted on this module: GET_STATUS is a read-only future monitor (planned v0.1 only, not a v1 bridge command) and is the only declared capability. The structural construct has no physical controller, so the hosted module's controller owns every stop action.",
+      "watchdog": {
+        "declared": false,
+        "owner": "hosted_module_controller",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "Not applicable: the structural module has no independent controller.",
+        "evidence": "L0 contract only."
+      },
+      "local_interlocks": {
+        "owner": "hosted_module_controller",
+        "estop_authority": "hosted module's local interlock; no independent E-stop circuit",
+        "authority": "ADR-0006",
+        "rules": [
+          "No remote command can energize any actuator.",
+          "A structural hazard signals the hosted module's local interlock and cannot be cleared remotely.",
+          "Recovery requires physical inspection plus a hosted controller RESET."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_APPLICABLE",
+        "source": "contracts/physical/capability-matrix.md#8-brackets--brackets-01",
+        "verification": "Not applicable: no physical controller or channel allocation exists for this construct.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "BRACKET_ALIGNMENT",
+          "BRACKET_LOAD",
+          "BRACKET_ESTOP"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "NOMINAL",
+        "terminal_state": "NOMINAL",
+        "steps": [
+          {
+            "kind": "observation",
+            "trigger": "structural_health_observed",
+            "expect_state": "NOMINAL"
+          }
+        ],
+        "notes": "The normal cycle of a structural construct is the absence of actuation; there is no command to admit."
+      }
+    },
+    {
+      "module_id": "combine-01",
+      "name": "Combine",
+      "role": "Workflow coordinator across all physical modules",
+      "construct": "orchestrated",
+      "physical_controller": false,
+      "controller_board": null,
+      "controller_board_note": "Orchestrated construct with no independent motor, servo or physical E-stop circuit; it issues authorised per-module commands through the controller boundary.",
+      "io_counts": {
+        "DI": 0,
+        "AI": 0,
+        "ENC": 0,
+        "DO": 0,
+        "SERVO": 0,
+        "MOTOR": 0,
+        "STEP": 0,
+        "ESTOP": 0
+      },
+      "count_status": {},
+      "derived_counts": {
+        "sensors": 0,
+        "motors": 0,
+        "actuators": 0,
+        "encoders": 0,
+        "estop_channels": 0
+      },
+      "logical_channels": [
+        "COMBINE_MODULE_STATE",
+        "COMBINE_DISPATCH"
+      ],
+      "io_signals": [
+        {
+          "channel": "COMBINE_MODULE_STATE",
+          "io_type": "LOGICAL",
+          "direction": "input",
+          "value_type": "object",
+          "unit": null,
+          "range": null,
+          "purpose": "Aggregate observed module states; not raw GPIO.",
+          "fault_codes": [
+            "MEMBER_STALE",
+            "MEMBER_FAULTED",
+            "MEMBER_ESTOPPED",
+            "MEMBER_UNAVAILABLE"
+          ]
+        },
+        {
+          "channel": "COMBINE_DISPATCH",
+          "io_type": "LOGICAL",
+          "direction": "output",
+          "value_type": "object",
+          "unit": null,
+          "range": null,
+          "purpose": "Delegated command request; not direct actuation.",
+          "fault_codes": []
+        }
+      ],
+      "supported_modes": [
+        "IDLE",
+        "PRODUCTION_RUNNING",
+        "DRAINING",
+        "SAFETY_HALT"
+      ],
+      "mode_transitions": [
+        {
+          "from": "IDLE",
+          "to": "PRODUCTION_RUNNING",
+          "trigger": {
+            "kind": "command",
+            "value": "COMBINE_START_PRODUCTION"
+          },
+          "precondition": "all member modules ready"
+        },
+        {
+          "from": "PRODUCTION_RUNNING",
+          "to": "DRAINING",
+          "trigger": {
+            "kind": "command",
+            "value": "COMBINE_STOP"
+          }
+        },
+        {
+          "from": "DRAINING",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "all_modules_terminal_or_idle"
+          }
+        },
+        {
+          "from": "ANY",
+          "to": "SAFETY_HALT",
+          "trigger": {
+            "kind": "event",
+            "value": "any_observed_member_estop"
+          }
+        },
+        {
+          "from": "SAFETY_HALT",
+          "to": "IDLE",
+          "trigger": {
+            "kind": "event",
+            "value": "each_local_controller_reset_and_observed_idle"
+          }
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "COMBINE_START_PRODUCTION",
+          "capability_id": "orchestration.production.start",
+          "actuation": false,
+          "transition_policy": "declared_edge",
+          "args": [
+            {
+              "name": "recipeId",
+              "type": "string",
+              "unit": null,
+              "required": false,
+              "range": null,
+              "range_owner": "local_controller",
+              "range_source": null,
+              "enforcement": "type_only"
+            }
+          ],
+          "reject_codes": [
+            "MEMBER_STALE",
+            "MEMBER_FAULTED",
+            "MEMBER_ESTOPPED",
+            "MEMBER_UNAVAILABLE"
+          ]
+        },
+        {
+          "name": "COMBINE_STOP",
+          "capability_id": "orchestration.production.stop",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        },
+        {
+          "name": "COMBINE_GET_STATUS",
+          "capability_id": "orchestration.status.read",
+          "actuation": false,
+          "transition_policy": "always_allowed",
+          "args": [],
+          "reject_codes": []
+        }
+      ],
+      "watchdog": {
+        "declared": false,
+        "owner": "member_module_controllers",
+        "timeout_seconds": null,
+        "timeout_source": null,
+        "behaviour": "Not applicable: Combine has no independent controller. Member staleness is the declared observation failure.",
+        "evidence": "L0 contract only."
+      },
+      "local_interlocks": {
+        "owner": "member_module_controllers",
+        "estop_authority": "member modules; Combine cannot reset a member E-stop",
+        "authority": "ADR-0006",
+        "rules": [
+          "An observed member E_STOP produces SAFETY_HALT.",
+          "Combine cannot claim physical stop before member telemetry verifies it.",
+          "Orchestration advances only on fresh observed terminal telemetry.",
+          "Recovery requires every local controller safely reset and observed at IDLE."
+        ]
+      },
+      "pin_mapping_provenance": {
+        "status": "NOT_APPLICABLE",
+        "source": "contracts/physical/capability-matrix.md#9-combine--combine-01",
+        "verification": "Not applicable: logical channels only; no raw GPIO or channel allocation exists for this construct.",
+        "declared_pins": {},
+        "undeclared_channels": [
+          "COMBINE_MODULE_STATE",
+          "COMBINE_DISPATCH"
+        ]
+      },
+      "normal_cycle": {
+        "initial_state": "IDLE",
+        "terminal_state": "IDLE",
+        "steps": [
+          {
+            "kind": "command",
+            "capability": "COMBINE_START_PRODUCTION",
+            "args": {
+              "recipeId": "recipe-a"
+            },
+            "expect_state": "PRODUCTION_RUNNING"
+          },
+          {
+            "kind": "command",
+            "capability": "COMBINE_STOP",
+            "args": {},
+            "expect_state": "DRAINING"
+          },
+          {
+            "kind": "event",
+            "trigger": "all_modules_terminal_or_idle",
+            "expect_state": "IDLE"
+          }
+        ],
+        "notes": "Member staleness, member fault and member E-stop fixtures remain a separate increment."
+      }
+    }
+  ],
+  "cross_module_invariants": [
+    {
+      "id": "local_safety_wins",
+      "rule": "Network loss, stale commands, twin state, dashboard actions and AI recommendations cannot energize an actuator or release an E-stop.",
+      "authority": "ADR-0006",
+      "modules": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "no_unverified_channel_reuse",
+      "rule": "Different mobile modules require distinct verified controller channels or a formally verified controller-selection interlock; placeholder pin maps are prohibited.",
+      "authority": "ADR-0006",
+      "modules": [
+        "forklift-01",
+        "dump-truck-01"
+      ]
+    },
+    {
+      "id": "zone_lock",
+      "rule": "Crane and forklift movement require a local or verified zone-clear protocol; network acknowledgement alone is insufficient.",
+      "authority": "ADR-0006",
+      "modules": [
+        "tower-crane-01",
+        "forklift-01"
+      ]
+    },
+    {
+      "id": "observed_completion",
+      "rule": "Orchestration advances only on fresh observed terminal telemetry, never on command dispatch or protocol acknowledgement.",
+      "authority": "ADR-0006",
+      "modules": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "staleness_as_unknown",
+      "rule": "Telemetry of unknown freshness is surfaced as UNKNOWN; a safe or running state is never inferred.",
+      "authority": "ADR-0006",
+      "modules": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "recovery_requires_operator_clearance",
+      "rule": "After an E-stop, power or bus loss or controller restart, each module must obtain local safe state and operator clearance before accepting a new motion command.",
+      "authority": "ADR-0006",
+      "modules": [
+        "ALL"
+      ]
+    }
+  ],
+  "open_increments": [
+    "Registry binding of module identifiers to device registry entries (Issue #32) is not part of this schema.",
+    "Unity prefab and scene mapping (Issue #33) is not part of this schema.",
+    "UNKNOWN and SIMULATED telemetry states (Issue #174 SPEC-5/SPEC-6) are not part of this schema.",
+    "The all-module fixture library (jam, missing sensor, limit switch, E-stop, offline, calibration expiry) is a separate increment; this schema carries the NORMAL CYCLE fixture only.",
+    "TC-4 measured pinout and tolerances and TC-5 power loss and safety stop require physical HIL evidence and cannot be satisfied by this schema."
+  ]
+}

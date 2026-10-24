@@ -5,6 +5,7 @@
 **Owner:** Physical-layer governance — Issues #9 and #174.  
 **Safety authority:** local controllers and hardwired E-stop circuits remain authoritative under ADR-0006.  
 **Compatibility boundary:** implemented bridge schemas remain `contracts/v1/schemas/command.schema.json` and `contracts/v1/schemas/telemetry.schema.json`. All module-specific commands and telemetry shapes below are **planned controller-contract v0.1**; they require a future controller schema version and compatibility review before publishing through the bridge.
+**Executable companion:** this matrix has a versioned machine-readable form, [`capability-schema.v1.json`](./capability-schema.v1.json), documented in [`capability-schema.md`](./capability-schema.md). The matrix remains the **source of truth**; a conformance test cross-checks the two in both directions. See [ADR-0020](../../docs/adr/adr-0020-versioned-capability-schema-and-admission-layer.md).
 
 ---
 
