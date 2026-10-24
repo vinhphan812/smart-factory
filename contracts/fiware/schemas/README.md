@@ -70,6 +70,7 @@ echo "All schemas are valid JSON"
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-10-20 | Initial schema definitions |
+| 1.1.0 | 2026-10-24 | Added `robot.json` (NGSI-LD Robot entity, Issue #204 / ADR-0018) and entity-level validation in `validate_schemas.py` (ADR-0017) |
 
 ## References
 

@@ -270,3 +270,43 @@ class TestRobotEntityId:
         capability = RobotCapability(robot_id="yanshee-03")
         entity = to_robot_entity(capability)
         assert entity["id"] == robot_entity_id("yanshee-03")
+
+
+class TestRobotEntityValidatesAgainstSchema:
+    """The produced entity must satisfy the registered JSON Schema, not just
+    carry the required keys (Issue #204 / ADR-0017)."""
+
+    def _schema(self) -> dict:
+        import json
+        from pathlib import Path
+
+        schema_path = (
+            Path(__file__).resolve().parents[2]
+            / "contracts"
+            / "fiware"
+            / "schemas"
+            / "robot.json"
+        )
+        return json.loads(schema_path.read_text(encoding="utf-8"))
+
+    def test_unverified_entity_validates_against_robot_schema(self) -> None:
+        import jsonschema
+
+        entity = to_robot_entity(UnverifiedRobotCapabilitySource().fetch())
+        jsonschema.validate(instance=entity, schema=self._schema())
+
+    def test_verified_entity_validates_against_robot_schema(self) -> None:
+        import jsonschema
+
+        capability = RobotCapability(
+            robot_id="yanshee-01",
+            status="idle",
+            battery_level=87.5,
+            supported_actions=("notify_operator",),
+            verified=True,
+            verification_source="yanshee-sdk@0.1.0",
+            data_quality=DataQuality.PHYSICAL,
+            observed_at="2026-10-24T08:00:00+00:00",
+        )
+        entity = to_robot_entity(capability)
+        jsonschema.validate(instance=entity, schema=self._schema())
