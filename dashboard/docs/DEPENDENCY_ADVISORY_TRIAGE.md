@@ -286,9 +286,18 @@ reviewable evidence that looks authoritative. The generator therefore:
 | Classification cross-check | consistent |
 
 The runtime component set was independently confirmed against a physical `npm ci --omit=dev
---ignore-scripts` installation: **17** packages on disk, **17** in `npm ls --omit=dev`, **17** in
-the lockfile closure, **17** in the runtime SBOM. `immer` (an unmet *optional* peer of `zustand`)
-is correctly **excluded** — it is not in the lockfile and is not installed.
+--ignore-scripts` installation of this exact `package.json` + `package-lock.json` pair: **17**
+packages on disk, **17** in `npm ls --omit=dev`, **17** in the lockfile closure, **17** in the
+runtime SBOM. `immer` (an unmet *optional* peer of `zustand`) is correctly **excluded** — it is
+not in the lockfile and is not installed.
+
+A note on the closure count: the pre-remediation closure was **16** packages and the
+post-remediation closure is **17**. The net change is entirely within the router dependency tree,
+and no new *direct* production dependency was added — `dependencies` still declares exactly the
+same six packages. `react-router-dom@6` brought in `@remix-run/router` (16 total);
+`react-router-dom@7` drops `@remix-run/router` and adds `cookie` and `set-cookie-parser`
+(17 total). The closure was confirmed by physically installing it, not inferred from the lockfile
+alone.
 
 The 17 runtime packages are: `@kurkle/color`, `@types/prop-types`, `@types/react`, `chart.js`,
 `cookie`, `csstype`, `js-tokens`, `loose-envify`, `react`, `react-chartjs-2`, `react-dom`,
@@ -325,6 +334,41 @@ environment was exercised.
 | ADR governance gate | `python scripts/check_adrs.py` | **PASS** — 16 ADRs validated |
 | ADR linter test suite | `python -m pytest scripts/tests/test_check_adrs.py -q` | **PASS** — 6/6 |
 
+### 5.0.1 Exact-head CI
+
+Verified on the pushed head `f823cff613079eb2638232549f64c15374d9b0cd`:
+
+| Workflow | Event | Result | URL |
+| :--- | :--- | :--- | :--- |
+| Dashboard CI (`Dashboard Quality & Build Gate`) | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065045028 |
+| Dashboard CI (`Dashboard Quality & Build Gate`) | push | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065042065 |
+| ADR Lint & Architecture Governance Gate | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065045019 |
+| ADR Lint & Architecture Governance Gate | push | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065042062 |
+| CI | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065045033 |
+
+The artefacts produced by the exact-head Dashboard CI run were downloaded and inspected:
+
+- `npm-audit-summary.txt` → `found 0 vulnerabilities`; `npm-audit.json` → `total: 0`. The CI scanner
+  independently confirms the local `npm audit` result.
+- `sha256sum-verification.txt` → all three built files `OK`.
+- `dashboard-dist.tar.gz.sha256` → digest verified with `sha256sum -c` → `OK`.
+- The CI build artefact's per-file `SHA256SUMS` is **byte-identical** to the locally built
+  manifest (`index-Bher25rv.css`, `index-mj-AmJLy.js`, `index.html`), so the build is reproducible
+  across the Linux CI runner and the local Windows workstation.
+- The CI SBOM contains 278 components against the local full-tree SBOM's 277. The delta is
+  entirely platform-specific **optional** build-toolchain binaries: CI adds
+  `@esbuild/linux-x64`, `@napi-rs/lzma-linux-x64-gnu`, `@rollup/rollup-linux-x64-gnu` and
+  `@rollup/rollup-linux-x64-musl`, and omits the three Windows counterparts
+  (`@esbuild/win32-x64`, `@rollup/rollup-win32-x64-gnu`, `@rollup/rollup-win32-x64-msvc`).
+  Every component in the delta carries CycloneDX `scope: optional` and
+  `cdx:npm:package:development: true`, so the delta is confined to the development/build side
+  and does not touch the 17-package production closure. No package differs in version, and no
+  non-optional package differs in presence between the two trees.
+- Note the canonical Dashboard CI workflow records the **full-tree** SBOM (`sbom.cdx.json`); the
+  separated runtime/full pair and the closure cross-check are produced by
+  `npm run release:evidence` (`dashboard/scripts/release-evidence.mjs`), which this change adds.
+  The workflow file itself is unchanged and byte-identical to PR #259.
+
 ### 5.1 Explicitly NOT verified
 
 These remain **external acceptance gaps** and are *not* claimed as satisfied by this change:
@@ -351,12 +395,15 @@ workflow or any check name.
 | `dashboard/docs/RELEASE_ARTIFACTS.md` | `27601ff6` | `27601ff6` | **Byte-identical — unchanged** |
 | `dashboard/sha256sum-verification.txt` | `024ffe02` | `024ffe02` | **Byte-identical — unchanged** |
 
-The only shared file modified by this change is `dashboard/package.json` (and its lockfile), which
-both PRs necessarily touch. The `release:evidence` script was added **at the end** of the `scripts`
-block rather than adjacent to `build:integrity`, specifically so that the two PRs' insertions do
-not land in the same hunk region. A merge test of this branch against PR #259 confirms
-`dashboard/package.json` auto-merges cleanly, with both `build:integrity` and `release:evidence`
-present in the merged result.
+The only file that **both** this change and PR #259 modify is `dashboard/package.json`; it is the
+one file both PRs necessarily touch. (This change also modifies `dashboard/package-lock.json`,
+`dashboard/.gitignore` and adds new files under `dashboard/scripts/` and `dashboard/src/tests/`,
+none of which PR #259 touches — so none of them can conflict.) The `release:evidence` script was
+added **at the end** of the `scripts` block rather than adjacent to `build:integrity`, specifically
+so that the two PRs' insertions do not land in the same hunk region. A merge test of this branch
+against PR #259 confirms `dashboard/package.json` auto-merges cleanly, with both `build:integrity`
+and `release:evidence` present in the merged result, and confirms that the merged tree retains
+`dashboard-ci.yml` at blob `69ee4298` and `build-integrity.mjs` at blob `5ea325ad`.
 
 One pre-existing conflict remains between the two branches, in
 `.github/workflows/adr-lint.yml`: the two branches contain differing text in the routing-truth-table
