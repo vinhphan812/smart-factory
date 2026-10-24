@@ -10,25 +10,98 @@
 # Teardown:
 #   docker compose -f docker-compose.full.yml down -v
 #
+# ── Supply-chain pinning (#244 F5) ───────────────────────────────────────────
+# Every container image below is referenced by an immutable OCI manifest
+# digest, not by a floating tag. A tag such as `mongo:4.4` can be re-pointed
+# at different bytes by the registry at any time; a digest cannot. The tag is
+# retained only as human-readable provenance next to the digest.
+#
+#   eclipse-mosquitto:2  sha256:860aeb5d63ce509508f6dcfb2bc8a1c1dd2bc60555b562b45ce90e52d8dabb0f
+#   mongo:4.4            sha256:4be76f674fc4b27859816811b8baa3c51830eb1dbf4ca81a51e26b79edd662ef
+#   quay.io/fiware/orion-ld:1.5.0
+#                        sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2
+#   nginx:alpine         sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+#   python:3.12-slim     sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+#   node:20-alpine       sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#
+# HOW THESE DIGESTS WERE RESOLVED (2026-10-24, reproducible):
+#   1. Docker Hub images (mongo, eclipse-mosquitto, nginx, python, node):
+#      a registry token was obtained from
+#      https://auth.docker.io/token?service=registry.docker.io&scope=repository:<repo>:pull
+#      and the manifest was fetched with
+#      GET https://registry-1.docker.io/v2/<repo>/manifests/<tag>
+#      Accept: application/vnd.oci.image.index.v1+json,
+#              application/vnd.docker.distribution.manifest.list.v2+json,
+#              application/vnd.oci.image.manifest.v1+json,
+#              application/vnd.docker.distribution.manifest.v2+json
+#   2. quay.io/fiware/orion-ld:1.5.0:
+#      GET https://quay.io/v2/fiware/orion-ld/manifests/1.5.0 (same Accept set)
+#   3. CROSS-CHECK: for every image the sha256 of the returned manifest body
+#      was computed and compared with the Docker-Content-Digest response
+#      header. All six digests matched byte for byte, so the digest is the
+#      hash of the manifest actually served by the registry — not a
+#      hand-written value. A digest that could not be resolved this way was
+#      left unpinned and reported instead of being invented.
+#   4. Independent second source: `docker manifest inspect -v <image>` was
+#      run for each image and its per-platform descriptors were consistent
+#      with the same manifest tree.
+#
+# Digests are enforced by `scripts/check_production_compose.py`, which fails
+# closed if any production-profile service loses its digest.
+#
+# ── Operator-supplied artefacts (NOT in the repository) ──────────────────────
+# The production broker needs two artefacts that are deliberately absent
+# from git. Both are supplied by the operator at deployment time:
+#
+#   infrastructure/mqtt-broker/config/tls/ca.crt       (CA trust anchor)
+#   infrastructure/mqtt-broker/config/tls/server.crt    (broker server cert)
+#   infrastructure/mqtt-broker/config/tls/server.key    (broker server key)
+#
+# They are produced by `infrastructure/mqtt-broker/config/tls/generate-certs.sh`
+# and `.../create-creds.sh`, and are gitignored (.gitignore lines 46-52) so
+# that private key material can never enter the repository. The broker
+# entrypoint fails closed when TLS is enabled but these files are absent:
+# it exits 1 with "TLS enabled but certificate files missing" rather than
+# starting a broker without a trust chain.
+#
+# The ACL file is likewise not committed: `infrastructure/mqtt-broker/
+# entrypoint.d/init.sh` writes `/mosquitto/config/acl` and
+# `/mosquitto/config/passwd` at container start from the operator-supplied
+# usernames and passwords. The guard requires that this entrypoint is
+# mounted, so an ACL-less broker cannot be started from this file.
+#
+# ── Orion-LD / MongoDB version compatibility ────────────────────────────────
+# The pinned pair is fiware/orion-ld:1.5.0 + mongo:4.4, and this pairing is
+# load-bearing rather than incidental:
+#
+#   * Orion-LD 1.5.0 embeds the MongoDB C++ *legacy* driver. That driver
+#     speaks the legacy OP_QUERY wire protocol. Verified directly in the
+#     pinned image: /usr/lib/x86_64-linux-gnu/libmongoclient.a is present
+#     with the legacy mongo::DBClientWithCommands symbols, and no
+#     libmongocxx / libbsoncxx is present.
+#     MongoDB deprecated the legacy opcodes in 5.0 and REMOVED them in
+#     5.1 (https://www.mongodb.com/docs/manual/legacy-opcodes: "Deprecated
+#     as of MongoDB 5.0. Unsupported as of MongoDB 5.1."), so a 5.1+
+#     server makes the broker log "Unsupported OP_QUERY command:
+#     listDatabases" and then "mongo::MsgAssertionException", and never
+#     becomes ready. 4.4 is safely below that boundary, is the newest
+#     server the legacy driver is tested against here, and is the tested
+#     pairing for the pinned Orion-LD digest above.
+#   * MongoDB 4.4 ships the legacy `mongo` shell; `mongosh` only exists from
+#     6.0 onwards, so the health probe must invoke `mongo`.
+#   * The MongoDB data volume must be created by a 4.x server. A volume
+#     previously initialised by 7.0 carries featureCompatibilityVersion 7.0
+#     and makes 4.4 refuse to start ("Wrong mongod version ... expected
+#     '4.4' or '4.9' or '5.0'"). Recreate the volume when downgrading.
+#
+# Upgrading either component therefore requires re-pinning BOTH digests and
+# re-running the L2 E2E simulation; changing one side alone is not a
+# supported configuration.
+#
 # ── Image / probe pinning notes ──────────────────────────────────────────────
 # These are not stylistic choices. Each one broke the stack before it was
 # fixed, and each was reproduced with a real `docker compose up` run.
 #
-#   * mongo:4.4    Orion-LD 1.5.0 uses the deprecated MongoDB C++ *legacy*
-#                  driver, which speaks the legacy OP_QUERY wire protocol.
-#                  MongoDB 5.0 REMOVED the legacy opcodes, so with mongo:5.0
-#                  the broker logs "Unsupported OP_QUERY command:
-#                  listDatabases" followed by "mongo::MsgAssertionException"
-#                  and never becomes ready; with mongo:7.0 it fails the same
-#                  way. mongo:4.4 is the newest server that still answers the
-#                  legacy driver and is the tested pairing.
-#   * mongo:4.4    ships the legacy `mongo` shell; `mongosh` only exists from
-#                  mongo:6.0 onwards, so the health probe must call `mongo`.
-#   * mongodb      data volume must be created by a 4.x server. A volume
-#                  previously initialised by 7.0 carries
-#                  featureCompatibilityVersion 7.0 and makes 4.4 refuse to
-#                  start ("Wrong mongod version ... expected '4.4' or '4.9' or
-#                  '5.0'"). Recreate the volume when downgrading.
 #   * orion-ld     1.5.0 reads ORIONLD_MONGO_HOST / ORIONLD_MONGO_DB.
 #                  ORION_LD_MONGO_HOST is silently ignored and the broker then
 #                  tries to reach localhost:27017 inside its own container.
@@ -58,7 +131,8 @@ services:
   # ── Infrastructure ────────────────────────────────────────────────────────
 
   mqtt:
-    image: eclipse-mosquitto:2
+    # Docker Hub OCI index digest for eclipse-mosquitto:2, resolved 2026-10-24.
+    image: eclipse-mosquitto:2@sha256:860aeb5d63ce509508f6dcfb2bc8a1c1dd2bc60555b562b45ce90e52d8dabb0f
     container_name: sf-mqtt
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
     restart: unless-stopped
@@ -108,7 +182,8 @@ services:
   # ── FIWARE Context Broker ─────────────────────────────────────────────────
 
   mongodb:
-    image: mongo:4.4
+    # Docker Hub OCI index digest for mongo:4.4, resolved 2026-10-24.
+    image: mongo:4.4@sha256:4be76f674fc4b27859816811b8baa3c51830eb1dbf4ca81a51e26b79edd662ef
     container_name: sf-mongodb
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
     restart: unless-stopped
@@ -132,7 +207,8 @@ services:
       - sf-net
 
   orion-ld:
-    image: quay.io/fiware/orion-ld:1.5.0
+    # Quay manifest digest for fiware/orion-ld:1.5.0, resolved 2026-10-24.
+    image: quay.io/fiware/orion-ld:1.5.0@sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2
     container_name: sf-orion-ld
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
     restart: unless-stopped
@@ -172,7 +248,8 @@ services:
       - "host.docker.internal:host-gateway"
 
   json-ld-context:
-    image: nginx:alpine
+    # Docker Hub OCI index digest for nginx:alpine, resolved 2026-10-24.
+    image: nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
     container_name: sf-json-ld-ctx
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
     restart: unless-stopped
@@ -192,7 +269,8 @@ services:
   # ── Core Services ────────────────────────────────────────────────────────
 
   iot-gateway:
-    image: python:3.12-slim
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
     container_name: sf-iot-gateway
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
     restart: unless-stopped
@@ -241,7 +319,8 @@ services:
       - sf-net
 
   factory-control:
-    image: python:3.12-slim
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
     container_name: sf-factory-control
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
     restart: unless-stopped
@@ -285,7 +364,8 @@ services:
   # It is a *separate* service (not a flag) so a read-only deployment has no
   # actuating code path to a device at all.
   factory-control-readonly:
-    image: python:3.12-slim
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
     container_name: sf-factory-control-readonly
     profiles: ["PRODUCTION_READONLY"]
     restart: unless-stopped
@@ -324,7 +404,8 @@ services:
       - sf-net
 
   edge-ai-robot:
-    image: python:3.12-slim
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
     container_name: sf-edge-ai-robot
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
     restart: unless-stopped
@@ -368,7 +449,8 @@ services:
   # this service is L2 simulation — it does NOT imply HIL (L3/L4) or
   # integrated (L5) evidence.
   mock-hil-bridge:
-    image: python:3.12-slim
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
     container_name: sf-mock-hil-bridge
     profiles: ["LAB_HIL"]
     restart: unless-stopped
@@ -395,7 +477,8 @@ services:
   # ── Dashboard ─────────────────────────────────────────────────────────────
 
   dashboard:
-    image: node:20-alpine
+    # Docker Hub OCI index digest for node:20-alpine, resolved 2026-10-24.
+    image: node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
     container_name: sf-dashboard
     profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
     restart: unless-stopped

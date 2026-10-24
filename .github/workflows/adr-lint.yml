@@ -36,3 +36,27 @@ jobs:
         run: |
           python scripts/check_adrs.py
           python -m pytest scripts/tests/test_check_adrs.py -v
+
+  production-compose-gate:
+    name: Production Compose Security Gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyyaml
+
+      # Fails closed on permissive production defaults: wildcard Orion-LD
+      # CORS, a defaulted SAFETY_OPERATOR_TOKEN, a default MQTT password, a
+      # published plaintext broker port, and any production image that is not
+      # pinned to an immutable OCI digest.
+      - name: Run production compose security guard
+        run: |
+          python scripts/check_production_compose.py docker-compose.full.yml
+          python -m pytest scripts/tests/test_check_production_compose.py -v
