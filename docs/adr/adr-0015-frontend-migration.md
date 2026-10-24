@@ -1,6 +1,6 @@
 # ADR-0015: Frontend Migration to React + TypeScript + Vite
 
-**Date:** 2024-10-19
+**Date:** 2026-10-19
 **Status:** Proposed
 **Related Issues:** #148
 
@@ -81,6 +81,27 @@ The WebSocket client in `services/ws/client.ts` is **READ-ONLY**. It subscribes 
 | Build | `npm run build` produces optimized bundle |
 | Security | No MQTT publish methods, read-only client |
 | Rollback | Legacy HTML preserved at `dashboard/src/index.html` |
+
+## Provenance
+
+The `Date:` field records the date on which this decision record was first written
+into the repository, not the date of a formally recorded acceptance.
+
+| Record | Reference | Date (author/commit) |
+|--------|-----------|----------------------|
+| Original ADR proposal (file introduced as `docs/adr/adr-0013-frontend-migration.md`) | commit [`61b0e02`](https://github.com/vinhphan812/smart-factory/commit/61b0e02f7b63e650e549ee070d76789e4a95387a) in PR [#211](https://github.com/vinhphan812/smart-factory/pull/211) | 2026-10-19 |
+| ADR index entry in `docs/adr/README.md` (authored as ADR-0013) | commit [`70b48cc`](https://github.com/vinhphan812/smart-factory/commit/70b48ccc4b9798897b0488c1cfabf6c3a2c83b6e) in PR [#211](https://github.com/vinhphan812/smart-factory/pull/211) | 2026-10-19 |
+| Renumbering to ADR-0015 (resolves the ADR-0013 ID collision) | commit [`a304fdb`](https://github.com/vinhphan812/smart-factory/commit/a304fdb69992a77c21e0a9ee116e2c0ce5d7df8d) in PR [#247](https://github.com/vinhphan812/smart-factory/pull/247) | 2026-10-21 |
+| Correction of the `Date:` field from `2024-10-19` to `2026-10-19` | commit [`2eb4b1a`](https://github.com/vinhphan812/smart-factory/commit/2eb4b1a268633f2af5a1cfa1e342e41e2949ffc0) in PR [#262](https://github.com/vinhphan812/smart-factory/pull/262) | 2026-10-23 |
+| Tracking issue that mandated the ADR record (SPEC-1) | issue [#148](https://github.com/vinhphan812/smart-factory/issues/148) | 2026-10-17 (opened) |
+
+**Provenance statement:** `2026-10-19` is a **documented historical inference** derived from
+the repository's own commit history — the ADR file and its index entry were both first
+committed on 2026-10-19 by PR #211. It is **not** a formally verified decision timestamp:
+PR #211 carries no approval review, no acceptance comment, and no signed decision record,
+and this ADR therefore remains `Status: Proposed`. Anyone wishing to promote it to
+`Accepted` must supply a verifiable acceptance record as required by
+`docs/adr/README.md` ("Never mark an ADR Accepted without a verifiable link").
 
 ## Rollback
 
