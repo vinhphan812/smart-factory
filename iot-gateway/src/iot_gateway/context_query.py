@@ -22,9 +22,11 @@ Orion-LD container.
 from __future__ import annotations
 
 import logging
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -35,6 +37,10 @@ ALERT_ENTITY_TYPE = "Alert"
 
 #: Entity type used for the robot capability entities.
 ROBOT_ENTITY_TYPE = "Robot"
+
+#: Hosts that are considered local and therefore exempt from the credential
+#: requirement. A non-loopback host must present a bearer token.
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
 
 class ContextTransport(Protocol):
@@ -53,18 +59,42 @@ class ContextTransport(Protocol):
 
 @dataclass
 class ContextQueryConfig:
-    """Configuration for the read-only context facade."""
+    """Configuration for the read-only context facade.
+
+    Deployment safety (ADR-0017):
+
+    - ``token`` is an optional bearer token for a credentialed Orion-LD
+      deployment, read from ``ORION_LD_TOKEN``. It authorises **reads only**;
+      the facade has no write method and never dispatches a skill.
+    - ``require_tls`` (from ``ORION_LD_REQUIRE_TLS``) makes TLS mandatory.
+    - ``ca_bundle`` (from ``ORION_LD_CA_BUNDLE``) is the CA bundle used to
+      verify the broker certificate.
+
+    A configuration that requires TLS without a CA bundle, or that addresses a
+    non-loopback host without a token, is rejected when the configuration is
+    built from the environment, rather than silently downgraded to an
+    unauthenticated plaintext request.
+    """
 
     base_url: str = "http://localhost:1026"
     context_url: str = "http://localhost:3000/contexts/smart-factory-context.jsonld"
     timeout_seconds: float = 5.0
+    token: str | None = None
+    require_tls: bool = False
+    ca_bundle: str | None = None
 
     @classmethod
     def from_env(cls) -> "ContextQueryConfig":
-        """Build configuration from environment variables."""
+        """Build configuration from environment variables.
+
+        Raises:
+            ValueError: if the resulting configuration is insecure (TLS
+                required without a CA bundle, or a non-loopback host without
+                a token).
+        """
         import os
 
-        return cls(
+        config = cls(
             base_url=os.environ.get("ORION_LD_URL", "http://localhost:1026"),
             context_url=os.environ.get(
                 "ORION_LD_CONTEXT",
@@ -73,7 +103,32 @@ class ContextQueryConfig:
             timeout_seconds=float(
                 os.environ.get("ORION_LD_CONTEXT_TIMEOUT", "5.0")
             ),
+            token=os.environ.get("ORION_LD_TOKEN") or None,
+            require_tls=os.environ.get("ORION_LD_REQUIRE_TLS", "").strip()
+            in {"1", "true", "True", "yes"},
+            ca_bundle=os.environ.get("ORION_LD_CA_BUNDLE") or None,
         )
+        config.assert_deployment_safe()
+        return config
+
+    def assert_deployment_safe(self) -> None:
+        """Reject a configuration that would expose the read path.
+
+        Raises:
+            ValueError: when TLS is required without a CA bundle, or when a
+                non-loopback host is addressed without a bearer token.
+        """
+        if self.require_tls and not self.ca_bundle:
+            raise ValueError(
+                "ORION_LD_REQUIRE_TLS is set but ORION_LD_CA_BUNDLE is not; "
+                "refusing to fall back to an unverified TLS connection."
+            )
+        host = urlparse(self.base_url).hostname or ""
+        if host not in LOOPBACK_HOSTS and not self.token:
+            raise ValueError(
+                f"ORION_LD_URL host {host!r} is not loopback and ORION_LD_TOKEN "
+                "is not set; refusing an unauthenticated read request."
+            )
 
 
 @dataclass
@@ -148,7 +203,16 @@ class AiohttpContextTransport:
                     'type="application/ld+json"'
                 ),
             }
-            self._session = aiohttp.ClientSession(headers=headers)
+            if self._config.token:
+                headers["Authorization"] = f"Bearer {self._config.token}"
+            ssl_context: ssl.SSLContext | None = None
+            if self._config.require_tls:
+                ssl_context = ssl.create_default_context(
+                    cafile=self._config.ca_bundle
+                )
+            self._session = aiohttp.ClientSession(
+                headers=headers, ssl=ssl_context
+            )
         return self._session
 
     async def get_json(

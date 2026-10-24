@@ -251,6 +251,8 @@ class TestConfig:
     def test_from_env_overrides(self, monkeypatch) -> None:
         monkeypatch.setenv("ORION_LD_URL", "http://orion:1026")
         monkeypatch.setenv("ORION_LD_CONTEXT_TIMEOUT", "9.5")
+        # A non-loopback host requires a bearer token (ADR-0017).
+        monkeypatch.setenv("ORION_LD_TOKEN", "test-token")
         config = ContextQueryConfig.from_env()
         assert config.base_url == "http://orion:1026"
         assert config.timeout_seconds == 9.5
