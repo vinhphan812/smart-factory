@@ -334,9 +334,11 @@ environment was exercised.
 | ADR governance gate | `python scripts/check_adrs.py` | **PASS** — 16 ADRs validated |
 | ADR linter test suite | `python -m pytest scripts/tests/test_check_adrs.py -q` | **PASS** — 6/6 |
 
-### 5.0.1 Exact-head CI
+### 5.0.1 CI verification evidence
 
-Verified on the pushed head `f823cff613079eb2638232549f64c15374d9b0cd`:
+The remediation commit `f823cff613079eb2638232549f64c15374d9b0cd` is the commit that carries the
+dependency changes, the new tooling and the tests; it is the immutable reference point for the
+evidence below. The gate was verified on that exact head:
 
 | Workflow | Event | Result | URL |
 | :--- | :--- | :--- | :--- |
@@ -345,6 +347,9 @@ Verified on the pushed head `f823cff613079eb2638232549f64c15374d9b0cd`:
 | ADR Lint & Architecture Governance Gate | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065045019 |
 | ADR Lint & Architecture Governance Gate | push | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065042062 |
 | CI | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065045033 |
+
+The PR head carries one further **documentation-only** commit on top of `f823cff`, which re-runs the
+identical gate without changing any dependency, workflow or build integrity input.
 
 The artefacts produced by the exact-head Dashboard CI run were downloaded and inspected:
 
