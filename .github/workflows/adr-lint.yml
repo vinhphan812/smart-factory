@@ -1,6 +1,7 @@
 # ==============================================================================
 # Routing truth table (path → workflow):
 #   adr/**, docs/**, .github/workflows/**          → adr-lint.yml  (this file)
+#   dashboard/**                                  → dashboard-ci.yml
 #   esp32-ukit-bridge/**                          → bridge-ci.yml
 #   factory-control/**                            → factory-control-ci.yml
 #   iot-gateway/**                                → gateway-ci.yml
@@ -8,6 +9,7 @@
 # Module ownership:
 #   adr/                          : global governance (all modules)
 #   docs/                         : global documentation
+#   dashboard/                    : React + Vite operator dashboard (TypeScript)
 #   esp32-ukit-bridge/            : ESP32 ↔ MEGA-uKit firmware + AMLP bridge
 #   factory-control/              : factory controller simulator + PLC adapter
 #   iot-gateway/                 : MQTT broker + HTTP/WebSocket API server
