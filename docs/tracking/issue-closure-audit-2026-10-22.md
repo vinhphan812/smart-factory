@@ -11,11 +11,17 @@
 > future closure action** and before relying on any "still open" claim in this document.
 > A later re-check is recorded in [Live status re-verification (2026-10-24)](#live-status-re-verification-2026-10-24).
 >
-> This rule is formalised in two sections below:
+> This rule is formalised in the sections below:
 > [Evidence Lifetime and Requery Rule](#evidence-lifetime-and-requery-rule) (when this
-> audit must be re-run and which commit SHA and CI run URL each observation is anchored to)
-> and [Release Boundary Classification](#release-boundary-classification) (which class of
-> evidence may close an issue and which may not).
+> audit must be re-run and which commit SHA and CI run URL each observation is anchored to),
+> [Release Boundary Classification](#release-boundary-classification) (which class of
+> evidence may close an issue and which may not),
+> [Snapshot Staleness and Branch Movement](#snapshot-staleness-and-branch-movement) (which
+> open PR heads have moved since the snapshot, and the SHA-scoped validity rule),
+> [Revalidation Procedure](#revalidation-procedure) (the exact commands a reviewer runs to
+> re-verify a specific issue's closure, and when each must be run), and
+> [Non-Negotiable Limitations of L0/L1/L2 Evidence](#non-negotiable-limitations-of-l0l1l2-evidence)
+> (what the evidence gathered here can never certify).
 
 ## Method
 
@@ -149,9 +155,11 @@ new result and its date here.
 2. **After any merge into `master`.** A merge changes `origin/master`, invalidating the
    audited tree SHA `3d7d7ca` and every file-line citation resolved against it, and may
    also close the very gap that kept an issue open.
-3. **After any merge, force-push or new commit on PR #242, #244, #260 or #261.** Their
-   head SHAs are the blocker state recorded above; a changed head invalidates the
-   recorded head SHA and the KEEP OPEN reasoning that rests on it.
+3. **After any merge, force-push or new commit on PR #242, #244, #258, #259, #260, #261
+   or #262.** Their head SHAs are the blocker state recorded above and in
+   [Snapshot Staleness and Branch Movement](#snapshot-staleness-and-branch-movement); a
+   changed head invalidates the recorded head SHA and the KEEP OPEN reasoning that
+   rests on it.
 4. **When a referenced CI run is re-run, superseded or deleted.** The run URL anchors the
    result; a newer run does not retroactively validate the old one, and a deleted run
    removes the evidence entirely.
@@ -173,6 +181,191 @@ The following conversions are invalid and are not made anywhere in this document
   evidence may change a verdict.
 - Class B (external release gate) evidence must not be recorded as closure evidence for
   any issue; see the next section.
+
+---
+
+## Snapshot Staleness and Branch Movement
+
+This audit is anchored to a **single point in time**: `origin/master` at
+[`3d7d7ca5e8413566637a50e83c1e5fbe2722977f`](https://github.com/vinhphan812/smart-factory/commit/3d7d7ca5e8413566637a50e83c1e5fbe2722977f),
+observed on **2026-10-22**. That anchor is not renegotiable and is not re-based by this
+document: the snapshot remains a dated observation of that tree.
+
+What *has* moved is the set of **open PR branch heads** that the snapshot's verdicts refer
+to as blockers. The table below records the real, live head SHAs of the open PRs as
+queried from the GitHub API on **2026-10-24T11:26:49Z** (see the exact query in
+[Revalidation Procedure](#revalidation-procedure)):
+
+| PR | Branch | Head SHA recorded in this document | Live head SHA observed 2026-10-24T11:26:49Z | Movement |
+|---|---|---|---|---|
+| #242 | `feat/issue-152-dashboard-auth-lineage-v2` | `986f00279e615f1717cb9e2f4d07f8760452d917` | `c0a7a20ec3cf221334173a9200beacef80e666d5` | **Moved** (last commit `c0a7a20e`, 2026-10-24T10:36:25Z) |
+| #244 | `feat/issue-182-deployment-e2e` | `614ed31f2844bc910061ec9e665d27186d865d3e` | `614ed31f2844bc910061ec9e665d27186d865d3e` | **Moved since the 2026-10-22 snapshot** (`6ebd8cc4c5d5e5b55148e65363847e90c3a3c700` → `51ccf4f3593836e87cac0279dd8f3bba14b3f8a6` → `614ed31f`); unchanged between the two 2026-10-24 requeries |
+| #258 | `docs/issue-closure-audit-2026-10-22` | `f7f085e8155adc12f2ab637392b2d535e2a1c262` | `f7f085e8155adc12f2ab637392b2d535e2a1c262` | This branch carries this document; it moves with every push to it, so its own head is by definition transient |
+| #259 | `smart-factory/t_7538eb48-ci-add-dashboard-ci-workflow-build-lint` | not previously recorded | `8332f01cd25f1a2ab2ddc4b5d3371803be4c6c12` | First anchored here (last commit 2026-10-23T13:34:47Z) |
+| #260 | `feat/issue-149-design-system-nav` | not previously recorded | `0c422e867993fcf046b2c21db0283cdae4480f57` | First anchored here (last commit 2026-10-24T08:30:11Z) |
+| #261 | `feat/issue-204-fiware-yanshee-context` | not previously recorded | `b9c1b46aca883648cec1197c6ae2a0ca1e508492` | First anchored here (last commit 2026-10-24T10:48:45Z) |
+| #262 | `docs/adr-0015-date-correction` | not previously recorded | `e438ae5f58ef0beddd4d1725d4b82b3f1a1235ea` | First anchored here (last commit 2026-10-24T02:58:41Z) |
+
+The head SHAs above were fetched live with `gh pr view <n> --json headRefOid` and
+cross-checked against `gh api repos/vinhphan812/smart-factory/pulls/<n>`. They are
+recorded as they stood at that timestamp and are **themselves subject to the same
+staleness rule** as everything else in this document.
+
+### SHA-scoped validity rule (non-negotiable)
+
+1. **Every closure verdict in this document is VALID ONLY against the specific SHA it
+   names.** A verdict that says "PR #244 is open/unmerged" is a statement about the
+   repository *at the SHA named for that PR and at `origin/master` at
+   `3d7d7ca5e8413566637a50e83c1e5fbe2722977f`* — nothing else.
+2. **Any branch movement invalidates the affected verdict until it is re-verified.** The
+   moment a cited PR head, the audited master tree, or a cited CI run changes, the
+   observation is stale. It must be re-taken by re-running the commands in
+   [Revalidation Procedure](#revalidation-procedure) — never extrapolated, never
+   inherited from the older value.
+3. **Re-verification is required on the ACTUAL closure date.** A closure claim must be
+   backed by a requery taken at the moment the claim is made, not by this document's
+   verdicts and not by the timestamps in this document.
+4. **Re-verification is required AGAIN after merge, against the merged master SHA.** A
+   merge changes `origin/master`, invalidating the audited tree SHA and every
+   file-and-line citation resolved against it. The post-merge re-verification must be
+   anchored to the **merged master commit SHA**, not to the PR head that was merged.
+5. **Staleness never converts into closure.** A moved branch, a new commit or a newer CI
+   run does not by itself satisfy any checklist item. Only fresh, dated, anchored
+   **Class A** evidence can change a verdict, and no Class B evidence can close anything
+   (see [Release Boundary Classification](#release-boundary-classification)).
+
+### Effect of the movement recorded above on this audit's verdicts
+
+As observed on 2026-10-24T11:26:49Z, all seven audited issues are still `open`, both
+blocking PRs (#242, #244) are still **unmerged**, and `origin/master` is still
+`3d7d7ca5e8413566637a50e83c1e5fbe2722977f`. The KEEP OPEN verdicts therefore still hold
+**at that timestamp**, and the movement of the PR heads has not changed them — because
+each verdict rests on *merged* repository state and on the *absence* of merged artefacts
+in `origin/master`, not on the content of an unmerged branch head.
+
+This must not be read as permanence. As soon as any of the seven PR heads above moves
+again, the corresponding observation is stale and must be re-verified under the rule in
+the preceding subsection.
+
+---
+
+## Revalidation Procedure
+
+A reviewer who wants to re-verify the closure state of **one specific issue** runs the
+following, in order. The procedure is per-issue: substitute the issue number in step 2
+and its blocking PR number in step 3. Every step is anchored to a SHA or a permanent
+CI URL, and each step has a defined point in time at which it must be run.
+
+### Step 1 — Fix the reference point (run at the moment of any closure claim)
+
+```text
+$ git fetch origin --prune
+$ git rev-parse origin/master
+3d7d7ca5e8413566637a50e83c1e5fbe2722977f
+```
+
+The SHA printed above is the one observed at the third requery (2026-10-24T11:26:49Z);
+record the SHA your own run prints. It is the anchor for every subsequent observation. If
+it differs from `3d7d7ca5e8413566637a50e83c1e5fbe2722977f`, the snapshot's
+file-and-line citations are stale and must be re-derived against the new master tree.
+
+### Step 2 — Re-query the issue's own live state (run at the moment of any closure claim)
+
+```text
+$ gh api repos/vinhphan812/smart-factory/issues/<ISSUE> --jq '"#\(.number) \(.state) updated=\(.updated_at) closed=\(.closed_at // "-")"'
+#179 open updated=2026-10-20T13:01:46Z closed=-
+```
+
+The line above is the observed output for issue #179 at the third requery. `<ISSUE>` is
+the issue number under review. The issue's `state` and `updated_at` must be captured with
+the timestamp of the query; a verdict quoted without that timestamp is not valid
+evidence.
+
+### Step 3 — Re-query the blocking PR's live head and merge state (run at the moment of any closure claim)
+
+```text
+$ gh api repos/vinhphan812/smart-factory/pulls/<PR> --jq '"PR#\(.number) state=\(.state) merged=\(.merged) mergedAt=\(.merged_at // "-") head=\(.head.sha) updated=\(.updated_at)"'
+PR#244 state=open merged=false mergedAt=- head=614ed31f2844bc910061ec9e665d27186d865d3e updated=2026-10-24T10:26:03Z
+$ gh pr view <PR> --repo vinhphan812/smart-factory --json number,state,mergedAt,headRefOid
+{"headRefOid":"614ed31f2844bc910061ec9e665d27186d865d3e","mergedAt":null,"number":244,"state":"OPEN"}
+```
+
+`<PR>` is the blocking pull request for that issue: #242 for #152 and #167, and #244 for
+issues #182, #186 and #180. The already-merged PRs are #245 for #179 and #256 for #174.
+Compare the returned `head` with the SHA recorded in this document. If they differ, the
+observation is stale and the checklist row for that issue must be re-derived.
+
+### Step 4 — Confirm the CI evidence for the exact SHA under review (run before citing any CI run)
+
+Filter by the **exact head SHA**, never by branch name:
+
+```text
+$ gh api "repos/vinhphan812/smart-factory/actions/runs?head_sha=<SHA>" --jq '.workflow_runs[] | "\(.id) \(.name) \(.event) \(.status)/\(.conclusion) \(.html_url)"'
+39717529878 ADR Lint & Architecture Governance Gate push completed/success https://github.com/vinhphan812/smart-factory/actions/runs/39717529878
+39717529906 IoT Gateway Tests push completed/success https://github.com/vinhphan812/smart-factory/actions/runs/39717529906
+```
+
+The two lines above are the observed output for `<SHA>` =
+`bcc8848bf2ff65aaa4e69b7d8d0c705cd73edd20` (the #179 merge).
+
+The permanent CI anchors already recorded in this document, and which must be cited by
+run ID and job ID rather than by branch:
+
+| Artefact | Permanent CI run | Permanent job(s) | Head SHA |
+|---|---|---|---|
+| #179 abuse suite (IoT Gateway Tests) | [run 39717529906](https://github.com/vinhphan812/smart-factory/actions/runs/39717529906) | [119623125531 (Python 3.11)](https://github.com/vinhphan812/smart-factory/actions/runs/39717529906/job/119623125531), [119623125386 (Python 3.12)](https://github.com/vinhphan812/smart-factory/actions/runs/39717529906/job/119623125386) | `bcc8848bf2ff65aaa4e69b7d8d0c705cd73edd20` |
+| Audited master tree (ADR Lint) | [run 39717602691](https://github.com/vinhphan812/smart-factory/actions/runs/39717602691) | — | `3d7d7ca5e8413566637a50e83c1e5fbe2722977f` |
+| #179 security artefacts (ADR Lint) | [run 39717529878](https://github.com/vinhphan812/smart-factory/actions/runs/39717529878) | — | `bcc8848bf2ff65aaa4e69b7d8d0c705cd73edd20` |
+| #174 capability matrix (ADR Lint) | [run 39717572941](https://github.com/vinhphan812/smart-factory/actions/runs/39717572941) | — | `961298b642599c71bcdbff1b0879b2f3bda2e9bb` |
+
+Job logs remain permanently addressable and may be re-counted independently:
+
+```text
+$ gh api repos/vinhphan812/smart-factory/actions/jobs/119623125531/logs > job-119623125531.log
+$ gh api repos/vinhphan812/smart-factory/actions/jobs/119623125386/logs > job-119623125386.log
+$ grep -c "test_security_abuse.py::" job-119623125531.log
+69
+$ grep -E "passed" job-119623125386.log | tail -2
+2026-10-22T03:34:22.6685335Z ======================= 316 passed, 1 warning in 10.37s ========================
+2026-10-22T03:34:43.3543353Z ======================= 407 passed, 1 warning in 19.13s ========================
+```
+
+The counts above are the observed output when the job logs were re-fetched on
+2026-10-24.
+
+### Step 5 — Re-run the local documentation and ADR gates (run before the review verdict)
+
+```text
+$ python scripts/check_adrs.py
+✅ ADR Lint / Governance Gate PASSED (15 ADRs validated successfully).
+$ python -m pytest scripts/tests/test_check_adrs.py -q
+......                                                                   [100%]
+6 passed in 0.27s
+```
+
+The output above is what the local gates produced on this branch on 2026-10-24.
+
+### Step 6 — Re-run the procedure AGAIN after merge (mandatory)
+
+When the blocking PR merges, repeat steps 1–5 **against the merged master commit SHA**
+(not against the PR head) and record the new anchors, the new requery timestamp and the
+resulting verdict in this document's
+[Live status re-verification](#live-status-re-verification-2026-10-24) section.
+
+### Point-in-time summary
+
+| Step | Point in time at which it must be run |
+|---|---|
+| 1 — reference point | Immediately before any closure claim, and again after any merge into `master` |
+| 2 — issue state | Immediately before any closure claim (the **actual** closure date, not a proxy date) |
+| 3 — PR head / merge state | Immediately before any closure claim, and again after the PR moves |
+| 4 — CI runs for the exact SHA | Before citing any CI result, and after any new commit on the cited SHA |
+| 5 — local lint gates | Before the review verdict is recorded |
+| 6 — post-merge re-verification | After the merge, anchored to the merged master SHA |
+
+No closure action is permitted on the strength of this document alone. The requery
+timestamp, the SHA and the CI run URL are the evidence; this document is only the record
+of how to obtain them.
 
 ---
 
@@ -432,6 +625,51 @@ depends on the superseded value.
 **Conclusion of this requery:** all seven issues remain `open`; no issue is closed by
 this document.
 
+### Third requery — 2026-10-24 11:26:49 UTC (18:26:49 GMT+0700)
+
+Executed while preparing the
+[Snapshot Staleness and Branch Movement](#snapshot-staleness-and-branch-movement) and
+[Revalidation Procedure](#revalidation-procedure) sections, so that the moved PR heads
+are recorded with their live SHA rather than asserted.
+
+```text
+$ date -u
+Sat, Oct 24, 2026 11:26:49 AM
+$ for i in 152 174 179 167 182 186 180; do gh api repos/vinhphan812/smart-factory/issues/$i --jq '"#\(.number) \(.state) updated=\(.updated_at) closed=\(.closed_at // "-")"'; done
+#152 open updated=2026-10-20T13:01:38Z closed=-
+#174 open updated=2026-10-20T13:02:50Z closed=-
+#179 open updated=2026-10-20T13:01:46Z closed=-
+#167 open updated=2026-10-20T13:01:30Z closed=-
+#182 open updated=2026-10-20T13:01:51Z closed=-
+#186 open updated=2026-10-20T13:02:40Z closed=-
+#180 open updated=2026-10-20T13:02:47Z closed=-
+$ for p in 242 244 245 256 258 259 260 261 262; do gh api repos/vinhphan812/smart-factory/pulls/$p --jq '"PR#\(.number) state=\(.state) merged=\(.merged) mergedAt=\(.merged_at // "-") head=\(.head.sha) updated=\(.updated_at)"'; done
+PR#242 state=open merged=false mergedAt=- head=c0a7a20ec3cf221334173a9200beacef80e666d5 updated=2026-10-24T10:36:36Z
+PR#244 state=open merged=false mergedAt=- head=614ed31f2844bc910061ec9e665d27186d865d3e updated=2026-10-24T10:26:03Z
+PR#245 state=closed merged=true mergedAt=2026-10-22T03:33:51Z head=bea5a59d16e3fa69e1101ecf7af167db4e84ea3a updated=2026-10-22T03:33:51Z
+PR#256 state=closed merged=true mergedAt=2026-10-22T03:34:20Z head=8526805d7a77055888752810e7a19569a0f1d9df updated=2026-10-22T03:34:20Z
+PR#258 state=open merged=false mergedAt=- head=f7f085e8155adc12f2ab637392b2d535e2a1c262 updated=2026-10-24T10:24:33Z
+PR#259 state=open merged=false mergedAt=- head=8332f01cd25f1a2ab2ddc4b5d3371803be4c6c12 updated=2026-10-24T10:24:28Z
+PR#260 state=open merged=false mergedAt=- head=0c422e867993fcf046b2c21db0283cdae4480f57 updated=2026-10-24T10:24:22Z
+PR#261 state=open merged=false mergedAt=- head=b9c1b46aca883648cec1197c6ae2a0ca1e508492 updated=2026-10-24T10:52:17Z
+PR#262 state=open merged=false mergedAt=- head=e438ae5f58ef0beddd4d1725d4b82b3f1a1235ea updated=2026-10-24T10:24:02Z
+$ git rev-parse origin/master
+3d7d7ca5e8413566637a50e83c1e5fbe2722977f
+```
+
+**What changed since the second requery:** PR #242's head SHA moved again, from
+`986f00279e615f1717cb9e2f4d07f8760452d917` to
+`c0a7a20ec3cf221334173a9200beacef80e666d5` (last commit authored 2026-10-24T10:36:25Z).
+PR #244's head is unchanged at `614ed31f2844bc910061ec9e665d27186d865d3e`. The
+remaining open PRs (#258, #259, #260, #261, #262) are anchored for the first time in
+the staleness table above. `origin/master` is **still** `3d7d7ca5e8413566637a50e83c1e5fbe2722977f`,
+so the audited tree and its file-and-line citations are not yet stale — but every
+verdict that names a PR head is anchored only to that head, and #242's head has now moved
+twice within a single day.
+
+**Conclusion of this requery:** all seven audited issues remain `open`; #242 and #244
+remain **unmerged**; no issue is closed by this document.
+
 ## ADR Allocation Consistency
 
 The ADR allocation in force is recorded here so that this audit cannot be read as
@@ -537,6 +775,48 @@ release gate as still open regardless of what Class A evidence shows. Under the
 [Evidence Lifetime and Requery Rule](#evidence-lifetime-and-requery-rule), the re-query
 must be taken **immediately before** the closure claim is made, and this document's own
 verdicts are not a substitute for it.
+
+---
+
+## Non-Negotiable Limitations of L0/L1/L2 Evidence
+
+This section is **binding and non-negotiable**. It is stated separately, and in full, so
+that it cannot be lost in a summary, a paraphrase, or a quotation of only the verdict
+tables above.
+
+The evidence gathered by this audit is **L0 (design/static) and L1 (host unit)**, plus
+**L2 (simulation)** in the cases where a simulator exists. Green CI, merged Markdown,
+L0 contracts and L1 test nodes **cannot certify** any of the capabilities listed below.
+Each item requires **external and/or physical evidence** at the level stated. **No
+closure action may treat any item below as satisfied by this document, by this
+repository, or by any CI run.**
+
+| # | Capability that L0/L1/L2 evidence CANNOT certify | Why this audit cannot certify it | External / physical evidence required | Level needed |
+|---|---|---|---|---|
+| L-1 | **Physical E-stop function** (actual operator press → actuator stop) | No physical actuation was performed. The capability matrix is an L0 design contract that itself marks electrical validation `BLOCKED-L3`; the abuse suite mocks external services. | A physical E-stop press on the real module with the actuator observed to stop, plus interlock actuation and operator-override evidence, recorded against a hardware session | **L3 bench, L4 HIL for the in-line safety loop, and L5 integrated for the full operator-to-actuator chain** |
+| L-2 | **OTA signature verification** (a tampered/unsigned image must be rejected) | `api.py` records an optional SHA-256 only; no signature is verified or rejected by any test node. ADR-0007 requires a signature that no merged code enforces. | A signed-image install on real hardware plus a negative test showing an invalid-signature image is rejected before flash, on the device | **L1 executable negative test (repository), plus L3 signed-image test on device** |
+| L-3 | **OTA A/B rollback** (a failed update must roll back to the previous slot) | ADR-0007 (`docs/adr/adr-0007-signed-ota-ab-rollback.md`) is `Status: Proposed`; the A/B slot layout it specifies is not implemented in `origin/master` (no slot state machine, no slot switch, no failure-injection test — the OTA control plane records a status string only, `ota_control.py:178`), and no device was booted or interrupted mid-update. | Interrupted-update and bricked-slot scenarios on real hardware with observed automatic rollback to the previous bootable slot | **L3 bench, and L4 HIL for field recovery** |
+| L-4 | **Broker TLS/ACL enforcement at runtime** (authorisation actually denied by the broker) | Broker authorisation and transport security were never exercised against a running broker; ADR-0010 is `Status: Proposed` and explicitly disclaims any implemented broker ACL, TLS listener or client configuration. The CI suite mocks the broker. | A real broker with TLS termination and per-role ACLs, showing a Viewer denial and an authorised Operator path, with certificates and configuration captured from the deployed endpoint | **L2 simulation against a real broker, plus L3 TLS/ACL test on the deployed broker** |
+| L-5 | **Yanshee SDK capability behaviour** (what the SDK actually does on Yanshee hardware) | The merged `iot-gateway/tests/test_security_abuse.py` contains no Yanshee or skill node (`grep -i "yanshee\|skill"` returns nothing), and no vendor SDK call was executed anywhere in this audit. | The Yanshee robot on hardware, with the SDK's real capability surface exercised and the unsupported-skill denial fixture observed, against the vendor SDK version in use | **L4 HIL on Yanshee hardware** |
+| L-6 | **Real browser / gateway session acceptance** (an authenticated, authorised user session end to end) | The threat model records WebSocket auth as unimplemented and anonymous WS access as a documented gap; the dashboard client makes unauthenticated fetches and the acknowledgement path is browser-memory demo only. No browser or live gateway session was driven by this audit. | An authenticated browser session against a deployed gateway and dashboard, with token lifecycle, RBAC enforcement, CSP/CORS/HSTS headers and WebSocket authorisation observed | **L1 server test, plus L3 deployed session test** |
+
+**Governing rules for this section.**
+
+1. **None of L-1 … L-6 is closure evidence for any issue.** Each is an outstanding
+   **Class B external release gate** under
+   [Release Boundary Classification](#release-boundary-classification). Even a completed
+   physical or deployment session would not by itself close any issue audited here; the
+   corresponding **Class A** repository evidence is required as well.
+2. **The required level is a floor, not a target.** "L1 executable test" for L-2 and L-6
+   means a repository test that does not exist today; until it exists, the capability is
+   uncertified at every level.
+3. **A CI run cannot substitute for the physical level.** No GitHub Actions runner, no
+   mocked broker, no simulator and no unit test can produce L3, L4 or L5 evidence.
+4. **This document asserts none of L-1 … L-6.** Nothing in this audit may be cited as
+   proof of physical E-stop function, OTA signature verification, OTA A/B rollback,
+   runtime broker TLS/ACL enforcement, Yanshee SDK capability behaviour, or browser /
+   gateway session acceptance. The evidence ceiling of this audit is **L0 static /
+   documentation only**.
 
 ---
 
