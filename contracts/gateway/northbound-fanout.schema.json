@@ -1,0 +1,425 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-factory.example.com/contracts/gateway/northbound-fanout.schema.json",
+  "title": "Gateway Northbound Fanout Contract v1",
+  "description": "Machine-readable description of the versioned northbound read surface of the Smart Factory IoT Gateway: the canonical device event envelope (northbound v1), the REST snapshot response, the incremental stream frame, the subscription filter, the cursor/high-watermark block and the read-path error envelope. This schema is SPECIFICATION ONLY: the northbound v1 fields (envelope_version, units, boot_id, observed_at, quality) are SPECIFIED-BUT-NOT-IMPLEMENTED in iot-gateway/ at the time of writing. See contracts/gateway/northbound-fanout-contract.md section 6 for the implemented / planned ledger.",
+  "type": "object",
+  "definitions": {
+    "envelope_version": {
+      "type": "string",
+      "description": "Version of the northbound envelope contract implemented by the producing Gateway. '0.1' is the unversioned shape emitted by the current implementation (CanonicalEvent.to_dict()). '1.0' is the versioned shape specified by this contract.",
+      "examples": ["0.1", "1.0"]
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Discriminator for the canonical device event. Consumers MUST ignore unknown values gracefully.",
+      "enum": [
+        "command_ack",
+        "status_online",
+        "status_offline",
+        "telemetry",
+        "heartbeat"
+      ]
+    },
+    "clock_domain": {
+      "type": "string",
+      "description": "Clock domain of observed_at. 'utc' = device timestamp is UTC epoch ms. 'device_monotonic' = device timestamp is an uptime/monotonic counter and NOT comparable with UTC. 'unknown' = domain could not be established.",
+      "enum": ["utc", "device_monotonic", "unknown"]
+    },
+    "quality": {
+      "type": "object",
+      "description": "Quality assessment of a single observation. This object replaces the loose boolean flags (stale, out_of_order) for northbound consumers; the boolean flags remain in the v0 envelope for backward compatibility.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Overall quality verdict for the observation.",
+          "enum": ["good", "uncertain", "degraded", "invalid"]
+        },
+        "reason": {
+          "type": "string",
+          "description": "Machine-readable reason when status is not 'good'. Empty string when status is 'good'.",
+          "examples": [
+            "",
+            "stale",
+            "out_of_order",
+            "unsynchronized_clock",
+            "malformed_payload",
+            "unknown_device",
+            "unsupported_capability"
+          ]
+        },
+        "stale": {
+          "type": "boolean",
+          "description": "True when the observation is older than the applicable staleness threshold."
+        },
+        "out_of_order": {
+          "type": "boolean",
+          "description": "True when the observation regressed against the previous observation of the same device_id."
+        },
+        "clock_domain": {
+          "$ref": "#/definitions/clock_domain"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "description": "received_at_ms - observed_at in milliseconds when clock_domain is 'utc'. -1 when the latency is not computable (device_monotonic or unknown).",
+          "minimum": -1
+        }
+      },
+      "required": ["status", "reason", "stale", "out_of_order", "clock_domain", "latency_ms"],
+      "additionalProperties": false
+    },
+    "units": {
+      "type": "object",
+      "description": "Unit declaration for every measured quantity carried by the payload. Consumers MUST apply these units; consumers MUST NOT infer units from field names.",
+      "properties": {
+        "temperature": {
+          "type": "string",
+          "description": "Unit of the temperature measurement.",
+          "enum": ["celsius", "centi_celsius", "fahrenheit", "centi_fahrenheit"]
+        },
+        "humidity": {
+          "type": "string",
+          "description": "Unit of the relative-humidity measurement.",
+          "enum": ["percent", "centi_percent"]
+        },
+        "speed": {
+          "type": "string",
+          "description": "Unit of the speed measurement.",
+          "enum": ["rpm", "mm_per_s", "cm_per_s", "m_per_s"]
+        },
+        "position": {
+          "type": "string",
+          "description": "Unit of the position measurement.",
+          "enum": ["mm", "cm", "m", "ticks"]
+        },
+        "uptime": {
+          "type": "string",
+          "description": "Unit of the uptime measurement.",
+          "enum": ["milliseconds", "seconds"]
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "description": "Any additional measured quantity and its unit, keyed by the measurement name."
+      }
+    },
+    "canonical_event": {
+      "type": "object",
+      "title": "Northbound canonical device event (v1)",
+      "description": "The single event shape carried by the REST snapshot response, the REST incremental list and the WebSocket/SSE stream. Consumers MUST branch on event_type before reading payload fields.",
+      "properties": {
+        "envelope_version": {
+          "$ref": "#/definitions/envelope_version"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Globally unique identifier of this observation. Consumers MUST use it as the idempotency key for deduplication."
+        },
+        "device_id": {
+          "type": "string",
+          "description": "Identifier of the originating device or bridge.",
+          "examples": ["conveyor-a", "sorting-1"]
+        },
+        "module_id": {
+          "type": ["string", "null"],
+          "description": "Factory module the device belongs to, when the Gateway can resolve it. Null when the device-to-module mapping is unknown. Used for module-scoped subscription filters."
+        },
+        "event_type": {
+          "$ref": "#/definitions/event_type"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Gateway-assigned monotonic sequence within the current Gateway incarnation. Consumers MUST use it for ordering and gap detection, and MUST NOT treat it as globally unique across Gateway restarts (see contract section 4.2, gap G1)."
+        },
+        "observed_at": {
+          "type": ["integer", "null"],
+          "description": "UTC epoch milliseconds at which the device observed the measured state. Null when the device did not supply a timestamp. NOT comparable across devices when quality.clock_domain is 'device_monotonic'.",
+          "minimum": 0
+        },
+        "received_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC ISO-8601 instant at which the Gateway received the observation. This is the only timestamp in the envelope that is guaranteed to be in the Gateway clock domain."
+        },
+        "received_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "UTC epoch milliseconds of received_at. Provided for arithmetic without date parsing."
+        },
+        "boot_id": {
+          "type": ["string", "null"],
+          "description": "Identifier of the device boot session that produced the observation. Null when the device does not publish one. Consumers MUST treat a change of boot_id as a device restart and MUST reset device-local derivations (for example uptime-derived counters) on change."
+        },
+        "units": {
+          "$ref": "#/definitions/units"
+        },
+        "quality": {
+          "$ref": "#/definitions/quality"
+        },
+        "payload": {
+          "type": "object",
+          "description": "Event-type-specific measurement data. Never mutated after emission. For telemetry the shape follows contracts/gateway/telemetry-schema-v2.md (schema_version 2.0)."
+        },
+        "mqtt_topic": {
+          "type": "string",
+          "description": "Southbound MQTT topic the observation arrived on. Provenance only; consumers MUST NOT use it as a routing key."
+        },
+        "mqtt_timestamp_ms": {
+          "type": "integer",
+          "description": "Raw source timestamp as delivered on the wire, in the source clock domain. Retained for provenance; prefer observed_at.",
+          "minimum": 0
+        },
+        "ingested_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 instant at which the Gateway ingested the observation. Equal to received_at for the current implementation."
+        },
+        "stale": {
+          "type": "boolean",
+          "description": "Legacy boolean mirror of quality.stale. Retained for v0 consumers."
+        },
+        "out_of_order": {
+          "type": "boolean",
+          "description": "Legacy boolean mirror of quality.out_of_order. Retained for v0 consumers."
+        },
+        "is_timestamp_synchronized": {
+          "type": "boolean",
+          "description": "Legacy boolean mirror of quality.clock_domain == 'utc'. Retained for v0 consumers."
+        },
+        "latency_ms": {
+          "type": "integer",
+          "description": "Legacy integer mirror of quality.latency_ms. Retained for v0 consumers.",
+          "minimum": -1
+        },
+        "timestamp": {
+          "type": "integer",
+          "description": "Legacy alias carried by the v0 envelope. In v0 this is event_timestamp_ms or mqtt_timestamp_ms; it does NOT distinguish clock domain. Consumers MUST migrate to observed_at.",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "event_id",
+        "device_id",
+        "event_type",
+        "sequence",
+        "received_at",
+        "received_at_ms",
+        "ingested_at"
+      ],
+      "additionalProperties": false
+    },
+    "cursor": {
+      "type": "object",
+      "description": "Replay cursor block. high_watermark is the highest sequence durably persisted in the Gateway EventStore at the moment the response was produced.",
+      "properties": {
+        "high_watermark": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Highest persisted sequence number. A consumer whose highest applied sequence is lower than high_watermark has a gap unless it has applied every intermediate sequence."
+        },
+        "last_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Highest sequence included in this response. Equal to high_watermark for a consistent snapshot."
+        },
+        "since_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The cursor the consumer supplied. 0 means a full snapshot."
+        }
+      },
+      "required": ["high_watermark", "last_sequence"],
+      "additionalProperties": false
+    },
+    "snapshot_response": {
+      "type": "object",
+      "title": "REST snapshot response (v1)",
+      "description": "Response body of GET /snapshot. The consumer MUST apply per_device_latest to initialise state, then stream strictly above cursor.last_sequence.",
+      "properties": {
+        "envelope_version": {
+          "$ref": "#/definitions/envelope_version"
+        },
+        "cursor": {
+          "$ref": "#/definitions/cursor"
+        },
+        "high_watermark": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Top-level mirror of cursor.high_watermark, retained for v0 consumers that read the flat field."
+        },
+        "snapshot_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of events in events[]."
+        },
+        "events": {
+          "type": "array",
+          "description": "Canonical events in ascending sequence order.",
+          "items": {
+            "$ref": "#/definitions/canonical_event"
+          }
+        },
+        "per_device_latest": {
+          "type": "object",
+          "description": "Most recent canonical event per device_id, keyed by device_id.",
+          "additionalProperties": {
+            "$ref": "#/definitions/canonical_event"
+          }
+        },
+        "overflow": {
+          "type": "boolean",
+          "description": "True when the Gateway holds more events than the response limit. The consumer MUST request a fresh full snapshot with since_sequence=0 before trusting the state."
+        },
+        "overflow_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The limit value applied to this response."
+        },
+        "resync_required": {
+          "type": "boolean",
+          "description": "True when the consumer MUST discard local state and resynchronise from a full snapshot. Set when overflow is true or when the requested cursor is older than the oldest retained event."
+        },
+        "oldest_retained_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Lowest sequence still retained in the EventStore. A consumer whose since_sequence is lower than this value cannot replay the gap and MUST resynchronise."
+        }
+      },
+      "required": [
+        "high_watermark",
+        "snapshot_count",
+        "events",
+        "per_device_latest",
+        "overflow",
+        "overflow_limit"
+      ],
+      "additionalProperties": false
+    },
+    "stream_frame": {
+      "type": "object",
+      "title": "Incremental stream frame (v1)",
+      "description": "One frame of the incremental northbound stream (WebSocket or SSE). frame_type 'event' carries exactly one canonical event. frame_type 'gap' tells the consumer that it missed events and MUST resynchronise. frame_type 'heartbeat' is a liveness probe carrying no state.",
+      "properties": {
+        "envelope_version": {
+          "$ref": "#/definitions/envelope_version"
+        },
+        "frame_type": {
+          "type": "string",
+          "enum": ["event", "gap", "heartbeat"]
+        },
+        "event": {
+          "$ref": "#/definitions/canonical_event"
+        },
+        "gap": {
+          "type": "object",
+          "description": "Present when frame_type is 'gap'.",
+          "properties": {
+            "from_sequence": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "First sequence the consumer is missing."
+            },
+            "to_sequence": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Last sequence the consumer is missing."
+            },
+            "reason": {
+              "type": "string",
+              "enum": ["queue_overflow", "retention_evicted", "slow_consumer", "unknown"]
+            }
+          },
+          "required": ["from_sequence", "to_sequence", "reason"],
+          "additionalProperties": false
+        },
+        "heartbeat": {
+          "type": "object",
+          "description": "Present when frame_type is 'heartbeat'.",
+          "properties": {
+            "high_watermark": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Highest persisted sequence at the moment the heartbeat was produced."
+            },
+            "gateway_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Gateway wall-clock time when the heartbeat was produced."
+            }
+          },
+          "required": ["high_watermark", "gateway_time"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["frame_type"],
+      "additionalProperties": false
+    },
+    "subscription_filter": {
+      "type": "object",
+      "title": "Northbound subscription filter",
+      "description": "Filter accepted by the incremental stream endpoints. An empty filter means all devices and all event types. device_ids, module_ids and event_types are OR within themselves and AND across groups.",
+      "properties": {
+        "device_ids": {
+          "type": "array",
+          "description": "Restrict the stream to these device_ids.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "module_ids": {
+          "type": "array",
+          "description": "Restrict the stream to these factory modules. Requires the Gateway to resolve the device-to-module mapping.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "event_types": {
+          "type": "array",
+          "description": "Restrict the stream to these canonical event types.",
+          "items": {
+            "$ref": "#/definitions/event_type"
+          }
+        },
+        "since_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Resume cursor. The stream MUST deliver only events with sequence strictly greater than this value."
+        }
+      },
+      "additionalProperties": false
+    },
+    "read_error": {
+      "type": "object",
+      "title": "Read-path error envelope",
+      "description": "Error body returned by the northbound read paths. Consistent with the FastAPI detail convention already used by iot-gateway.",
+      "properties": {
+        "detail": {
+          "type": "string",
+          "description": "Human-readable reason."
+        },
+        "error_code": {
+          "type": "string",
+          "description": "Stable machine-readable error code.",
+          "enum": [
+            "unauthorized",
+            "forbidden",
+            "cursor_expired",
+            "filter_invalid",
+            "not_found",
+            "rate_limited"
+          ]
+        },
+        "oldest_retained_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Present for cursor_expired. The consumer MUST resynchronise from a full snapshot."
+        }
+      },
+      "required": ["detail"],
+      "additionalProperties": false
+    }
+  },
+  "$ref": "#/definitions/canonical_event"
+}

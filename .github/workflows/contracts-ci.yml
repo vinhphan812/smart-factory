@@ -1,0 +1,70 @@
+# ==============================================================================
+# Routing truth table (path → workflow):
+#   adr/**, docs/**, .github/workflows/**          → adr-lint.yml
+#   contracts/**                                   → contracts-ci.yml  (this file)
+#   dashboard/**                                  → dashboard-ci.yml
+#   esp32-ukit-bridge/**                          → bridge-ci.yml
+#   factory-control/**                            → factory-control-ci.yml
+#   iot-gateway/**                                → gateway-ci.yml
+#
+# Module ownership:
+#   contracts/          : versioned, machine-readable cross-system contracts
+#
+# NOTE: the routing truth table rows that name this workflow are deliberately
+# NOT added to the other workflow files in this change. PR #259 (issue #156)
+# owns a concurrent edit of exactly those header blocks in adr-lint.yml,
+# bridge-ci.yml, factory-control-ci.yml and gateway-ci.yml; editing them here
+# would create a merge conflict for no functional gain. The rows must be
+# reconciled when that PR lands.
+# ==============================================================================
+
+name: Contracts Validation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - contracts/**
+  pull_request:
+    paths:
+      - contracts/**
+
+jobs:
+  northbound-fixture:
+    name: Northbound fanout fixture parity
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema
+
+      - name: Validate the northbound fanout fixture pack
+        run: |
+          python contracts/gateway/fixtures/validate_fixtures.py
+
+  northbound-fixture-csharp:
+    name: Northbound fanout fixture parity (C# / Unity binding)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Project the fixture with the C# reference binding
+        run: |
+          dotnet run --project contracts/gateway/fixtures/bindings/csharp/GatewayFixtureParity.csproj \
+            -- contracts/gateway/fixtures/northbound-fixture.v1.json

@@ -10,6 +10,7 @@ This root module holds **validated versioned interfaces shared by multiple root 
 - `contracts/v1/` holds cross-system schemas: command-lifecycle.md, command.schema.json, telemetry.schema.json, device-event.schema.json, and examples.
 - `contracts/v2/` holds v2 schemas: telemetry.schema.json and examples.
 - `contracts/gateway/` holds gateway-specific canonical documentation including telemetry-schema-v2.md.
+- `contracts/gateway/northbound-fanout-contract.md` + `northbound-fanout.schema.json` hold the **versioned northbound read contract** for the IoT Gateway (Issue #194), with the shared consumer fixture pack under `contracts/gateway/fixtures/`. The northbound contract **references** `live-state-fanout.md` and `sync-contracts.md` rather than re-specifying them; it does not close Issue #194.
 - In particular, `telemetry.schema.json` requires `timestamp` and `state`, whereas issue #66 firmware TEL payload uses `received_at_ms`, `values`, and `pairs`. This mismatch has been resolved by v2 schema (Issue #166, `contracts/gateway/telemetry-schema-v2.md`).
 - A schema is **canonical** only when its version, producer, consumers, examples, validation tests and compatibility policy are documented. No duplicate authoritative schema copies.
 - See [ADR-0009: Telemetry Schema Compatibility](../docs/adr/adr-0009-telemetry-schema-compatibility.md) for the known mismatch between `telemetry.schema.json` and the actual bridge telemetry format.

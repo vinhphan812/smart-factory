@@ -1,0 +1,1030 @@
+{
+  "fixture_version": "1.0.0",
+  "envelope_version": "1.0",
+  "description": "Recorded Gateway northbound read used for Unity / React consumer parity. One GET /snapshot response at cursor 44, followed by seven incremental stream frames. Exercises: status_online, telemetry in a synchronised (UTC) clock domain, command_ack, status_offline, heartbeat, a stale/degraded observation, a stale-only device, a telemetry observation in an unsynchronised (device-monotonic) clock domain, an exactly duplicated event, an out-of-order event, an explicit gap frame and a liveness heartbeat frame. The Unity C# and the React/TypeScript consumer project this SAME recording to the SAME expected state.",
+  "gateway": {
+    "service": "Smart Factory IoT Gateway",
+    "version": "0.1.0",
+    "http_port": 8001,
+    "ws_port": 8000
+  },
+  "snapshot": {
+    "envelope_version": "1.0",
+    "cursor": {
+      "high_watermark": 44,
+      "last_sequence": 44,
+      "since_sequence": 0
+    },
+    "high_watermark": 44,
+    "snapshot_count": 7,
+    "events": [
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550038",
+        "device_id": "conveyor-a",
+        "module_id": "conveyor",
+        "event_type": "status_online",
+        "sequence": 38,
+        "observed_at": 1792832398000,
+        "received_at": "2026-10-24T09:00:00.000Z",
+        "received_at_ms": 1792832400000,
+        "boot_id": "boot-a-7f3c",
+        "units": {},
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 2000
+        },
+        "payload": {
+          "status": "online",
+          "reason": "keepalive"
+        },
+        "mqtt_topic": "smart-factory/conveyor-a/status",
+        "mqtt_timestamp_ms": 1792832398000,
+        "ingested_at": "2026-10-24T09:00:00.000Z",
+        "timestamp": 1792832398000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 2000
+      },
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550039",
+        "device_id": "conveyor-a",
+        "module_id": "conveyor",
+        "event_type": "telemetry",
+        "sequence": 39,
+        "observed_at": 1792832399000,
+        "received_at": "2026-10-24T09:00:01.000Z",
+        "received_at_ms": 1792832401000,
+        "boot_id": "boot-a-7f3c",
+        "units": {
+          "temperature": "centi_celsius",
+          "humidity": "centi_percent",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 2000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "conveyor-a",
+          "timestamp": "2026-10-24T08:59:59.000Z",
+          "uptime_ms": 3599000,
+          "structured": {
+            "state": "RUNNING",
+            "speed": 60,
+            "sensors": {
+              "temperature_centi_c": 2850,
+              "humidity_centi_percent": 6500
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:01.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/conveyor-a/telemetry",
+        "mqtt_timestamp_ms": 1792832399000,
+        "ingested_at": "2026-10-24T09:00:01.000Z",
+        "timestamp": 1792832399000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 2000
+      },
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550040",
+        "device_id": "sorting-1",
+        "module_id": "sorting",
+        "event_type": "command_ack",
+        "sequence": 40,
+        "observed_at": 1792832399000,
+        "received_at": "2026-10-24T09:00:02.000Z",
+        "received_at_ms": 1792832402000,
+        "boot_id": "boot-b-2a91",
+        "units": {},
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 3000
+        },
+        "payload": {
+          "request_id": "102",
+          "status": "acknowledged",
+          "status_code": 0,
+          "sequence": 40,
+          "command": "SORTING_START",
+          "attempts": 1
+        },
+        "mqtt_topic": "smart-factory/sorting-1/command/ack",
+        "mqtt_timestamp_ms": 1792832399000,
+        "ingested_at": "2026-10-24T09:00:02.000Z",
+        "timestamp": 1792832399000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 3000
+      },
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550041",
+        "device_id": "sorting-1",
+        "module_id": "sorting",
+        "event_type": "status_online",
+        "sequence": 41,
+        "observed_at": 1792832400000,
+        "received_at": "2026-10-24T09:00:03.000Z",
+        "received_at_ms": 1792832403000,
+        "boot_id": "boot-b-2a91",
+        "units": {},
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 3000
+        },
+        "payload": {
+          "status": "online",
+          "reason": "keepalive"
+        },
+        "mqtt_topic": "smart-factory/sorting-1/status",
+        "mqtt_timestamp_ms": 1792832400000,
+        "ingested_at": "2026-10-24T09:00:03.000Z",
+        "timestamp": 1792832400000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 3000
+      },
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550042",
+        "device_id": "sorting-1",
+        "module_id": "sorting",
+        "event_type": "telemetry",
+        "sequence": 42,
+        "observed_at": 1792832401000,
+        "received_at": "2026-10-24T09:00:04.000Z",
+        "received_at_ms": 1792832404000,
+        "boot_id": "boot-b-2a91",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 3000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "sorting-1",
+          "timestamp": "2026-10-24T09:00:01.000Z",
+          "uptime_ms": 7199000,
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 2210
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:04.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/sorting-1/telemetry",
+        "mqtt_timestamp_ms": 1792832401000,
+        "ingested_at": "2026-10-24T09:00:04.000Z",
+        "timestamp": 1792832401000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 3000
+      },
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550043",
+        "device_id": "press-1",
+        "module_id": "press",
+        "event_type": "telemetry",
+        "sequence": 43,
+        "observed_at": 1792832401000,
+        "received_at": "2026-10-24T09:00:05.000Z",
+        "received_at_ms": 1792832405000,
+        "boot_id": "boot-c-51d2",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 4000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "press-1",
+          "timestamp": "2026-10-24T09:00:01.000Z",
+          "uptime_ms": 903000,
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 1905
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:05.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/press-1/telemetry",
+        "mqtt_timestamp_ms": 1792832401000,
+        "ingested_at": "2026-10-24T09:00:05.000Z",
+        "timestamp": 1792832401000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 4000
+      },
+      {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550044",
+        "device_id": "weld-1",
+        "module_id": "weld",
+        "event_type": "telemetry",
+        "sequence": 44,
+        "observed_at": 1792832370000,
+        "received_at": "2026-10-24T09:00:06.000Z",
+        "received_at_ms": 1792832406000,
+        "boot_id": "boot-d-77e1",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "degraded",
+          "reason": "stale",
+          "stale": true,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 36000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "weld-1",
+          "timestamp": "2026-10-24T08:59:30.000Z",
+          "uptime_ms": 899000,
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 2050
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:06.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/weld-1/telemetry",
+        "mqtt_timestamp_ms": 1792832370000,
+        "ingested_at": "2026-10-24T09:00:06.000Z",
+        "timestamp": 1792832370000,
+        "stale": true,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 36000
+      }
+    ],
+    "per_device_latest": {
+      "conveyor-a": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550039",
+        "device_id": "conveyor-a",
+        "module_id": "conveyor",
+        "event_type": "telemetry",
+        "sequence": 39,
+        "observed_at": 1792832399000,
+        "received_at": "2026-10-24T09:00:01.000Z",
+        "received_at_ms": 1792832401000,
+        "boot_id": "boot-a-7f3c",
+        "units": {
+          "temperature": "centi_celsius",
+          "humidity": "centi_percent",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 2000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "conveyor-a",
+          "timestamp": "2026-10-24T08:59:59.000Z",
+          "uptime_ms": 3599000,
+          "structured": {
+            "state": "RUNNING",
+            "speed": 60,
+            "sensors": {
+              "temperature_centi_c": 2850,
+              "humidity_centi_percent": 6500
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:01.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/conveyor-a/telemetry",
+        "mqtt_timestamp_ms": 1792832399000,
+        "ingested_at": "2026-10-24T09:00:01.000Z",
+        "timestamp": 1792832399000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 2000
+      },
+      "sorting-1": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550042",
+        "device_id": "sorting-1",
+        "module_id": "sorting",
+        "event_type": "telemetry",
+        "sequence": 42,
+        "observed_at": 1792832401000,
+        "received_at": "2026-10-24T09:00:04.000Z",
+        "received_at_ms": 1792832404000,
+        "boot_id": "boot-b-2a91",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 3000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "sorting-1",
+          "timestamp": "2026-10-24T09:00:01.000Z",
+          "uptime_ms": 7199000,
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 2210
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:04.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/sorting-1/telemetry",
+        "mqtt_timestamp_ms": 1792832401000,
+        "ingested_at": "2026-10-24T09:00:04.000Z",
+        "timestamp": 1792832401000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 3000
+      },
+      "press-1": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550043",
+        "device_id": "press-1",
+        "module_id": "press",
+        "event_type": "telemetry",
+        "sequence": 43,
+        "observed_at": 1792832401000,
+        "received_at": "2026-10-24T09:00:05.000Z",
+        "received_at_ms": 1792832405000,
+        "boot_id": "boot-c-51d2",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 4000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "press-1",
+          "timestamp": "2026-10-24T09:00:01.000Z",
+          "uptime_ms": 903000,
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 1905
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:05.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/press-1/telemetry",
+        "mqtt_timestamp_ms": 1792832401000,
+        "ingested_at": "2026-10-24T09:00:05.000Z",
+        "timestamp": 1792832401000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 4000
+      },
+      "weld-1": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550044",
+        "device_id": "weld-1",
+        "module_id": "weld",
+        "event_type": "telemetry",
+        "sequence": 44,
+        "observed_at": 1792832370000,
+        "received_at": "2026-10-24T09:00:06.000Z",
+        "received_at_ms": 1792832406000,
+        "boot_id": "boot-d-77e1",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "degraded",
+          "reason": "stale",
+          "stale": true,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 36000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "weld-1",
+          "timestamp": "2026-10-24T08:59:30.000Z",
+          "uptime_ms": 899000,
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 2050
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:06.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/weld-1/telemetry",
+        "mqtt_timestamp_ms": 1792832370000,
+        "ingested_at": "2026-10-24T09:00:06.000Z",
+        "timestamp": 1792832370000,
+        "stale": true,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 36000
+      }
+    },
+    "overflow": false,
+    "overflow_limit": 1000,
+    "resync_required": false,
+    "oldest_retained_sequence": 1
+  },
+  "frames": [
+    {
+      "envelope_version": "1.0",
+      "frame_type": "event",
+      "event": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550045",
+        "device_id": "conveyor-a",
+        "module_id": "conveyor",
+        "event_type": "telemetry",
+        "sequence": 45,
+        "observed_at": 1792832402000,
+        "received_at": "2026-10-24T09:00:07.000Z",
+        "received_at_ms": 1792832407000,
+        "boot_id": "boot-a-7f3c",
+        "units": {
+          "temperature": "centi_celsius",
+          "humidity": "centi_percent",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 5000
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-structured",
+          "device_id": "conveyor-a",
+          "timestamp": "2026-10-24T09:00:02.000Z",
+          "uptime_ms": 3601000,
+          "structured": {
+            "state": "RUNNING",
+            "speed": 62,
+            "sensors": {
+              "temperature_centi_c": 2861,
+              "humidity_centi_percent": 6488
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:07.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/conveyor-a/telemetry",
+        "mqtt_timestamp_ms": 1792832402000,
+        "ingested_at": "2026-10-24T09:00:07.000Z",
+        "timestamp": 1792832402000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 5000
+      }
+    },
+    {
+      "envelope_version": "1.0",
+      "frame_type": "event",
+      "event": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550046",
+        "device_id": "sorting-1",
+        "module_id": "sorting",
+        "event_type": "status_offline",
+        "sequence": 46,
+        "observed_at": 1792832407000,
+        "received_at": "2026-10-24T09:00:08.000Z",
+        "received_at_ms": 1792832408000,
+        "boot_id": "boot-b-2a91",
+        "units": {},
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 1000
+        },
+        "payload": {
+          "status": "offline",
+          "reason": "keepalive_timeout"
+        },
+        "mqtt_topic": "smart-factory/sorting-1/status",
+        "mqtt_timestamp_ms": 1792832407000,
+        "ingested_at": "2026-10-24T09:00:08.000Z",
+        "timestamp": 1792832407000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 1000
+      }
+    },
+    {
+      "envelope_version": "1.0",
+      "frame_type": "event",
+      "event": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550046",
+        "device_id": "sorting-1",
+        "module_id": "sorting",
+        "event_type": "status_offline",
+        "sequence": 46,
+        "observed_at": 1792832407000,
+        "received_at": "2026-10-24T09:00:08.000Z",
+        "received_at_ms": 1792832408000,
+        "boot_id": "boot-b-2a91",
+        "units": {},
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "utc",
+          "latency_ms": 1000
+        },
+        "payload": {
+          "status": "offline",
+          "reason": "keepalive_timeout"
+        },
+        "mqtt_topic": "smart-factory/sorting-1/status",
+        "mqtt_timestamp_ms": 1792832407000,
+        "ingested_at": "2026-10-24T09:00:08.000Z",
+        "timestamp": 1792832407000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": true,
+        "latency_ms": 1000
+      }
+    },
+    {
+      "envelope_version": "1.0",
+      "frame_type": "event",
+      "event": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550048",
+        "device_id": "press-1",
+        "module_id": "press",
+        "event_type": "telemetry",
+        "sequence": 48,
+        "observed_at": null,
+        "received_at": "2026-10-24T09:00:10.000Z",
+        "received_at_ms": 1792832410000,
+        "boot_id": "boot-c-51d2",
+        "units": {
+          "temperature": "centi_celsius",
+          "speed": "rpm"
+        },
+        "quality": {
+          "status": "uncertain",
+          "reason": "unsynchronized_clock",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "device_monotonic",
+          "latency_ms": -1
+        },
+        "payload": {
+          "schema_version": "2.0",
+          "source_format": "amlp-raw",
+          "device_id": "press-1",
+          "timestamp": "2026-10-24T09:00:10.000Z",
+          "uptime_ms": 904000,
+          "raw": {
+            "received_at_ms": 904000,
+            "values": ["PRESS", "IDLE", "0"],
+            "pairs": {
+              "TEMPERATURE": "1880"
+            }
+          },
+          "structured": {
+            "state": "IDLE",
+            "speed": 0,
+            "sensors": {
+              "temperature_centi_c": 1880
+            }
+          },
+          "metadata": {
+            "gateway_id": "gateway-001",
+            "translated_at": "2026-10-24T09:00:10.100Z"
+          }
+        },
+        "mqtt_topic": "smart-factory/press-1/telemetry",
+        "mqtt_timestamp_ms": 904000,
+        "ingested_at": "2026-10-24T09:00:10.000Z",
+        "timestamp": 904000,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": false,
+        "latency_ms": -1
+      }
+    },
+    {
+      "envelope_version": "1.0",
+      "frame_type": "event",
+      "event": {
+        "envelope_version": "1.0",
+        "event_id": "11111111-2222-4333-8444-555555550047",
+        "device_id": "conveyor-a",
+        "module_id": "conveyor",
+        "event_type": "heartbeat",
+        "sequence": 47,
+        "observed_at": null,
+        "received_at": "2026-10-24T09:00:09.000Z",
+        "received_at_ms": 1792832409000,
+        "boot_id": "boot-a-7f3c",
+        "units": {},
+        "quality": {
+          "status": "good",
+          "reason": "",
+          "stale": false,
+          "out_of_order": false,
+          "clock_domain": "unknown",
+          "latency_ms": -1
+        },
+        "payload": {
+          "version": "v1.2.0",
+          "rssi": -64,
+          "heap_free": 40912
+        },
+        "mqtt_topic": "smart-factory/conveyor-a/heartbeat",
+        "mqtt_timestamp_ms": 0,
+        "ingested_at": "2026-10-24T09:00:09.000Z",
+        "timestamp": 0,
+        "stale": false,
+        "out_of_order": false,
+        "is_timestamp_synchronized": false,
+        "latency_ms": -1
+      }
+    },
+    {
+      "envelope_version": "1.0",
+      "frame_type": "gap",
+      "gap": {
+        "from_sequence": 49,
+        "to_sequence": 52,
+        "reason": "slow_consumer"
+      }
+    },
+    {
+      "envelope_version": "1.0",
+      "frame_type": "heartbeat",
+      "heartbeat": {
+        "high_watermark": 52,
+        "gateway_time": "2026-10-24T09:00:12.000Z"
+      }
+    }
+  ],
+  "expected_state": {
+    "unity": {
+      "consumer": "unity",
+      "devices": {
+        "conveyor-a": {
+          "device_id": "conveyor-a",
+          "connectivity": "online",
+          "data_state": "live",
+          "last_event_type": "heartbeat",
+          "last_sequence": 47,
+          "last_event_id": "11111111-2222-4333-8444-555555550047",
+          "boot_id": "boot-a-7f3c",
+          "observed_at": 1792832402000,
+          "received_at": "2026-10-24T09:00:09.000Z",
+          "clock_domain": "utc",
+          "quality_status": "good",
+          "quality_reason": "",
+          "units": {
+            "temperature": "centi_celsius",
+            "humidity": "centi_percent",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "RUNNING",
+            "speed": 62,
+            "temperature": 2861,
+            "humidity": 6488
+          },
+          "payload_state": "RUNNING"
+        },
+        "sorting-1": {
+          "device_id": "sorting-1",
+          "connectivity": "offline",
+          "data_state": "live",
+          "last_event_type": "status_offline",
+          "last_sequence": 46,
+          "last_event_id": "11111111-2222-4333-8444-555555550046",
+          "boot_id": "boot-b-2a91",
+          "observed_at": 1792832401000,
+          "received_at": "2026-10-24T09:00:08.000Z",
+          "clock_domain": "utc",
+          "quality_status": "good",
+          "quality_reason": "",
+          "units": {
+            "temperature": "centi_celsius",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "IDLE",
+            "speed": 0,
+            "temperature": 2210
+          },
+          "payload_state": "IDLE"
+        },
+        "press-1": {
+          "device_id": "press-1",
+          "connectivity": "unknown",
+          "data_state": "uncertain",
+          "last_event_type": "telemetry",
+          "last_sequence": 48,
+          "last_event_id": "11111111-2222-4333-8444-555555550048",
+          "boot_id": "boot-c-51d2",
+          "observed_at": null,
+          "received_at": "2026-10-24T09:00:10.000Z",
+          "clock_domain": "device_monotonic",
+          "quality_status": "uncertain",
+          "quality_reason": "unsynchronized_clock",
+          "units": {
+            "temperature": "centi_celsius",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "IDLE",
+            "speed": 0,
+            "temperature": 1880
+          },
+          "payload_state": "IDLE"
+        },
+        "weld-1": {
+          "device_id": "weld-1",
+          "connectivity": "unknown",
+          "data_state": "stale",
+          "last_event_type": "telemetry",
+          "last_sequence": 44,
+          "last_event_id": "11111111-2222-4333-8444-555555550044",
+          "boot_id": "boot-d-77e1",
+          "observed_at": 1792832370000,
+          "received_at": "2026-10-24T09:00:06.000Z",
+          "clock_domain": "utc",
+          "quality_status": "degraded",
+          "quality_reason": "stale",
+          "units": {
+            "temperature": "centi_celsius",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "IDLE",
+            "speed": 0,
+            "temperature": 2050
+          },
+          "payload_state": "IDLE"
+        }
+      },
+      "last_applied_sequence": 48,
+      "resync_required": true,
+      "gap_detected": true,
+      "applied_event_ids": [
+        "11111111-2222-4333-8444-555555550038",
+        "11111111-2222-4333-8444-555555550039",
+        "11111111-2222-4333-8444-555555550040",
+        "11111111-2222-4333-8444-555555550041",
+        "11111111-2222-4333-8444-555555550042",
+        "11111111-2222-4333-8444-555555550043",
+        "11111111-2222-4333-8444-555555550044",
+        "11111111-2222-4333-8444-555555550045",
+        "11111111-2222-4333-8444-555555550046",
+        "11111111-2222-4333-8444-555555550047",
+        "11111111-2222-4333-8444-555555550048"
+      ],
+      "dropped_duplicate_event_ids": [
+        "11111111-2222-4333-8444-555555550046"
+      ]
+    },
+    "react": {
+      "consumer": "react",
+      "devices": {
+        "conveyor-a": {
+          "device_id": "conveyor-a",
+          "connectivity": "online",
+          "data_state": "live",
+          "last_event_type": "heartbeat",
+          "last_sequence": 47,
+          "last_event_id": "11111111-2222-4333-8444-555555550047",
+          "boot_id": "boot-a-7f3c",
+          "observed_at": 1792832402000,
+          "received_at": "2026-10-24T09:00:09.000Z",
+          "clock_domain": "utc",
+          "quality_status": "good",
+          "quality_reason": "",
+          "units": {
+            "temperature": "centi_celsius",
+            "humidity": "centi_percent",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "RUNNING",
+            "speed": 62,
+            "temperature": 2861,
+            "humidity": 6488
+          },
+          "payload_state": "RUNNING"
+        },
+        "sorting-1": {
+          "device_id": "sorting-1",
+          "connectivity": "offline",
+          "data_state": "live",
+          "last_event_type": "status_offline",
+          "last_sequence": 46,
+          "last_event_id": "11111111-2222-4333-8444-555555550046",
+          "boot_id": "boot-b-2a91",
+          "observed_at": 1792832401000,
+          "received_at": "2026-10-24T09:00:08.000Z",
+          "clock_domain": "utc",
+          "quality_status": "good",
+          "quality_reason": "",
+          "units": {
+            "temperature": "centi_celsius",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "IDLE",
+            "speed": 0,
+            "temperature": 2210
+          },
+          "payload_state": "IDLE"
+        },
+        "press-1": {
+          "device_id": "press-1",
+          "connectivity": "unknown",
+          "data_state": "uncertain",
+          "last_event_type": "telemetry",
+          "last_sequence": 48,
+          "last_event_id": "11111111-2222-4333-8444-555555550048",
+          "boot_id": "boot-c-51d2",
+          "observed_at": null,
+          "received_at": "2026-10-24T09:00:10.000Z",
+          "clock_domain": "device_monotonic",
+          "quality_status": "uncertain",
+          "quality_reason": "unsynchronized_clock",
+          "units": {
+            "temperature": "centi_celsius",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "IDLE",
+            "speed": 0,
+            "temperature": 1880
+          },
+          "payload_state": "IDLE"
+        },
+        "weld-1": {
+          "device_id": "weld-1",
+          "connectivity": "unknown",
+          "data_state": "stale",
+          "last_event_type": "telemetry",
+          "last_sequence": 44,
+          "last_event_id": "11111111-2222-4333-8444-555555550044",
+          "boot_id": "boot-d-77e1",
+          "observed_at": 1792832370000,
+          "received_at": "2026-10-24T09:00:06.000Z",
+          "clock_domain": "utc",
+          "quality_status": "degraded",
+          "quality_reason": "stale",
+          "units": {
+            "temperature": "centi_celsius",
+            "speed": "rpm"
+          },
+          "values": {
+            "state": "IDLE",
+            "speed": 0,
+            "temperature": 2050
+          },
+          "payload_state": "IDLE"
+        }
+      },
+      "last_applied_sequence": 48,
+      "resync_required": true,
+      "gap_detected": true,
+      "applied_event_ids": [
+        "11111111-2222-4333-8444-555555550038",
+        "11111111-2222-4333-8444-555555550039",
+        "11111111-2222-4333-8444-555555550040",
+        "11111111-2222-4333-8444-555555550041",
+        "11111111-2222-4333-8444-555555550042",
+        "11111111-2222-4333-8444-555555550043",
+        "11111111-2222-4333-8444-555555550044",
+        "11111111-2222-4333-8444-555555550045",
+        "11111111-2222-4333-8444-555555550046",
+        "11111111-2222-4333-8444-555555550047",
+        "11111111-2222-4333-8444-555555550048"
+      ],
+      "dropped_duplicate_event_ids": [
+        "11111111-2222-4333-8444-555555550046"
+      ]
+    }
+  }
+}
