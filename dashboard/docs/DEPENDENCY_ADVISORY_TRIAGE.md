@@ -348,8 +348,9 @@ evidence below. The gate was verified on that exact head:
 | ADR Lint & Architecture Governance Gate | push | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065042062 |
 | CI | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065045033 |
 
-The PR head carries one further **documentation-only** commit on top of `f823cff`, which re-runs the
-identical gate without changing any dependency, workflow or build integrity input.
+The PR head carries two further **documentation-only** commits on top of `f823cff` (`d309039` and
+`d48280c`), which re-run the identical gate without changing any dependency, workflow or build
+integrity input. §5.2 records the independently re-verified runs at the reviewed head itself.
 
 The artefacts produced by the exact-head Dashboard CI run were downloaded and inspected:
 
@@ -360,15 +361,28 @@ The artefacts produced by the exact-head Dashboard CI run were downloaded and in
 - The CI build artefact's per-file `SHA256SUMS` is **byte-identical** to the locally built
   manifest (`index-Bher25rv.css`, `index-mj-AmJLy.js`, `index.html`), so the build is reproducible
   across the Linux CI runner and the local Windows workstation.
-- The CI SBOM contains 278 components against the local full-tree SBOM's 277. The delta is
-  entirely platform-specific **optional** build-toolchain binaries: CI adds
-  `@esbuild/linux-x64`, `@napi-rs/lzma-linux-x64-gnu`, `@rollup/rollup-linux-x64-gnu` and
-  `@rollup/rollup-linux-x64-musl`, and omits the three Windows counterparts
-  (`@esbuild/win32-x64`, `@rollup/rollup-win32-x64-gnu`, `@rollup/rollup-win32-x64-msvc`).
-  Every component in the delta carries CycloneDX `scope: optional` and
+- The CI SBOM contains **280** component entries over **278** distinct package versions, against the
+  local full-tree SBOM's **277** entries over **277** distinct versions. The two trees must be
+  compared *by distinct version*, because npm 10.9.9 (CI) emits one `components` entry per
+  **install path** while npm 12.0.2 (local) collapses same-version duplicates: `eslint-visitor-keys@5.0.1`
+  appears three times in the CI SBOM (the `eslint/`, `espree/` and `@typescript-eslint/visitor-keys/`
+  nested paths) and once locally, and `eslint-visitor-keys@3.4.3` once in each. At the distinct-version
+  level the delta is exactly the four platform-specific **optional** build-toolchain binaries that CI
+  adds — `@esbuild/linux-x64`, `@napi-rs/lzma-linux-x64-gnu`, `@rollup/rollup-linux-x64-gnu` and
+  `@rollup/rollup-linux-x64-musl` — against the three Windows counterparts the local tree carries
+  instead (`@esbuild/win32-x64`, `@rollup/rollup-win32-x64-gnu`, `@rollup/rollup-win32-x64-msvc`).
+  Every component in that delta carries CycloneDX `scope: optional` and
   `cdx:npm:package:development: true`, so the delta is confined to the development/build side
   and does not touch the 17-package production closure. No package differs in version, and no
   non-optional package differs in presence between the two trees.
+- The CycloneDX `scope` field is **not** comparable across the two trees: npm 10.9.9 labels 266 of
+  the CI SBOM's 280 entries `optional`, whereas npm 12.0.2 labels only 6 of the local tree's 277
+  entries `optional` (and marks the same `eslint-visitor-keys` versions `required` rather than
+  `optional`). Scope labels must therefore not be used to reconcile the two SBOMs; the
+  `cdx:npm:package:development` flag and the `name@version` set are the comparable signals. Using
+  the `development` flag, the CI tree's **17** non-development components are exactly the **17**
+  components of the derived runtime SBOM — an empty symmetric difference — so the runtime partition
+  is confirmed independently from the CI artefact itself, not only from the local tree.
 - Note the canonical Dashboard CI workflow records the **full-tree** SBOM (`sbom.cdx.json`); the
   separated runtime/full pair and the closure cross-check are produced by
   `npm run release:evidence` (`dashboard/scripts/release-evidence.mjs`), which this change adds.
@@ -385,6 +399,58 @@ These remain **external acceptance gaps** and are *not* claimed as satisfied by 
 - Live multi-container integration across the gateway, bridge and factory control services.
 
 The unit CI results and build integrity above are **not** evidence of production deployment.
+
+The four gaps above are tracked as open in this repository's own issue tracker (issue #156, OPEN) and
+are recorded here as external acceptance gaps. No text in this PR body, in this document, or in the
+Dashboard CI workflow claims production deployment from unit CI; the workflow's evidence steps are
+explicitly non-blocking advisory/SBOM material, and the PR body's Hardware Status section states
+"Dashboard frontend only — no physical hardware connected. Evidence level: L0 Static / L2 Simulation."
+
+### 5.2 Independent re-verification at the reviewed head
+
+The advisory and release-evidence claims in §1, §4 and §5.0.1 were **re-derived independently** at the
+reviewed head `d48280cddd116097e29898b3d5838a8548abdc7a` from a fresh checkout of
+`origin/feat/issue-149-design-system-nav`, using the committed lockfile and the exact-head CI build
+artefacts — not from the author's local machine. The re-derivation reproduced every published figure
+and additionally corrected one SBOM counting basis (see §5.0.1).
+
+| Check | Command | Independently observed result |
+| :--- | :--- | :--- |
+| Deterministic install | `npm ci` | 279 packages added, 280 audited, `found 0 vulnerabilities` |
+| Advisory scan (raw JSON) | `npm audit --json` | `"vulnerabilities": {}`; `total: 0` (info/low/moderate/high/critical all 0) |
+| Pre-upgrade baseline | `npm audit --json` on the `af5e47f` lockfile | 8 advisories — 2 critical, 1 high, 5 moderate — matching §1 |
+| Pre-upgrade dependency-path analysis | `dependency-scope.mjs` `classifyScope` over the `af5e47f` lockfile | `react-router` and `react-router-dom` runtime-reachable; `tinypool`, `vitest`, `vite`, `@vitest/mocker`, `esbuild`, `vite-node` development/build only — matching §2 |
+| Release SBOM separation | `npm run release:evidence` | 0 advisories, 17-package production closure, closure agreement consistent; 17 runtime / 260 development-build / 277 total |
+| Runtime closure (physical) | `npm ci --omit=dev --ignore-scripts` into a clean directory | **17** packages on disk, matching the runtime SBOM's 17 `name@version` entries exactly (empty set difference) |
+| Pre-upgrade closure (physical) | `npm ci --omit=dev --ignore-scripts` on the `af5e47f` lockfile | **16** packages, confirming the 16 → 17 closure change in §4.2 |
+| `npm sbom --omit=dev` under-reporting | `npm sbom --omit=dev --sbom-format=cyclonedx` on npm **12.0.2** and npm **10.9.9** | **9** components on both versions; `react` and `react-dom` absent — confirming §4.1 on both npm versions |
+| Unit tests | `npm run test` | 62 passed across 6 files (24 in `dependency-scope.test.ts`) |
+| Typecheck / lint | `npm run typecheck` / `npm run lint` | exit 0 / 0 errors, 11 warnings — matching §5 |
+| Production build + integrity | `npm run build:integrity`; `cd dist && sha256sum -c SHA256SUMS` | 3 files hashed; all three `OK` |
+| Build reproducibility | `diff` of local `dist/SHA256SUMS` against the CI artefact's | byte-identical |
+| ADR governance gate | `python scripts/check_adrs.py`; `python -m pytest scripts/tests/test_check_adrs.py -q` | 16 ADRs validated; 6 passed |
+
+The exact-head CI runs at `d48280c` were also confirmed **SUCCESS** independently of the `f823cff`
+anchor cited above:
+
+| Workflow | Job | Event | Result | URL |
+| :--- | :--- | :--- | :--- | :--- |
+| ADR Lint & Architecture Governance Gate | `ADR Lint & Impact Check` | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065612440 |
+| ADR Lint & Architecture Governance Gate | `ADR Lint & Impact Check` | push | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065608458 |
+| Dashboard CI | `Dashboard Quality & Build Gate` | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065612514 |
+| Dashboard CI | `Dashboard Quality & Build Gate` | push | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065608435 |
+| CI | (repository CI) | pull_request | **success** | https://github.com/vinhphan812/smart-factory/actions/runs/40065612428 |
+
+The exact-head Dashboard CI artefact (`dashboard-dist-0c64d024fea7adacf626d8be13eb8d925624d413`,
+downloaded from run `40065612514`) was inspected directly: `npm-audit-summary.txt` reads
+`found 0 vulnerabilities`; `npm-audit.json` reports `"total": 0` with an empty `vulnerabilities`
+object and an identical `metadata.dependencies` block to the locally reproduced audit
+(`prod: 18, dev: 312, optional: 53, peer: 8, total: 329`); `sha256sum-verification.txt` reports all
+three built files `OK`; and `dashboard-dist.tar.gz.sha256` matches the recomputed digest of the
+downloaded tarball (`8d99f2ca00817eb8850bb177ee6e610d88bf94444b39a34d48e5e7bdf22b6a40`).
+
+**Evidence level of this re-verification: L0 static + L1 reproducible execution + L2 simulation.**
+No L3/L4/L5 hardware, deployed-environment or HIL evidence is claimed or produced.
 
 ---
 
