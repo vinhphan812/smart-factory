@@ -1,6 +1,7 @@
 # ==============================================================================
 # Routing truth table (path → workflow):
 #   adr/**, docs/**, .github/workflows/**          → adr-lint.yml  (this file)
+#   edge-ai-robot/**, integration-tests/**         → edge-ai-ci.yml
 #   esp32-ukit-bridge/**                          → bridge-ci.yml
 #   factory-control/**                            → factory-control-ci.yml
 #   iot-gateway/**                                → gateway-ci.yml
@@ -8,8 +9,10 @@
 # Module ownership:
 #   adr/                          : global governance (all modules)
 #   docs/                         : global documentation
+#   edge-ai-robot/                : robot adapter + bounded skills + FIWARE response policy
 #   esp32-ukit-bridge/            : ESP32 ↔ MEGA-uKit firmware + AMLP bridge
 #   factory-control/              : factory controller simulator + PLC adapter
+#   integration-tests/            : cross-module scenario harness (L2 simulation)
 #   iot-gateway/                 : MQTT broker + HTTP/WebSocket API server
 # ==============================================================================
 

@@ -4,11 +4,14 @@ This directory contains the Docker Compose configuration for deploying the FIWAR
 
 ## Components
 
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| **orion-ld** | `quay.io/fiware/orion-ld:1.5.0` | 1026 | NGSI-LD v1.3.1 Context Broker |
-| **mongodb** | `mongo:7.0` | 27017 | Orion-LD backend database |
-| **json-ld-context** | `nginx:alpine` | 3000 | JSON-LD @context definitions |
+| Service | Image | Pinned digest | Port | Purpose |
+|---------|-------|---------------|------|---------|
+| **orion-ld** | `quay.io/fiware/orion-ld:1.5.0` | `sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2` | 1026 | NGSI-LD v1.3.1 Context Broker |
+| **mongodb** | `mongo:7.0` | `sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7` | 27017 | Orion-LD backend database |
+| **json-ld-context** | `nginx:alpine` | `sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417` | 3000 | JSON-LD @context definitions |
+
+All three images are referenced by immutable digest in
+`docker-compose.fiware.yml`; the tag above is kept for human readability only.
 
 ## Quick Start
 

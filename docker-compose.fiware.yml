@@ -11,14 +11,26 @@
 #   curl http://localhost:27017
 #   curl http://localhost:3000/health
 #
-# Versions:
+# Versions (every image is pinned by immutable digest, Issue #204 / ADR-0017):
 #   - Orion-LD: 1.5.0 (NGSI-LD v1.3.1 compliant)
+#       quay.io/fiware/orion-ld:1.5.0
+#       sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2
 #   - MongoDB: 7.0 (LTS)
+#       mongo:7.0
+#       sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7
 #   - JSON-LD Context: nginx:alpine serving static contexts
+#       nginx:alpine
+#       sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+#
+# Digests resolved from the registry manifest API (Docker Hub / Quay) and
+# cross-checked by hashing the returned manifest body. The human-readable tag
+# is kept next to each digest as a comment so the intended version stays
+# visible in review.
 
 services:
   mongodb:
-    image: mongo:7.0
+    # mongo:7.0
+    image: mongo@sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7
     container_name: fiware-mongodb
     restart: unless-stopped
     ports:
@@ -40,7 +52,8 @@ services:
       - fiware-net
 
   orion-ld:
-    image: quay.io/fiware/orion-ld:1.5.0
+    # quay.io/fiware/orion-ld:1.5.0
+    image: quay.io/fiware/orion-ld@sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2
     container_name: fiware-orion-ld
     restart: unless-stopped
     ports:
@@ -80,7 +93,8 @@ services:
   # JSON-LD Context Service for Smart Factory entities
   # Serves custom @context definitions for factory entities
   json-ld-context:
-    image: nginx:alpine
+    # nginx:alpine
+    image: nginx@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
     container_name: fiware-json-ld-context
     restart: unless-stopped
     ports:
