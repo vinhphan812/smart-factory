@@ -114,6 +114,14 @@ class EventStore:
         self._engine = create_async_engine(
             database_url, echo=False, connect_args=connect_args
         )
+        if database_url.startswith("sqlite"):
+            from sqlalchemy import event
+            @event.listens_for(self._engine.sync_engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
         self._session_maker = async_sessionmaker(
             self._engine, class_=AsyncSession, expire_on_commit=False
         )
@@ -226,6 +234,28 @@ class EventStore:
             session.add(GatewayMetadata(key=self._SEQUENCE_KEY, value="1"))
             await session.commit()
             return 1
+
+    async def seed_sequence_from_high_watermark(self, normalizer: Any) -> None:
+        """Align the normalizer's sequence counter with the stored state.
+
+        The normalizer owns the sequence number assigned to every event, but
+        its counter lives in memory only. After a restart it would restart at
+        1, producing sequence numbers that sort *below* the ones already in
+        the store. The retention pruner deletes the lowest sequences first,
+        so those freshly written events are purged immediately and the
+        reported high-watermark freezes — the gateway silently loses every
+        event written after a restart.
+
+        Seeding the counter from the persisted high-watermark (and from the
+        persisted counter, when present) keeps the sequence space strictly
+        monotonic across restarts.
+        """
+        high = await self.high_watermark()
+        persisted = await self._load_sequence()
+        seed = max(high, persisted)
+        if seed:
+            normalizer.seed_sequence(seed)
+            logger.info("Seeded event sequence from persisted high-watermark: %d", seed)
 
     # ------------------------------------------------------------------
     # Persistence

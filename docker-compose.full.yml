@@ -1,0 +1,520 @@
+# docker-compose.full.yml
+# Full-stack Smart Factory — all services except hardware-in-the-loop.
+# No ESP32, no physical uKit motors. Mock MQTT publisher drives the simulation.
+#
+# Usage:
+#   docker compose -f docker-compose.full.yml up -d
+#   docker compose -f docker-compose.full.yml ps
+#   docker compose -f docker-compose.full.yml logs -f iot-gateway
+#
+# Teardown:
+#   docker compose -f docker-compose.full.yml down -v
+#
+# ── Supply-chain pinning (#244 F5) ───────────────────────────────────────────
+# Every container image below is referenced by an immutable OCI manifest
+# digest, not by a floating tag. A tag such as `mongo:4.4` can be re-pointed
+# at different bytes by the registry at any time; a digest cannot. The tag is
+# retained only as human-readable provenance next to the digest.
+#
+#   eclipse-mosquitto:2  sha256:860aeb5d63ce509508f6dcfb2bc8a1c1dd2bc60555b562b45ce90e52d8dabb0f
+#   mongo:4.4            sha256:4be76f674fc4b27859816811b8baa3c51830eb1dbf4ca81a51e26b79edd662ef
+#   quay.io/fiware/orion-ld:1.5.0
+#                        sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2
+#   nginx:alpine         sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+#   python:3.12-slim     sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+#   node:20-alpine       sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#
+# HOW THESE DIGESTS WERE RESOLVED (2026-10-24, reproducible):
+#   1. Docker Hub images (mongo, eclipse-mosquitto, nginx, python, node):
+#      a registry token was obtained from
+#      https://auth.docker.io/token?service=registry.docker.io&scope=repository:<repo>:pull
+#      and the manifest was fetched with
+#      GET https://registry-1.docker.io/v2/<repo>/manifests/<tag>
+#      Accept: application/vnd.oci.image.index.v1+json,
+#              application/vnd.docker.distribution.manifest.list.v2+json,
+#              application/vnd.oci.image.manifest.v1+json,
+#              application/vnd.docker.distribution.manifest.v2+json
+#   2. quay.io/fiware/orion-ld:1.5.0:
+#      GET https://quay.io/v2/fiware/orion-ld/manifests/1.5.0 (same Accept set)
+#   3. CROSS-CHECK: for every image the sha256 of the returned manifest body
+#      was computed and compared with the Docker-Content-Digest response
+#      header. All six digests matched byte for byte, so the digest is the
+#      hash of the manifest actually served by the registry — not a
+#      hand-written value. A digest that could not be resolved this way was
+#      left unpinned and reported instead of being invented.
+#   4. Independent second source: `docker manifest inspect -v <image>` was
+#      run for each image and its per-platform descriptors were consistent
+#      with the same manifest tree.
+#
+# Digests are enforced by `scripts/check_production_compose.py`, which fails
+# closed if any production-profile service loses its digest.
+#
+# ── Operator-supplied artefacts (NOT in the repository) ──────────────────────
+# The production broker needs two artefacts that are deliberately absent
+# from git. Both are supplied by the operator at deployment time:
+#
+#   infrastructure/mqtt-broker/config/tls/ca.crt       (CA trust anchor)
+#   infrastructure/mqtt-broker/config/tls/server.crt    (broker server cert)
+#   infrastructure/mqtt-broker/config/tls/server.key    (broker server key)
+#
+# They are produced by `infrastructure/mqtt-broker/config/tls/generate-certs.sh`
+# and `.../create-creds.sh`, and are gitignored (.gitignore lines 46-52) so
+# that private key material can never enter the repository. The broker
+# entrypoint fails closed when TLS is enabled but these files are absent:
+# it exits 1 with "TLS enabled but certificate files missing" rather than
+# starting a broker without a trust chain.
+#
+# The ACL file is likewise not committed: `infrastructure/mqtt-broker/
+# entrypoint.d/init.sh` writes `/mosquitto/config/acl` and
+# `/mosquitto/config/passwd` at container start from the operator-supplied
+# usernames and passwords. The guard requires that this entrypoint is
+# mounted, so an ACL-less broker cannot be started from this file.
+#
+# ── Orion-LD / MongoDB version compatibility ────────────────────────────────
+# The pinned pair is fiware/orion-ld:1.5.0 + mongo:4.4, and this pairing is
+# load-bearing rather than incidental:
+#
+#   * Orion-LD 1.5.0 embeds the MongoDB C++ *legacy* driver. That driver
+#     speaks the legacy OP_QUERY wire protocol. Verified directly in the
+#     pinned image: /usr/lib/x86_64-linux-gnu/libmongoclient.a is present
+#     with the legacy mongo::DBClientWithCommands symbols, and no
+#     libmongocxx / libbsoncxx is present.
+#     MongoDB deprecated the legacy opcodes in 5.0 and REMOVED them in
+#     5.1 (https://www.mongodb.com/docs/manual/legacy-opcodes: "Deprecated
+#     as of MongoDB 5.0. Unsupported as of MongoDB 5.1."), so a 5.1+
+#     server makes the broker log "Unsupported OP_QUERY command:
+#     listDatabases" and then "mongo::MsgAssertionException", and never
+#     becomes ready. 4.4 is safely below that boundary, is the newest
+#     server the legacy driver is tested against here, and is the tested
+#     pairing for the pinned Orion-LD digest above.
+#   * MongoDB 4.4 ships the legacy `mongo` shell; `mongosh` only exists from
+#     6.0 onwards, so the health probe must invoke `mongo`.
+#   * The MongoDB data volume must be created by a 4.x server. A volume
+#     previously initialised by 7.0 carries featureCompatibilityVersion 7.0
+#     and makes 4.4 refuse to start ("Wrong mongod version ... expected
+#     '4.4' or '4.9' or '5.0'"). Recreate the volume when downgrading.
+#
+# Upgrading either component therefore requires re-pinning BOTH digests and
+# re-running the L2 E2E simulation; changing one side alone is not a
+# supported configuration.
+#
+# ── Image / probe pinning notes ──────────────────────────────────────────────
+# These are not stylistic choices. Each one broke the stack before it was
+# fixed, and each was reproduced with a real `docker compose up` run.
+#
+#   * orion-ld     1.5.0 reads ORIONLD_MONGO_HOST / ORIONLD_MONGO_DB.
+#                  ORION_LD_MONGO_HOST is silently ignored and the broker then
+#                  tries to reach localhost:27017 inside its own container.
+#   * orion-ld     GET /version answers HTTP 200. GET /health is NOT a
+#                  registered Orion-LD service and answers HTTP 400
+#                  ("service not found"), so it can never be a liveness probe.
+#   * python:3.12-slim has neither curl nor wget. Every probe for a Python
+#                  service uses the interpreter's own urllib instead.
+#
+# ── Deployment profiles (#182 SPEC-2) ────────────────────────────────────────
+# Selected with COMPOSE_PROFILES (comma separated). Services without a
+# `profiles:` key belong to every profile.
+#
+#   LOCAL_SIM          (default) — the whole stack below; no physical hardware.
+#   LAB_HIL            adds `mock-hil-bridge`, a software device simulator.
+#                      Evidence produced with it is L2 simulation; it never
+#                      implies HIL (L3/L4) or integrated (L5) evidence.
+#   PRODUCTION_READONLY  adds `factory-control-readonly`, a control plane that
+#                      can observe but cannot actuate. The actuating services
+#                      are excluded from that profile, so a read-only
+#                      deployment has no command path to a device at all.
+#
+# Example:
+#   COMPOSE_PROFILES=LAB_HIL docker compose -f docker-compose.full.yml up -d
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────────────
+
+  mqtt:
+    # Docker Hub OCI index digest for eclipse-mosquitto:2, resolved 2026-10-24.
+    image: eclipse-mosquitto:2@sha256:860aeb5d63ce509508f6dcfb2bc8a1c1dd2bc60555b562b45ce90e52d8dabb0f
+    container_name: sf-mqtt
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
+    restart: unless-stopped
+    ports:
+      - "${MQTT_TLS_BIND:-127.0.0.1}:8883:8883"
+    volumes:
+      - mqtt-data:/mosquitto/data
+      - mqtt-conf:/mosquitto/config
+      - ./infrastructure/mqtt-broker/entrypoint.d:/docker-entrypoint.d:ro
+      - ./infrastructure/mqtt-broker/config/tls:/mosquitto/certs:ro
+    environment:
+      MQTT_TLS_ENABLED: "true"
+      # Production profiles expose no plaintext listener, including on sf-net.
+      MQTT_TLS_ONLY: "true"
+      MQTT_TLS_LISTENER_ADDRESS: "0.0.0.0"
+      MQTT_PORT: "8883"
+      MQTT_ADMIN_USERNAME: "${MQTT_ADMIN_USERNAME:?required}"
+      MQTT_ADMIN_PASSWORD: "${MQTT_ADMIN_PASSWORD:?required}"
+      MQTT_GW_USERNAME: "${MQTT_GW_USERNAME:?required}"
+      MQTT_GW_PASSWORD: "${MQTT_GW_PASSWORD:?required}"
+      MQTT_BRIDGE_USERNAME: "${MQTT_BRIDGE_USERNAME:?required}"
+      MQTT_BRIDGE_PASSWORD: "${MQTT_BRIDGE_PASSWORD:?required}"
+    env_file:
+      - path: .env
+        required: false
+    entrypoint: ["sh", "/docker-entrypoint.d/init.sh"]
+    healthcheck:
+      # The broker runs with allow_anonymous false, so the probe MUST
+      # authenticate. An unauthenticated probe is rejected with
+      # "Connection Refused: not authorised" and the service stays unhealthy,
+      # which gates every dependent service on service_healthy.
+      # The admin credential has readwrite on smart-factory/#.
+      test:
+        - "CMD-SHELL"
+        - >-
+          mosquitto_pub -h localhost -p 8883
+          --cafile /mosquitto/certs/ca.crt
+          -u "$$MQTT_ADMIN_USERNAME" -P "$$MQTT_ADMIN_PASSWORD"
+          -t "smart-factory/healthcheck" -m "ping" -q 1
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sf-net
+
+  # ── FIWARE Context Broker ─────────────────────────────────────────────────
+
+  mongodb:
+    # Docker Hub OCI index digest for mongo:4.4, resolved 2026-10-24.
+    image: mongo:4.4@sha256:4be76f674fc4b27859816811b8baa3c51830eb1dbf4ca81a51e26b79edd662ef
+    container_name: sf-mongodb
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    env_file:
+      - path: ./fiware/mongodb.env
+        required: false
+    healthcheck:
+      # mongo:4.4 ships the legacy `mongo` shell (mongosh only exists from
+      # mongo:6.0 onwards), so the probe must use `mongo`.
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sf-net
+
+  orion-ld:
+    # Quay manifest digest for fiware/orion-ld:1.5.0, resolved 2026-10-24.
+    image: quay.io/fiware/orion-ld:1.5.0@sha256:dcb8c4100769b2a873b6d16c8ed501515fe3fb9ebde8d0fb4c3129ef07671bd2
+    container_name: sf-orion-ld
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
+    restart: unless-stopped
+    ports:
+      - "${ORION_LD_PORT:-1026}:1026"
+    environment:
+      ORION_LD_HOST: 0.0.0.0
+      ORION_LD_PORT: 1026
+      # Orion-LD 1.5.0 reads ORIONLD_MONGO_HOST / ORIONLD_MONGO_DB.
+      # ORION_LD_MONGO_HOST is silently ignored and the broker then tries to
+      # reach localhost:27017 inside its own container.
+      ORIONLD_MONGO_HOST: mongodb
+      ORIONLD_MONGO_DB: ${MONGODB_DB:-orion}
+      ORION_LD_LOG_LEVEL: info
+      ORION_LD_USE_NGSI_LD_API: "true"
+      ORION_LD_INFORMATION_MODEL: ngsi-ld
+      ORION_LD_CORS_ORIGINS: "${ORION_LD_CORS_ORIGINS:?required}"
+      ORION_LD_MAX_LIFETIME: 0
+      ORION_LD_ENTITY_ID_REGEX: ".*"
+    env_file:
+      - path: ./fiware/orion-ld.env
+        required: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      # GET /version is the Orion-LD route that answers 2xx.
+      # GET /health answers HTTP 400 ("service not found").
+      test: ["CMD", "curl", "-sf", "http://localhost:1026/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - sf-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  json-ld-context:
+    # Docker Hub OCI index digest for nginx:alpine, resolved 2026-10-24.
+    image: nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+    container_name: sf-json-ld-ctx
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION", "PRODUCTION_READONLY"]
+    restart: unless-stopped
+    ports:
+      - "${JSON_LD_PORT:-3000}:80"
+    volumes:
+      - ./fiware/contexts:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - sf-net
+
+  # ── Core Services ────────────────────────────────────────────────────────
+
+  iot-gateway:
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+    container_name: sf-iot-gateway
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -e .[dev] && exec iot-gateway"
+    ports:
+      - "${GW_WS_PORT:-8000}:8000"
+      - "${GW_HTTP_PORT:-8001}:8001"
+    volumes:
+      - ./iot-gateway:/app
+      - gw-data:/app/data
+      - ./infrastructure/mqtt-broker/config/tls:/mosquitto/certs:ro
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "8883"
+      MQTT_TLS_ENABLED: "true"
+      MQTT_CA_CERT: "/mosquitto/certs/ca.crt"
+      MQTT_USERNAME: "${MQTT_GW_USERNAME:?required}"
+      MQTT_PASSWORD: "${MQTT_GW_PASSWORD:?required}"
+      DATABASE_URL: "sqlite+aiosqlite:///data/gateway.db"
+      WS_HOST: "0.0.0.0"
+      WS_PORT: "8000"
+      WS_HTTP_PORT: "8001"
+      MAX_EVENTS: "${MAX_EVENTS:-10000}"
+      SAFETY_OPERATOR_TOKEN: "${SAFETY_OPERATOR_TOKEN:?required_for_actuation}"
+      DEPLOYMENT_PROFILE: "${DEPLOYMENT_PROFILE:-LOCAL_SIM}"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      # python:3.12-slim has no curl binary — probe with urllib instead.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - sf-net
+
+  factory-control:
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+    container_name: sf-factory-control
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -e . && uvicorn factory_control.api:app --host 0.0.0.0 --port 8001"
+    ports:
+      - "${FC_PORT:-8002}:8001"
+    volumes:
+      - ./factory-control:/app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "8883"
+      MQTT_TLS_ENABLED: "true"
+      MQTT_GATEWAY_URL: "http://iot-gateway:8001"
+      SAFETY_OPERATOR_TOKEN: "${SAFETY_OPERATOR_TOKEN:?required_for_actuation}"
+      DEPLOYMENT_PROFILE: "${DEPLOYMENT_PROFILE:-LOCAL_SIM}"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+      iot-gateway:
+        condition: service_healthy
+    healthcheck:
+      # python:3.12-slim has no curl binary — probe with urllib instead.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - sf-net
+
+  # Read-only control plane for the PRODUCTION_READONLY profile.
+  # It is a *separate* service (not a flag) so a read-only deployment has no
+  # actuating code path to a device at all.
+  factory-control-readonly:
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+    container_name: sf-factory-control-readonly
+    profiles: ["PRODUCTION_READONLY"]
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -e . && uvicorn factory_control.api:app --host 0.0.0.0 --port 8001"
+    ports:
+      - "${FC_RO_PORT:-8004}:8001"
+    volumes:
+      - ./factory-control:/app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "8883"
+      MQTT_TLS_ENABLED: "true"
+      MQTT_GATEWAY_URL: ""
+      DEPLOYMENT_PROFILE: "PRODUCTION_READONLY"
+      # A read-only deployment never carries an actuation credential.
+      SAFETY_OPERATOR_TOKEN: ""
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - sf-net
+
+  edge-ai-robot:
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+    container_name: sf-edge-ai-robot
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -e . && uvicorn edge_ai_robot.api.app:app --host 0.0.0.0 --port 8002"
+    ports:
+      - "${ROBOT_PORT:-8003}:8002"
+    volumes:
+      - ./edge-ai-robot:/app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "8883"
+      MQTT_TLS_ENABLED: "true"
+      GATEWAY_URL: "http://iot-gateway:8001"
+      DEPLOYMENT_PROFILE: "${DEPLOYMENT_PROFILE:-LOCAL_SIM}"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+      iot-gateway:
+        condition: service_healthy
+    healthcheck:
+      # python:3.12-slim has no curl binary — probe with urllib instead.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - sf-net
+
+  # ── LAB_HIL profile ───────────────────────────────────────────────────────
+  # Software device simulator for the LAB_HIL profile. Evidence produced with
+  # this service is L2 simulation — it does NOT imply HIL (L3/L4) or
+  # integrated (L5) evidence.
+  mock-hil-bridge:
+    # Docker Hub OCI index digest for python:3.12-slim, resolved 2026-10-24.
+    image: python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+    container_name: sf-mock-hil-bridge
+    profiles: ["LAB_HIL"]
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir paho-mqtt && python mock_hil_bridge.py"
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: "8883"
+      MQTT_TLS_ENABLED: "true"
+      MQTT_CA_CERT: "/mosquitto/certs/ca.crt"
+      MQTT_USERNAME: "${MQTT_BRIDGE_USERNAME:?required}"
+      MQTT_PASSWORD: "${MQTT_BRIDGE_PASSWORD:?required}"
+      DEPLOYMENT_PROFILE: "LAB_HIL"
+    volumes:
+      - ./e2e/simulation:/app:ro
+      - ./infrastructure/mqtt-broker/config/tls:/mosquitto/certs:ro
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    networks:
+      - sf-net
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────
+
+  dashboard:
+    # Docker Hub OCI index digest for node:20-alpine, resolved 2026-10-24.
+    image: node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+    container_name: sf-dashboard
+    profiles: ["LOCAL_SIM", "LAB_HIL", "PRODUCTION"]
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "npm install --prefer-offline && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "${DASH_PORT:-5173}:5173"
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+    environment:
+      VITE_GATEWAY_WS_URL: "ws://iot-gateway:8000/ws"
+      VITE_GATEWAY_HTTP_URL: "http://iot-gateway:8001"
+    depends_on:
+      iot-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - sf-net
+
+# ── Volumes & Networks ───────────────────────────────────────────────────
+
+volumes:
+  mqtt-data:
+  mqtt-conf:
+  mongodb-data:
+  mongodb-config:
+  gw-data:
+
+networks:
+  sf-net:
+    driver: bridge
+    name: sf-net

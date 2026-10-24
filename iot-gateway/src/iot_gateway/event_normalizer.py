@@ -58,6 +58,19 @@ class EventNormalizer:
         self._time_bounds = time_bounds or TimeBounds()
         self._last_device_timestamp_ms: dict[str, int] = {}
 
+    def seed_sequence(self, sequence: int) -> None:
+        """Continue the sequence numbering from a persisted high-watermark.
+
+        The counter is process-local, so after a gateway restart it would
+        restart at 1. Those values collide with (and sort below) the
+        sequences already stored, which makes the retention pruner delete
+        the freshly written events immediately and freezes the reported
+        high-watermark. Seeding from the store on startup keeps the
+        sequence space strictly monotonic across restarts.
+        """
+        if sequence > self._sequence:
+            self._sequence = sequence
+
     def _next_sequence(self) -> int:
         self._sequence += 1
         return self._sequence

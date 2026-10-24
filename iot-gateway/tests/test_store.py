@@ -137,3 +137,110 @@ async def test_sequence_ordering(store: EventStore) -> None:
     assert sequences == sorted(sequences), (
         "Events must be returned in ascending sequence order for deterministic replay"
     )
+
+
+@pytest.mark.asyncio
+async def test_sequence_continues_after_restart(database_url: str) -> None:
+    """A restarted gateway must not reuse sequence numbers already stored.
+
+    The normalizer's sequence counter lives in memory only. After a restart
+    it would restart at 1, producing sequences that sort *below* the ones
+    already in the store. The retention pruner deletes the lowest sequences
+    first, so the freshly written events are purged immediately and the
+    high-watermark freezes — the gateway silently loses every event written
+    after a restart.
+    """
+    first_store = EventStore(database_url, max_events=1000)
+    await first_store.init()
+    first_normalizer = EventNormalizer()
+    for _ in range(3):
+        event = first_normalizer.normalize(
+            "smart-factory/d1/command/ack", b'{"command_id":1}'
+        )
+        assert event is not None
+        await first_store.insert(event)
+    high_before = await first_store.high_watermark()
+    assert high_before == 3
+    await first_store.close()
+
+    # ── Restart: a brand new store + normalizer over the same database ──
+    second_store = EventStore(database_url, max_events=1000)
+    await second_store.init()
+    second_normalizer = EventNormalizer()
+    try:
+        await second_store.seed_sequence_from_high_watermark(second_normalizer)
+
+        event = second_normalizer.normalize(
+            "smart-factory/d1/command/ack", b'{"command_id":2}'
+        )
+        assert event is not None
+        await second_store.insert(event)
+
+        # The new event must sort ABOVE the pre-restart events ...
+        high_after = await second_store.high_watermark()
+        assert high_after > high_before, (
+            f"sequence must advance across restart: {high_before} -> {high_after}"
+        )
+        # ... and must actually be retained, not pruned straight away.
+        stored = await second_store.query(device_id="d1", limit=10)
+        assert len(stored) == 4, stored
+    finally:
+        await second_store.close()
+
+
+@pytest.mark.asyncio
+async def test_sequence_seed_keeps_retention_from_deleting_new_events(
+    database_url: str,
+) -> None:
+    """Restarting a gateway at the retention limit must not purge new events.
+
+    This is the exact failure seen in the E2E stack: the store was already
+    at max_events, so the pruner deleted the freshly inserted (low-sequence)
+    events on every write and the high-watermark never advanced.
+    """
+    first_store = EventStore(database_url, max_events=3)
+    await first_store.init()
+    first_normalizer = EventNormalizer()
+    for _ in range(3):
+        event = first_normalizer.normalize(
+            "smart-factory/d1/command/ack", b'{"command_id":1}'
+        )
+        assert event is not None
+        await first_store.insert(event)
+    await first_store.close()
+
+    second_store = EventStore(database_url, max_events=3)
+    await second_store.init()
+    second_normalizer = EventNormalizer()
+    try:
+        await second_store.seed_sequence_from_high_watermark(second_normalizer)
+        event = second_normalizer.normalize(
+            "smart-factory/d1/command/ack", b'{"command_id":2}'
+        )
+        assert event is not None
+        await second_store.insert(event)
+
+        stored = await second_store.query(device_id="d1", limit=10)
+        assert len(stored) == 3, "retention must keep the newest events"
+        # The newest event must be the one written after the restart.
+        assert max(e["sequence"] for e in stored) == 4
+    finally:
+        await second_store.close()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_uses_wal_journal_mode(store: EventStore) -> None:
+    """SQLite must run in WAL mode so readers never block on a writer.
+
+    With the default rollback journal, a concurrent writer holds an
+    exclusive lock on the whole database and every reader fails with
+    "database is locked". WAL lets readers and the writer proceed
+    concurrently, which is what keeps /health and /events responsive while
+    the gateway is writing.
+    """
+    import sqlalchemy
+
+    async with store._engine.connect() as conn:  # noqa: SLF001
+        result = await conn.execute(sqlalchemy.text("PRAGMA journal_mode"))
+        assert result.scalar().lower() == "wal"
+

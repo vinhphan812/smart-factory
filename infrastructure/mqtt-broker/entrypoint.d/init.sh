@@ -19,12 +19,24 @@ ACL_FILE="${CONF_DIR}/acl"
 write_mosquitto_conf() {
     echo "[inf] Generating ${CONF_FILE}"
 
-    # Determine TLS settings
+    # Determine listener/TLS settings.
+    #
+    #   MQTT_TLS_ENABLED=true, MQTT_TLS_ONLY unset/false
+    #       Dual listener: plaintext on MQTT_PORT + TLS on MQTT_TLS_PORT.
+    #       Used by docker-compose.yml (development).
+    #   MQTT_TLS_ENABLED=true, MQTT_TLS_ONLY=true
+    #       TLS listener ONLY - no plaintext listener is emitted at all.
+    #       Used by the production profiles in docker-compose.full.yml so a
+    #       production broker cannot accept unauthenticated/plaintext traffic.
+    #   MQTT_TLS_ENABLED unset/false
+    #       Plaintext only (development and the E2E simulation stack).
     TLS_ENABLED="${MQTT_TLS_ENABLED:-false}"
+    TLS_ONLY="${MQTT_TLS_ONLY:-false}"
     BIND_HOST="${MQTT_BIND_ADDRESS:-0.0.0.0}"
     BIND_PORT="${MQTT_PORT:-1883}"
     TLS_PORT=""
     TLS_ARGS=""
+    PLAINTEXT_LISTENER="listener ${BIND_PORT} ${BIND_HOST}"
     if [ "$TLS_ENABLED" = "true" ]; then
         TLS_PORT="listener ${MQTT_TLS_PORT:-8883} ${MQTT_TLS_LISTENER_ADDRESS:-0.0.0.0}"
         TLS_ARGS="
@@ -32,6 +44,10 @@ cafile /mosquitto/certs/ca.crt
 certfile /mosquitto/certs/server.crt
 keyfile /mosquitto/certs/server.key
 require_certificate false"
+        if [ "$TLS_ONLY" = "true" ]; then
+            # Drop the plaintext listener: TLS is the only way in.
+            PLAINTEXT_LISTENER=""
+        fi
     fi
 
     # Build mosquitto.conf
@@ -64,7 +80,7 @@ max_packet_size 32768
 # ---------------------------------------------------------------------------
 # Listeners
 # ---------------------------------------------------------------------------
-listener ${BIND_PORT} ${BIND_HOST}
+${PLAINTEXT_LISTENER}
 ${TLS_PORT}${TLS_ARGS}
 
 # ---------------------------------------------------------------------------

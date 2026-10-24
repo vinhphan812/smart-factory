@@ -1,5 +1,7 @@
 """Edge AI Robot package."""
 
+__version__ = "0.1.0"
+
 from edge_ai_robot.adapter import (
     ConnectionState,
     MiniAlphaAdapterBase,

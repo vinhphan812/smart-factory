@@ -1,0 +1,99 @@
+{
+  "schema": "smart-factory/e2e-report/v1",
+  "generated_at": "2026-10-22T03:32:58Z",
+  "evidence_level": "L2 simulation",
+  "hardware_required": false,
+  "target_sha": "caebf4a45fc5454eae61cd721b28930eaedf1338",
+  "evidence_provenance": {
+    "kind": "historical_checked_in_simulation_report",
+    "source_commit": "b70eb4a1b1f458752246ae845b79d3aae9abf582",
+    "note": "This immutable report records the successful simulation at target_sha; it is not evidence for a later checkout. Run the E2E workflow for the checked-out revision."
+  },
+  "compose_file": "e2e/simulation/docker-compose.e2e.yml",
+  "endpoints": {
+    "gateway_http": "http://localhost:8001",
+    "gateway_ws": "ws://localhost:8000/ws",
+    "factory_control": "http://localhost:8002",
+    "edge_ai_robot": "http://localhost:8003",
+    "mqtt": "localhost:1883"
+  },
+  "totals": {
+    "tests": 8,
+    "passed": 8,
+    "failed": 0
+  },
+  "results": [
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_happy_production_cycle",
+      "outcome": "passed",
+      "duration_s": 0.065,
+      "scenario_id": "SCENARIO-01",
+      "scenario_name": "happy_production_cycle",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_malformed_crc_is_rejected",
+      "outcome": "passed",
+      "duration_s": 0.034,
+      "scenario_id": "SCENARIO-02",
+      "scenario_name": "malformed_crc",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_duplicate_and_late_ack",
+      "outcome": "passed",
+      "duration_s": 0.038,
+      "scenario_id": "SCENARIO-03",
+      "scenario_name": "duplicate_late_ack",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_broker_outage_and_recovery",
+      "outcome": "passed",
+      "duration_s": 6.931,
+      "scenario_id": "SCENARIO-04",
+      "scenario_name": "broker_outage",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_sqlite_lock_does_not_wedge_gateway",
+      "outcome": "passed",
+      "duration_s": 18.391,
+      "scenario_id": "SCENARIO-05",
+      "scenario_name": "sqlite_lock",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_ws_reconnect_resyncs_without_gap",
+      "outcome": "passed",
+      "duration_s": 27.313,
+      "scenario_id": "SCENARIO-06",
+      "scenario_name": "ws_reconnect",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_authorization_denial",
+      "outcome": "passed",
+      "duration_s": 8.07,
+      "scenario_id": "SCENARIO-07",
+      "scenario_name": "authorization_denial",
+      "tags": [],
+      "longrepr": null
+    },
+    {
+      "nodeid": "scenarios/test_scenarios.py::test_yanshee_offline_does_not_break_core",
+      "outcome": "passed",
+      "duration_s": 20.961,
+      "scenario_id": "SCENARIO-08",
+      "scenario_name": "yanshee_offline",
+      "tags": [],
+      "longrepr": null
+    }
+  ]
+}
