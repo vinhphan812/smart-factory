@@ -3,13 +3,16 @@
  */
 
 import React, { useEffect, Component } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { GatewayWsProvider } from '../hooks/useGatewayWs';
-import { OverviewPage } from '../pages/OverviewPage';
+import { ProtectedRoute } from '../components/Auth';
+import { LoginPage } from '../pages/LoginPage';
 import { TelemetryPage } from '../pages/TelemetryPage';
 import { EventsPage } from '../pages/EventsPage';
 import { IncidentsPage, IncidentDetailPage } from '../pages/incidents';
+import { OverviewPage } from '../pages/OverviewPage';
+import { useAuth, AuthProvider } from '../store/authContext';
 
 // Error Boundary class component
 interface ErrorBoundaryState {
@@ -53,6 +56,34 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBounda
   }
 }
 
+/**
+ * App wrapper that checks for existing session on mount
+ */
+function AuthCheck({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, refreshSession } = useAuth();
+
+  useEffect(() => {
+    // Session state is validated via the httpOnly cookie. If there is no
+    // valid session yet, try one cookie-based refresh before giving up.
+    if (!isAuthenticated) {
+      refreshSession();
+    }
+  }, []);
+
+  return <>{children}</>;
+}
+
+/**
+ * AppLayout wrapper that uses Outlet for child routes
+ */
+function AppLayoutWithOutlet() {
+  return (
+    <AppLayout>
+      <Outlet />
+    </AppLayout>
+  );
+}
+
 function App(): React.ReactElement {
   // Auto-connect to gateway on mount
   useEffect(() => {
@@ -61,22 +92,38 @@ function App(): React.ReactElement {
 
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <GatewayWsProvider>
-          {/* Single application shell (AppLayout renders the design-system
-              Header + Sidebar with 9-module navigation) hosting all routes. */}
-          <AppLayout>
-            <Routes>
-              <Route path="/" element={<OverviewPage />} />
-              <Route path="/telemetry" element={<TelemetryPage />} />
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/incidents" element={<IncidentsPage />} />
-              <Route path="/incidents/:incidentId" element={<IncidentDetailPage />} />
-              <Route path="/modules/:moduleId" element={<ModuleDetailPage />} />
-            </Routes>
-          </AppLayout>
-        </GatewayWsProvider>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <GatewayWsProvider>
+            <AuthCheck>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<LoginPage />} />
+
+                {/* Protected routes with layout */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute requiredPermission="dashboard:view">
+                      <AppLayoutWithOutlet />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<OverviewPage />} />
+                  <Route path="telemetry" element={<TelemetryPage />} />
+                  <Route path="events" element={<EventsPage />} />
+                  <Route path="incidents" element={<IncidentsPage />} />
+                  <Route path="incidents/:incidentId" element={<IncidentDetailPage />} />
+                  <Route path="modules/:moduleId" element={<ModuleDetailPage />} />
+                </Route>
+
+                {/* Fallback to login */}
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              </Routes>
+            </AuthCheck>
+          </GatewayWsProvider>
+        </BrowserRouter>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

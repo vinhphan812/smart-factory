@@ -19,6 +19,8 @@ from .ota_control import OtaControl, OtaJobStatus
 from .time_sync import TimeMetrics
 from .safety_gate import SafetyGate
 from .incidents import IncidentStore, get_incident_store
+from fastapi.middleware.cors import CORSMiddleware
+from .auth import create_auth_routes, CSRFProtectionMiddleware, require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,47 @@ class WebSocketServer:
         # callable, not a bound method whose return value (coroutine) might not
         # be awaited correctly on all Python/asyncio versions.
         async def handler(conn: websockets.ServerConnection) -> None:
+            # WebSocket admission check
+            token = None
+            path = getattr(conn, "path", "") or ""
+            if "?" in path:
+                from urllib.parse import parse_qs, urlparse
+                parsed = urlparse(path)
+                qs = parse_qs(parsed.query)
+                if "token" in qs:
+                    token = qs["token"][0]
+                elif "access_token" in qs:
+                    token = qs["access_token"][0]
+
+            headers = getattr(conn, "headers", {}) or {}
+            cookie_header = headers.get("cookie", "") if hasattr(headers, "get") else ""
+            if not token and cookie_header:
+                for item in cookie_header.split(";"):
+                    if "=" in item:
+                        k, v = item.strip().split("=", 1)
+                        if k == "access_token":
+                            token = v
+
+            auth_header = headers.get("authorization", "") if hasattr(headers, "get") else ""
+            if not token and auth_header:
+                parts = auth_header.split()
+                if len(parts) == 2 and parts[0].lower() == "bearer":
+                    token = parts[1]
+
+            from .auth import JWT_SECRET, decode_token, USERS_DB, _TEST_MODE
+            if JWT_SECRET is not None and USERS_DB and not _TEST_MODE:
+                if not token:
+                    await conn.close(code=4001, reason="Unauthorized: Missing token")
+                    return
+                try:
+                    payload = decode_token(token)
+                    if payload.get("type") != "access":
+                        await conn.close(code=4003, reason="Forbidden: Invalid token type")
+                        return
+                except Exception as exc:
+                    await conn.close(code=4001, reason=f"Unauthorized: {exc}")
+                    return
+
             client_queue: asyncio.Queue[str] = asyncio.Queue(
                 maxsize=self.MAX_QUEUE_PER_CLIENT
             )
@@ -199,6 +242,36 @@ def create_http_app(
         version="0.1.0",
         description="MQTT ingestion gateway for ESP32-uKit Bridge.",
     )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(CSRFProtectionMiddleware)
+
+    create_auth_routes(app)
+
+    @app.post("/api/jobs")
+    async def create_job_endpoint(
+        request: dict[str, Any],
+        current_user: Any = Depends(require_permission("jobs:create")),
+    ) -> dict[str, Any]:
+        return {"status": "job_created", "job": request}
+
+    @app.get("/api/jobs")
+    async def list_jobs_endpoint(
+        current_user: Any = Depends(require_permission("jobs:view")),
+    ) -> dict[str, Any]:
+        return {"jobs": []}
+
+    @app.get("/api/materials")
+    async def list_materials_endpoint(
+        current_user: Any = Depends(require_permission("materials:view")),
+    ) -> dict[str, Any]:
+        return {"materials": []}
 
     @app.get("/health")
     async def health() -> dict[str, Any]:

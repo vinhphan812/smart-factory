@@ -154,3 +154,197 @@ export type TimeRange = '5m' | '1h' | '24h';
  * - 'replay': Historical event replay mode (future)
  */
 export type AppMode = 'live' | 'demo' | 'simulated' | 'replay';
+
+// ============ Auth & RBAC Types ============
+
+/**
+ * User roles for RBAC
+ */
+export type UserRole = 'operator' | 'supervisor' | 'admin';
+
+/**
+ * Permission scope for operations
+ */
+export type PermissionScope =
+  | 'dashboard:view'
+  | 'incidents:view'
+  | 'incidents:acknowledge'
+  | 'incidents:resolve'
+  | 'safety-gate:status'
+  | 'safety-gate:emergency-stop'
+  | 'safety-gate:interlock'
+  | 'safety-gate:override'
+  | 'jobs:view'
+  | 'jobs:create'
+  | 'jobs:cancel'
+  | 'materials:view'
+  | 'admin:users'
+  | 'admin:settings';
+
+/**
+ * Role-based permission mapping
+ */
+export const ROLE_PERMISSIONS: Record<UserRole, PermissionScope[]> = {
+  operator: [
+    'dashboard:view',
+    'incidents:view',
+    'incidents:acknowledge',
+    'safety-gate:status',
+    'jobs:view',
+    'materials:view',
+  ],
+  supervisor: [
+    'dashboard:view',
+    'incidents:view',
+    'incidents:acknowledge',
+    'incidents:resolve',
+    'safety-gate:status',
+    'safety-gate:emergency-stop',
+    'safety-gate:interlock',
+    'safety-gate:override',
+    'jobs:view',
+    'jobs:create',
+    'jobs:cancel',
+    'materials:view',
+  ],
+  admin: [
+    'dashboard:view',
+    'incidents:view',
+    'incidents:acknowledge',
+    'incidents:resolve',
+    'safety-gate:status',
+    'safety-gate:emergency-stop',
+    'safety-gate:interlock',
+    'safety-gate:override',
+    'jobs:view',
+    'jobs:create',
+    'jobs:cancel',
+    'materials:view',
+    'admin:users',
+    'admin:settings',
+  ],
+};
+
+/**
+ * User info from auth
+ */
+export interface AuthUser {
+  user_id: string;
+  username: string;
+  role: UserRole;
+  display_name: string;
+  permissions: PermissionScope[];
+}
+
+/**
+ * Login credentials
+ */
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
+/**
+ * Auth response from login.
+ *
+ * SECURITY: token material is delivered via httpOnly cookies only and is
+ * never present in the response body, so it is not part of this contract.
+ */
+export interface AuthResponse {
+  user: AuthUser;
+}
+
+/**
+ * Refresh token request
+ */
+export interface RefreshTokenRequest {
+  refresh_token: string;
+}
+
+// ============ Job & Material Lineage Types ============
+
+/**
+ * Job states in the production pipeline
+ */
+export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * Material states
+ */
+export type MaterialStatus = 'pending' | 'processing' | 'completed' | 'rejected' | 'scrapped';
+
+/**
+ * Lineage event type for tracking state changes
+ */
+export type LineageEventType =
+  | 'job_created'
+  | 'job_started'
+  | 'job_completed'
+  | 'job_failed'
+  | 'job_cancelled'
+  | 'material_received'
+  | 'material_processing'
+  | 'material_completed'
+  | 'material_rejected'
+  | 'material_scraped'
+  | 'material_transferred';
+
+/**
+ * Lineage event for tracking state changes with timestamp and module
+ */
+export interface LineageEvent {
+  event_id: string;
+  event_type: LineageEventType;
+  job_id?: string;
+  material_id?: string;
+  batch_id?: string;
+  module_id: string;
+  from_state?: string;
+  to_state?: string;
+  timestamp: string;
+  operator_id?: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Production job
+ */
+export interface ProductionJob {
+  job_id: string;
+  batch_id: string;
+  product_type: string;
+  quantity: number;
+  status: JobStatus;
+  priority: number;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  failed_at?: string;
+  failure_reason?: string;
+  current_module?: string;
+  lineage_events: LineageEvent[];
+}
+
+/**
+ * Material in production
+ */
+export interface ProductionMaterial {
+  material_id: string;
+  batch_id: string;
+  current_module: string;
+  status: MaterialStatus;
+  received_at: string;
+  processed_at?: string;
+  completed_at?: string;
+  rejected_at?: string;
+  rejection_reason?: string;
+  properties?: Record<string, unknown>;
+  lineage_events: LineageEvent[];
+}
+
+/**
+ * Job with full lineage
+ */
+export interface ProductionJobWithLineage extends ProductionJob {
+  materials: ProductionMaterial[];
+}

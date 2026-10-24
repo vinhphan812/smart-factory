@@ -1,0 +1,90 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:6c2d1b7a-8f9e-4a3b-9c1e-5f6a7b8c9d0e",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-10-23T13:32:16.737065Z",
+    "tools": [
+      {
+        "vendor": "Smart Factory",
+        "name": "iot-gateway-sbom-generator",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "iot-gateway",
+      "version": "0.1.0",
+      "description": "MQTT ingestion gateway for Smart Factory ESP32-uKit Bridge"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "paho-mqtt",
+      "version": "paho-mqtt>=2.0.0",
+      "purl": "pkg:pypi/paho-mqtt"
+    },
+    {
+      "type": "library",
+      "name": "websockets",
+      "version": "websockets>=12.0",
+      "purl": "pkg:pypi/websockets"
+    },
+    {
+      "type": "library",
+      "name": "uvicorn[standard]",
+      "version": "uvicorn[standard]>=0.25.0",
+      "purl": "pkg:pypi/uvicorn[standard]"
+    },
+    {
+      "type": "library",
+      "name": "fastapi",
+      "version": "fastapi>=0.110.0",
+      "purl": "pkg:pypi/fastapi"
+    },
+    {
+      "type": "library",
+      "name": "pydantic",
+      "version": "pydantic>=2.0",
+      "purl": "pkg:pypi/pydantic"
+    },
+    {
+      "type": "library",
+      "name": "sqlalchemy",
+      "version": "sqlalchemy>=2.0",
+      "purl": "pkg:pypi/sqlalchemy"
+    },
+    {
+      "type": "library",
+      "name": "aiosqlite",
+      "version": "aiosqlite>=0.19,<1.0",
+      "purl": "pkg:pypi/aiosqlite"
+    },
+    {
+      "type": "library",
+      "name": "greenlet",
+      "version": "greenlet>=3.0",
+      "purl": "pkg:pypi/greenlet"
+    },
+    {
+      "type": "library",
+      "name": "aiohttp",
+      "version": "aiohttp>=3.9.0",
+      "purl": "pkg:pypi/aiohttp"
+    },
+    {
+      "type": "library",
+      "name": "cryptography",
+      "version": "cryptography>=42.0.0",
+      "purl": "pkg:pypi/cryptography"
+    },
+    {
+      "type": "library",
+      "name": "PyJWT",
+      "version": "PyJWT>=2.8.0",
+      "purl": "pkg:pypi/PyJWT"
+    }
+  ]
+}
